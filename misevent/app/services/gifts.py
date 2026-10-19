@@ -60,6 +60,8 @@ class GiftsMixin:
             ("christmas", True): pe.calc_christmas_gift_daily,
             ("christmas", False): pe.calc_christmas_gift,
         }[(gift_type, daily)]
+        extra = {} if daily else {"subsidy_full": self.labor_subsidy_full(
+            emp, terms.wage, terms.weekly_hours, pe.gift_wage_date(gift_type, year))}
         return fn(
             terms.wage,
             emp.children,
@@ -68,6 +70,7 @@ class GiftsMixin:
             term or emp.termination_date,
             rates=rates,
             birth_date=emp.birth_date,
+            **extra,
         )
 
     def _calc_gift_for(self, emp, gift_type, year, exit_settlement=False):
@@ -90,6 +93,7 @@ class GiftsMixin:
                     res.net,
                     exit_settlement,
                     efka_employer=res.efka_employer,
+                    subsidy_employee=res.subsidy_employee,
                 ),
             )
             return res
@@ -114,6 +118,8 @@ class GiftsMixin:
         daily = emp.pay_type == "daily"
         wage = emp.daily_wage if daily else emp.monthly_gross
         fn = pe.calc_leave_allowance_daily if daily else pe.calc_leave_allowance
+        extra = {} if daily else {"subsidy_full": self.labor_subsidy_full(
+            emp, wage, emp.weekly_hours, date(year, 7, 31))}
         return fn(
             wage,
             emp.children,
@@ -123,6 +129,7 @@ class GiftsMixin:
             rates=rates,
             birth_date=emp.birth_date,
             full_year=pe.is_third_service_year(year, emp.hire_date),
+            **extra,
         )
 
     def _calc_allowance_for(self, emp, year, exit_settlement=False):
@@ -142,6 +149,7 @@ class GiftsMixin:
                     res.net,
                     exit_settlement,
                     efka_employer=res.efka_employer,
+                    subsidy_employee=res.subsidy_employee,
                 ),
             )
             return res

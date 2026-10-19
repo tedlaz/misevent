@@ -21,6 +21,9 @@ class LeaveType(str, Enum):
     UNPAID = "adeia_aneu_apodoxon"  # άνευ αποδοχών
     MATERNITY = "mitrotita"
     PARENTAL = "goniki"
+    # Ισόχρονη άδεια φροντίδας τέκνου (μειωμένο ωράριο σε συνεχόμενες ημέρες):
+    # πληρώνεται από τον εργοδότη, ΔΕΝ αφαιρείται από την κανονική άδεια.
+    CHILDCARE = "frontida_teknou"
 
 
 @dataclass(frozen=True)
@@ -404,6 +407,19 @@ class SicknessBenefitRecorded(DomainEvent):
     reference: str = ""  # αρ. απόφασης / πρωτοκόλλου ΕΦΚΑ
 
 
+@dataclass(frozen=True)
+class ChildcareReductionSet(DomainEvent):
+    """Μειωμένο ωράριο φροντίδας τέκνου (μετά τη λοχεία). Λογίζεται ΠΛΗΡΗΣ
+    χρόνος εργασίας: σύμβαση, μισθός, εισφορές, δώρα ΔΕΝ αλλάζουν — μόνο το
+    πρόγραμμα επιτρέπεται να είναι μικρότερο (βλ. `constraints.check_schedule`).
+
+    Νέα δήλωση ΑΝΤΙΚΑΘΙΣΤΑ την προηγούμενη· κενό `option` = κατάργηση."""
+
+    employee_id: str
+    date_from: date
+    option: str  # κλειδί του `config.CHILDCARE_REDUCTION_OPTIONS` ή ""
+
+
 # ---------------------------------------------------------------- Μισθοδοσία
 @dataclass(frozen=True)
 class MonthlyPayrollCalculated(DomainEvent):
@@ -454,6 +470,9 @@ class GiftCalculated(DomainEvent):
     # ανασυντίθενται από τα ποσοστά της ημέρας καταβολής — βλ. `_gift_cost`.
     # Χωρίς αυτές η ΑΠΔ δεν μπορεί να δηλώσει ό,τι ΠΡΑΓΜΑΤΙΚΑ υπολογίστηκε.
     efka_employer: float = 0.0
+    # Επιδότηση εργατικής εισφοράς (ΑΠΔ κωδ. 102): το `efka_employee` είναι
+    # ήδη ΜΕΙΩΜΕΝΟ κατά αυτήν (= ό,τι κρατήθηκε)· η ΑΠΔ την ξαναπροσθέτει.
+    subsidy_employee: float = 0.0
 
 
 @dataclass(frozen=True)
@@ -470,6 +489,8 @@ class LeaveAllowanceCalculated(DomainEvent):
     exit_settlement: bool = False
     # Εισφορές ΕΡΓΟΔΟΤΗ — βλ. GiftCalculated.efka_employer
     efka_employer: float = 0.0
+    # Επιδότηση εργατικής εισφοράς — βλ. GiftCalculated.subsidy_employee
+    subsidy_employee: float = 0.0
 
 
 # ------------------------------------------------------------- Εταιρεία
@@ -656,6 +677,10 @@ class InsuranceProfileAssigned(DomainEvent):
     insurance_class: str = "new"  # old | new
     ergani_specialty_code: str = ""
     ergani_specialty_description: str = ""
+    # ΕΞΑΙΡΕΣΗ από την επιδότηση εργατικής εισφοράς (ΑΠΔ κωδ. 102):
+    # συνταξιούχος, οικοδόμος, τεκμαρτό ημερομίσθιο, ασφαλιστικές κλάσεις,
+    # αμοιβή από κλαδική ΣΣΕ — δεν προκύπτουν από τα δεδομένα, τα δηλώνει ο χρήστης.
+    labor_subsidy_excluded: bool = False
 
     @property
     def teka_member(self) -> bool:
@@ -872,6 +897,24 @@ class AllowanceRulesDefined(DomainEvent):
 
 
 @dataclass(frozen=True)
+class LaborSubsidyDefined(DomainEvent):
+    """Επιδότηση εργατικής εισφοράς (αρ. 14 ν. 2837/2000) — ποσοστό."""
+
+    valid_from: date
+    pct: float = 0.0667
+    repealed: bool = False
+
+
+@dataclass(frozen=True)
+class PremiumExemptionDefined(DomainEvent):
+    """Απαλλαγή εισφορών προσαυξήσεων (αρ. 41 ν. 5184/2025) — μερίδιο."""
+
+    valid_from: date
+    share: float = 1.0
+    repealed: bool = False
+
+
+@dataclass(frozen=True)
 class SeveranceRulesDefined(DomainEvent):
     """Αποζημίωση απόλυσης: πίνακας μηνών ανά έτη υπηρεσίας, προσαύξηση 1/6
     και κλίμακα αυτοτελούς φόρου — με ημερομηνία ισχύος.
@@ -1051,6 +1094,7 @@ EVENT_TYPES = {
         LeaveCancelled,
         LeaveRescheduled,
         SicknessBenefitRecorded,
+        ChildcareReductionSet,
         ErganiSubmissionRecorded,
         CompanyRegistered,
         CompanyBranchDefined,
@@ -1083,6 +1127,8 @@ EVENT_TYPES = {
         TaxScaleDefined,
         SickLeaveRulesDefined,
         AllowanceRulesDefined,
+        LaborSubsidyDefined,
+        PremiumExemptionDefined,
         SeveranceRulesDefined,
         WorkHourRulesDefined,
         ObligationTypeConfigured,
@@ -1116,6 +1162,8 @@ SHARED_EVENT_TYPES = frozenset(
         "TaxScaleDefined",
         "SickLeaveRulesDefined",
         "AllowanceRulesDefined",
+        "LaborSubsidyDefined",
+        "PremiumExemptionDefined",
         "SeveranceRulesDefined",
         "WorkHourRulesDefined",
         "ObligationTypeConfigured",

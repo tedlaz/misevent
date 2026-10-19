@@ -900,6 +900,7 @@ def gift_analysis(kind: str, year: int, month: int | None = None):
         a = {
             "gross": g.gross,
             "efka_employee": g.efka_employee,
+            "subsidy_employee": g.subsidy_employee,
             "taxable": round(g.gross - g.efka_employee, 2),
             "fmy": g.fmy,
             "net": g.net,
@@ -1523,8 +1524,11 @@ def payroll_analysis(y: int, m: int):
         a["premium_detail"] = _premium_breakdown(a, y, m)
         on = last_working_day_of_month(y, m)
         emp = proj.employments.get(p.employee_id)
+        # Βάση εισφορών = μικτά ΧΩΡΙΣ τις απαλλασσόμενες προσαυξήσεις
+        contrib_gross = round(
+            (a.get("gross") or 0.0) - (a.get("premium_exempt") or 0.0), 2)
         a["efka_detail"] = _efka_breakdown(
-            emp, a.get("gross"), a.get("efka_employee"), on,
+            emp, contrib_gross, a.get("efka_employee"), on,
             efka_employer=a.get("efka_employer"),
             stored=a.get("contributions"),
         )
@@ -1534,7 +1538,7 @@ def payroll_analysis(y: int, m: int):
         )
         a["tax_detail"] = _tax_breakdown(emp, a.get("taxable"), a.get("fmy"), on)
         a["insurable"] = round(
-            min(a.get("gross") or 0.0, config.efka_rates_for(on).monthly_cap), 2
+            min(contrib_gross, config.efka_rates_for(on).monthly_cap), 2
         )
         a["efka_cap"] = config.efka_rates_for(on).monthly_cap
         out.append(

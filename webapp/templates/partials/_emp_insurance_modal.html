@@ -31,6 +31,11 @@
                στοιχείο — είναι ΟΡΟΣ ΣΥΜΒΑΣΗΣ και δηλώνεται στην πρόσληψη /
                «Αλλαγή σύμβασης» (_emp_contract_modal.html). #}
           </div>
+          <label class="chk"><input type="checkbox" name="labor_subsidy_excluded" value="1"
+            {{ 'checked' if f.get('labor_subsidy_excluded', prof.labor_subsidy_excluded if prof else False) }}>
+            Εκτός επιδότησης εργατικής εισφοράς
+            <small class="muted">(συνταξιούχος, οικοδόμος, τεκμαρτό ημερομίσθιο,
+              ασφαλιστικές κλάσεις, αμοιβή από κλαδική ΣΣΕ)</small></label>
         {% else %}
           <div class="warnbox">
             Δεν έχουν δηλωθεί ειδικότητες (θέσεις εργασίας) — δηλώστε τις

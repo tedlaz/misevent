@@ -244,9 +244,13 @@
           <td class="lt"><span class="dot"></span>− Ασφαλιστικές εισφορές (ασφ/νου)
             <small>ασφαλιστέες αποδοχές {{ a.insurable|money }} €
               {%- if gift %} (τα Δώρα/Επίδομα δεν πλαφονάρονται — εισφορές επί του συνόλου)
+              {%- elif a.premium_exempt %} (= μικτά {{ a.gross|money }} − προσαυξήσεις χωρίς
+                εισφορές {{ a.premium_exempt|money }} €, Εγκ. e-ΕΦΚΑ 21/2025)
               {%- elif a.gross > a.efka_cap %} (πλαφόν {{ a.efka_cap|money }} €)
               {%- else %} (= μικτά, κάτω από το πλαφόν {{ a.efka_cap|money }} €){% endif %}
-              × συνολικό ποσοστό ταμείων — ανάλυση παρακάτω</small></td>
+              × συνολικό ποσοστό ταμείων — ανάλυση παρακάτω
+              {%- if a.subsidy_employee %} · μείον επιδότηση εργατικής εισφοράς
+                (ΔΥΠΑ, ΑΠΔ κωδ. 102) {{ a.subsidy_employee|money }} € — δεν παρακρατείται{% endif %}</small></td>
           <td class="lv sub">− {{ a.efka_employee|money }} €</td>
         </tr>
         <tr class="l-taxable">

@@ -189,6 +189,30 @@
         }
       ]
     },
+    "labor_subsidy": {
+      "source": "events",
+      "entries": [
+        {
+          "valid_from": "2024-01-01",
+          "repealed": false,
+          "values": {
+            "pct": 0.0667
+          }
+        }
+      ]
+    },
+    "premium_exemption": {
+      "source": "events",
+      "entries": [
+        {
+          "valid_from": "2025-11-01",
+          "repealed": false,
+          "values": {
+            "share": 1.0
+          }
+        }
+      ]
+    },
     "severance": {
       "source": "events",
       "entries": [

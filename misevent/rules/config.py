@@ -781,6 +781,50 @@ def allowance_rules_for(d: date) -> AllowanceRules:
     return _pick("allowance", d, f"Δεν υπάρχουν κανόνες προσαυξήσεων για {gr_date(d)}")
 
 
+# --- Επιδότηση εργατικής εισφοράς (αρ. 14 ν. 2837/2000, ΑΠΔ κωδ. 102) ---
+# Όποιος αμείβεται ΑΚΡΙΒΩΣ με τον κατώτατο (+ τριετίες/γάμο) δεν πληρώνει το
+# ποσοστό σύνταξης εργαζομένου πάνω στον ΣΚΕΤΟ κατώτατο· το καλύπτει η ΔΥΠΑ.
+@dataclass(frozen=True)
+class LaborSubsidy:
+    valid_from: date
+    pct: float = 0.0667  # ποσοστό εργαζομένου κλάδου σύνταξης
+    # ΚΑΤΑΡΓΗΣΗ κανόνα από αυτή την ημερομηνία (βλ. events.py). Το `_pick`
+    # σκάει αντί να υποχωρήσει σιωπηλά στην προηγούμενη γραμμή.
+    repealed: bool = False
+
+
+LABOR_SUBSIDY_HISTORY = [
+    LaborSubsidy(valid_from=date(2024, 1, 1)),
+]
+
+
+def labor_subsidy_for(d: date) -> LaborSubsidy:
+    return _pick("labor_subsidy", d, f"Δεν υπάρχει επιδότηση εργατικής εισφοράς για {gr_date(d)}")
+
+
+# --- Απαλλαγή εισφορών προσαυξήσεων (αρ. 41 ν. 5184/2025, Εγκ. e-ΕΦΚΑ 21/2025) ---
+# Πλήρης απασχόληση: οι ΠΡΟΣΑΥΞΗΣΕΙΣ νύχτας/υπερεργασίας/υπερωρίας/Κυριακών-
+# αργιών ΔΕΝ έχουν εισφορές (εργαζομένου ΚΑΙ εργοδότη) — η απλή αξία της ώρας
+# έχει. Στην ΑΠΔ δηλώνεται ΜΟΝΟ το ποσό με εισφορές. Ο ΦΜΥ δεν αλλάζει.
+@dataclass(frozen=True)
+class PremiumExemption:
+    valid_from: date
+    share: float = 1.0  # μερίδιο της προσαύξησης που απαλλάσσεται
+    # ΚΑΤΑΡΓΗΣΗ κανόνα από αυτή την ημερομηνία (βλ. events.py). Το `_pick`
+    # σκάει αντί να υποχωρήσει σιωπηλά στην προηγούμενη γραμμή.
+    repealed: bool = False
+
+
+PREMIUM_EXEMPTION_HISTORY = [
+    PremiumExemption(valid_from=date(2025, 11, 1)),  # μισθολογική περίοδος 11/2025
+]
+
+
+def premium_exemption_for(d: date) -> PremiumExemption:
+    return _pick("premium_exemption", d,
+                 f"Δεν υπάρχει απαλλαγή εισφορών προσαυξήσεων για {gr_date(d)}")
+
+
 def freeze_span_years() -> float:
     """Το ΜΗΚΟΣ του παγώματος 14/02/2012–31/12/2023 σε δεκαδικά έτη.
 
@@ -1135,6 +1179,25 @@ FAMILIES: dict[str, ParamFamily] = {f.key: f for f in [
         ),
     ),
     ParamFamily(
+        "labor_subsidy", "Επιδότηση εργατικής εισφοράς", LaborSubsidy,
+        "LaborSubsidyDefined", LABOR_SUBSIDY_HISTORY,
+        note="αρ. 14 ν. 2837/2000: μισθός ΑΚΡΙΒΩΣ ίσος με τον κατώτατο "
+             "(+ προσαυξήσεις) → ποσοστό επί του σκέτου κατώτατου, ΑΠΔ κωδ. 102",
+        fields=(
+            _pf("pct", "Ποσοστό επιδότησης εργαζομένου (%)", "pct"),
+        ),
+    ),
+    ParamFamily(
+        "premium_exemption", "Απαλλαγή εισφορών προσαυξήσεων", PremiumExemption,
+        "PremiumExemptionDefined", PREMIUM_EXEMPTION_HISTORY,
+        note="αρ. 41 ν. 5184/2025, Εγκ. e-ΕΦΚΑ 21/2025: πλήρης απασχόληση — "
+             "οι προσαυξήσεις νύχτας/υπερεργασίας/υπερωρίας/αργιών χωρίς "
+             "εισφορές (η απλή αξία της ώρας έχει)",
+        fields=(
+            _pf("share", "Μερίδιο προσαύξησης που απαλλάσσεται (%)", "pct"),
+        ),
+    ),
+    ParamFamily(
         "severance", "Αποζημίωση απόλυσης", SeveranceRules,
         "SeveranceRulesDefined", SEVERANCE_HISTORY,
         # Δικό της modal: δύο ΠΙΝΑΚΕΣ (μήνες ανά έτη, κλιμάκια φόρου) δεν
@@ -1257,6 +1320,16 @@ validate_families()
 # `reason_date` του event (ημερομηνία που τεκμηριώνει την αιτία, π.χ. η ισχύς
 # της νέας ΓΣΣΕ). Κενός κωδικός = χειροκίνητη μεταβολή: η αιτιολογία
 # περιγράφεται από τη ΔΙΑΦΟΡΑ των όρων (webapp/views/employments.py).
+# --- Μειωμένο ωράριο φροντίδας τέκνου (ChildcareReductionSet.option) --------
+# Κωδικός -> (ετικέτα, διαδοχικά διαστήματα (μήνες, ώρες μείωσης/ημέρα)).
+CHILDCARE_REDUCTION_OPTIONS: dict[str, tuple] = {
+    "classic": ("1 ώρα/ημέρα για 30 μήνες", ((30, 1),)),
+    "alternative": (
+        "2 ώρες/ημέρα για 12 μήνες και 1 ώρα για 6 (με συμφωνία εργοδότη)",
+        ((12, 2), (6, 1)),
+    ),
+}
+
 CONTRACT_CHANGE_REASONS: dict[str, str] = {
     "gsse": "Προσαρμογή αποδοχών σε ΓΣΣΕ της {date}",
     "triennium": "Προσαρμογή αποδοχών λόγω τριετίας",

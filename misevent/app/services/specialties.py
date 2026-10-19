@@ -595,8 +595,12 @@ class SpecialtiesMixin:
         auxiliary_scheme=None,
         pron_choice=None,
         branch_no=0,
+        labor_subsidy_excluded=None,
     ):
         """Αναθέτει σε απασχόληση μια δηλωμένη ειδικότητα της εταιρείας.
+
+        `labor_subsidy_excluded`: None = κρατά ό,τι ίσχυε (η διόρθωση φόρμας
+        πρόσληψης ξαναγράφει το προφίλ και δεν πρέπει να σβήνει τη δήλωση).
 
         Στην πρόσληψη επιλέγονται ΜΟΝΟ: ειδικότητα, ΦΟΡΕΑΣ ΕΠΙΚΟΥΡΙΚΗΣ
         (ΕΦΚΑ ή ΤΕΚΑ, από τους επιτρεπτούς της ειδικότητας) και, όπου
@@ -632,6 +636,9 @@ class SpecialtiesMixin:
         insurance_class = choice if choice in {"new", "old"} else "new"
         # Ο ΕΠΙΛΥΜΕΝΟΣ φορέας (όχι το όρισμα, που μπορεί να ήρθε κενό).
         self._validate_package_components(resolved, carrier, welfare_scheme, on)
+        if labor_subsidy_excluded is None:
+            prev = emp.insurance_profile
+            labor_subsidy_excluded = bool(prev and prev.labor_subsidy_excluded)
         self.assign_insurance_profile(
             employment_id,
             branch_no=branch_no,
@@ -642,6 +649,7 @@ class SpecialtiesMixin:
             insurance_class=insurance_class,
             ergani_specialty_code=sp.ergani_specialty_code,
             ergani_specialty_description=sp.ergani_specialty_description,
+            labor_subsidy_excluded=labor_subsidy_excluded,
         )
 
     def _validate_package_components(
@@ -753,6 +761,7 @@ class SpecialtiesMixin:
         insurance_class="new",
         ergani_specialty_code="",
         ergani_specialty_description="",
+        labor_subsidy_excluded=False,
     ):
         """Ασφαλιστικό προφίλ ΑΠΑΣΧΟΛΗΣΗΣ (ΚΑΔ/ειδικότητα/ΚΠΚ/ΤΕΚΑ). Τα
         στοιχεία ταυτότητας (ΑΜΑ, πατρώνυμο, μητρώνυμο, γέννηση) αντλούνται
@@ -777,5 +786,6 @@ class SpecialtiesMixin:
                 insurance_class=insurance_class,
                 ergani_specialty_code=ergani_specialty_code,
                 ergani_specialty_description=ergani_specialty_description,
+                labor_subsidy_excluded=bool(labor_subsidy_excluded),
             ),
         )

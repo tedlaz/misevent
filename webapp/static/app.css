@@ -418,12 +418,13 @@ table.tbl a.lnk:hover{border-color:var(--ink)}
    ζώνες άδειας του «Ζωντανά» (§/live). Το πορτοκαλί ΔΕΝ ανήκει εδώ: είναι
    αποκλειστικά της ασυμφωνίας με την κάρτα. */
 :root{--lv-annual:#26845B;--lv-sick:#D14B4B;--lv-unpaid:#7A5AA6;
-  --lv-maternity:#D9679D;--lv-parental:#287CAB;--lv-any:#7A5AA6}
+  --lv-maternity:#D9679D;--lv-parental:#287CAB;--lv-childcare:#1E9A9A;--lv-any:#7A5AA6}
 .leave-kanoniki_adeia{background:var(--lv-annual)}
 .leave-astheneia{background:var(--lv-sick)}
 .leave-adeia_aneu_apodoxon{background:var(--lv-unpaid)}
 .leave-mitrotita{background:var(--lv-maternity)}
 .leave-goniki{background:var(--lv-parental)}
+.leave-frontida_teknou{background:var(--lv-childcare)}
 @keyframes leave-row-in{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:none}}
 @keyframes leave-balance-bump{0%{transform:scale(.82)}70%{transform:scale(1.12)}100%{transform:none}}
 @keyframes leave-over-pulse{50%{filter:brightness(1.08)}}
@@ -583,6 +584,7 @@ table.tbl a.lnk:hover{border-color:var(--ink)}
 .leave-astheneia .work-leave-mark{background:#D14B4B}.leave-adeia_aneu_apodoxon .work-leave-mark{
   background:#7A5AA6}.leave-mitrotita .work-leave-mark{background:#D9679D}
 .leave-goniki .work-leave-mark{background:#287CAB}
+.leave-frontida_teknou .work-leave-mark{background:#1E9A9A}
 .work-day-cell.has-leave{background-image:repeating-linear-gradient(135deg,transparent 0,
   transparent 5px,rgba(38,132,91,.13) 5px,rgba(38,132,91,.13) 8px)}
 .work-schedule-planner.day-detail .work-day-heads>div{border-right:1px solid #E4E9ED}
@@ -1671,11 +1673,125 @@ table.tbl tbody tr:first-child .tip:hover::after{transform:translateY(0)}
    ΔΥΟ ΦΟΡΕΣ (δικό μας ΗΗ/ΜΜ/ΕΕΕΕ + το native mm/dd/yyyy). */
 .dgr>input[type=date]{position:absolute;right:0;bottom:0;width:1px;height:1px;
   min-width:0;opacity:0;padding:0;margin:0;border:0;pointer-events:none}
-.dgr>.dgr-cal{flex:none;font-size:14px;line-height:1;cursor:pointer;
-  background:var(--card);color:var(--ink);border:1px solid var(--line);
-  border-radius:8px;padding:0 9px;
-  transition:border-color .2s var(--ease),background-color .2s var(--ease)}
-.dgr>.dgr-cal:hover{border-color:#C9D4E0;background:var(--paper)}
+
+/* --- ΡΑΓΑ ΩΡΑΡΙΟΥ (static/time-rail.js) ---------------------------------
+   Άξονας 00:00 → 09:00 της επομένης (33 ώρες): οι θέσεις έρχονται από το JS
+   σε % του άξονα. Στην εβδομάδα ΟΛΕΣ οι ράγες μοιράζονται τη στήλη 3 του
+   πλέγματος, ώστε οι βάρδιες διαφορετικών ημερών να συγκρίνονται κάθετα. */
+.trl-grid,.trl{--trl-bar:#2F6E9E;--trl-tele:#7A5AA6;--trl-tele-2:#9A7CC4;--trl-next:#EEF2F7}
+.trl-grid{display:grid;grid-template-columns:86px minmax(150px,210px) minmax(0,1fr) 48px;
+  column-gap:10px;align-items:center;grid-column:1 / -1}
+.trl-grid.one{grid-template-columns:minmax(0,1fr)}
+.trl{display:flex;flex-direction:column;gap:6px;min-width:0}
+.trl-rcell{grid-column:3;padding-top:4px}
+.trl-grid.one .trl-rcell{grid-column:1}
+.trl-ruler{position:relative;height:28px}
+.trl-ruler span{position:absolute;bottom:3px;transform:translateX(-50%);
+  font:500 10.5px var(--mono);color:var(--muted)}
+.trl-ruler span:first-child{transform:none}
+.trl-ruler span:nth-last-child(2){transform:translateX(-100%)}
+.trl-ruler span.mid{color:var(--ink);font-weight:600}
+.trl-ruler em{position:absolute;top:0;padding-left:5px;font-size:9.5px;font-weight:600;
+  font-style:normal;letter-spacing:.07em;text-transform:uppercase;color:var(--muted);white-space:nowrap}
+.trl-row{display:contents}
+.trl-row>*{padding-block:6px}
+.trl-grid:not(.one) .trl-row>*{border-top:1px solid var(--line)}
+.trl-day{grid-column:1;font-weight:600;font-size:13px;cursor:pointer;line-height:1.25}
+.trl-day small{display:block;font-weight:400;color:var(--muted);font-size:11px}
+.trl-textcell{grid-column:2;min-width:0}
+.trl-trackcell{grid-column:3;min-width:0}
+.trl-grid.one .trl-trackcell{grid-column:1}
+.trl-sum{grid-column:4;text-align:right;font:600 12.5px var(--mono);font-variant-numeric:tabular-nums}
+.trl-sum.zero{color:var(--muted);font:400 12px inherit}
+.trl-row.active>*{background:color-mix(in srgb,var(--trl-bar) 7%,transparent)}
+.trl-row.active>.trl-day{box-shadow:inset 3px 0 0 var(--trl-bar);padding-left:8px}
+.trl-msg{grid-column:2 / -1;display:flex;flex-wrap:wrap;gap:6px;border-top:0 !important;
+  padding-block:0 6px !important}
+.trl-grid.one .trl-msg{grid-column:1}
+.trl-msg:empty{display:none}
+input.trl-text{width:100%;font-family:var(--mono);font-size:13px}
+input.trl-text.trl-bad{border-color:var(--prob)}
+
+.trl-track{position:relative;height:32px;border-radius:7px;cursor:copy;touch-action:none;
+  background:linear-gradient(to right,transparent calc(100%*24/33 - 1px),
+    #C9D4E0 calc(100%*24/33 - 1px) calc(100%*24/33 + 1px),var(--trl-next) calc(100%*24/33 + 1px)),
+    var(--paper);
+  outline:1px solid var(--line);outline-offset:-1px}
+.trl-track::before{content:"";position:absolute;inset:0;pointer-events:none;border-radius:7px;
+  background:repeating-linear-gradient(to right,var(--line) 0 1px,transparent 1px calc(100%/33))}
+.trl-track.full{cursor:default}
+.trl-bar{position:absolute;top:4px;bottom:4px;border-radius:6px;background:var(--trl-bar);color:#fff;
+  display:flex;align-items:center;justify-content:center;cursor:grab;user-select:none;overflow:hidden;
+  font:600 11px var(--mono);white-space:nowrap;box-shadow:0 1px 2px rgba(23,36,47,.2);z-index:2}
+.trl-bar:active{cursor:grabbing}
+.trl-bar.tele{background:repeating-linear-gradient(135deg,var(--trl-tele) 0 7px,var(--trl-tele-2) 7px 14px)}
+.trl-bar.sel{outline:2px solid var(--ink);outline-offset:1px}
+.trl-bar:focus-visible{outline:3px solid var(--trl-bar);outline-offset:2px}
+.trl-bar span{padding:0 11px;overflow:hidden;pointer-events:none}
+.trl-bar .h{position:absolute;top:0;bottom:0;width:10px;cursor:ew-resize;z-index:3}
+.trl-bar .h::after{content:"";position:absolute;top:50%;left:50%;width:2px;height:11px;
+  transform:translate(-50%,-50%);border-radius:1px;background:currentColor;opacity:.55}
+.trl-bar .h.l{left:0}.trl-bar .h.r{right:0}
+.trl-ghost{position:absolute;top:9px;bottom:9px;border:1.5px dashed var(--trl-bar);border-left:0;
+  border-radius:0 5px 5px 0;opacity:.55;pointer-events:none;z-index:1}
+.trl-ghost.tele{border-color:var(--trl-tele)}
+.trl-bad-zone{position:absolute;top:2px;bottom:2px;pointer-events:none;z-index:1;border-radius:4px;
+  background:repeating-linear-gradient(135deg,color-mix(in srgb,var(--prob) 22%,transparent) 0 4px,transparent 4px 8px);
+  border:1px solid color-mix(in srgb,var(--prob) 55%,transparent)}
+.trl-tip{position:absolute;top:-25px;transform:translateX(-50%);background:var(--ink);color:#fff;
+  font:600 11px var(--mono);padding:2px 7px;border-radius:5px;pointer-events:none;white-space:nowrap;z-index:5}
+.trl-chip{display:inline-flex;align-items:center;font-size:11.5px;font-weight:600;padding:2px 9px;
+  border-radius:999px;white-space:nowrap}
+.trl-chip.ok{background:var(--ready-bg);color:var(--ready)}
+.trl-chip.warn{background:var(--warn-bg);color:#A35C00}
+.trl-chip.prob{background:var(--prob-bg);color:var(--prob);white-space:normal}
+.trl-chip.info{background:#E3EEF7;color:var(--trl-bar)}
+.trl-tools{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-top:8px;padding:9px 10px;
+  border-radius:9px;background:var(--paper);border:1px solid var(--line);grid-column:1 / -1}
+.trl-tools b{font-size:12.5px;margin-right:4px}
+.trl-tools button{font:500 12px inherit;padding:4px 9px;border-radius:7px;border:1px solid var(--line);
+  background:var(--card);color:var(--ink);cursor:pointer}
+.trl-tools button:hover:not(:disabled){border-color:var(--trl-bar)}
+.trl-tools button.trl-preset{font-family:var(--mono);font-size:11.5px}
+.trl-tools button[aria-pressed="true"]{background:var(--trl-tele);border-color:var(--trl-tele);color:#fff}
+.trl-tools button:disabled{opacity:.45;cursor:default}
+.trl-sep{width:1px;align-self:stretch;background:var(--line);margin:0 3px}
+.trl-total{display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin-top:8px;font-size:12.5px;
+  grid-column:1 / -1}
+.trl-total b{font-family:var(--mono)}
+.trl-meter{width:140px;height:7px;border-radius:5px;background:var(--line);overflow:hidden}
+.trl-meter i{display:block;height:100%;background:var(--trl-bar)}
+@media(max-width:640px){
+  .trl-grid:not(.one){grid-template-columns:minmax(0,1fr) auto}
+  .trl-grid:not(.one) .trl-rcell{grid-column:1 / -1}
+  .trl-grid:not(.one) .trl-textcell,.trl-grid:not(.one) .trl-trackcell,
+  .trl-grid:not(.one) .trl-msg{grid-column:1 / -1;border-top:0}
+  .trl-grid:not(.one) .trl-sum{grid-column:2}
+  .trl-ruler em{font-size:0}
+  .trl-ruler em::after{content:"+1 ημέρα";font-size:9.5px}
+}
+
+/* --- Ημερολόγιο (flatpickr, static/vendor) στο θέμα μας ----------------- */
+.flatpickr-calendar{background:var(--card);border:1px solid var(--line);
+  box-shadow:0 10px 30px rgba(23,36,47,.16);font-family:inherit}
+.flatpickr-calendar.arrowTop::after{border-bottom-color:var(--card)}
+.flatpickr-calendar.arrowBottom::after{border-top-color:var(--card)}
+.flatpickr-months .flatpickr-month,.flatpickr-current-month .flatpickr-monthDropdown-months,
+.flatpickr-current-month input.cur-year,span.flatpickr-weekday,.flatpickr-day{
+  color:var(--ink);fill:var(--ink)}
+.flatpickr-current-month .flatpickr-monthDropdown-months,
+.flatpickr-current-month .flatpickr-monthDropdown-months .flatpickr-monthDropdown-month{
+  background-color:var(--card);color:var(--ink)}
+.flatpickr-months .flatpickr-prev-month,.flatpickr-months .flatpickr-next-month{
+  color:var(--ink);fill:var(--ink)}
+.flatpickr-months .flatpickr-prev-month:hover svg,
+.flatpickr-months .flatpickr-next-month:hover svg{fill:var(--ready)}
+.flatpickr-day:hover,.flatpickr-day:focus{background:var(--ready-bg);border-color:var(--ready-bg)}
+.flatpickr-day.today{border-color:var(--ready)}
+.flatpickr-day.selected,.flatpickr-day.selected:hover{background:var(--ready);
+  border-color:var(--ready);color:#fff}
+.flatpickr-day.prevMonthDay,.flatpickr-day.nextMonthDay,.flatpickr-day.flatpickr-disabled{
+  color:var(--muted);opacity:.6}
 
 /* --- Πεδίο με κουμπί αναζήτησης (π.χ. Τοπική Δ/νση e-ΕΦΚΑ) ------------- */
 .fieldrow{display:flex;gap:6px;align-items:stretch}
@@ -2164,6 +2280,7 @@ button.pick>span:first-of-type{flex:1}
 .lb-leaveband.lv-adeia_aneu_apodoxon{--lv:var(--lv-unpaid)}
 .lb-leaveband.lv-mitrotita{--lv:var(--lv-maternity)}
 .lb-leaveband.lv-goniki{--lv:var(--lv-parental)}
+.lb-leaveband.lv-frontida_teknou{--lv:var(--lv-childcare)}
 
 /* Η κάθετη γραμμή της ΤΡΕΧΟΥΣΑΣ ΩΡΑΣ — σταθερά στο κέντρο των λωρίδων */
 /* Η θέση δίνεται από το JS (--nowx): στο κλειδωμένο grid είναι το κέντρο,

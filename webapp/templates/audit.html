@@ -50,8 +50,8 @@
     <label class="ref">Τύπος event
       <select name="type" onchange="this.form.submit()">
         <option value="">— όλοι —</option>
-        {% for t in types %}
-          <option value="{{ t }}" {{ 'selected' if t == etype }}>{{ t }}</option>
+        {% for t, label in types %}
+          <option value="{{ t }}" {{ 'selected' if t == etype }}>{{ label }}</option>
         {% endfor %}
       </select>
     </label>
@@ -89,7 +89,8 @@
             <td class="mono muted" style="font-size:11.5px;white-space:nowrap">
               {{ r.occurred_at.strftime('%d/%m/%Y %H:%M:%S') }}
             </td>
-            <td><b>{{ r.event }}</b></td>
+            <td><b>{{ r.label }}</b>
+              <div class="mono muted" style="font-size:11px">{{ r.event }}</div></td>
             <td>{{ r.who }}</td>
             <td class="mono muted" style="font-size:11.5px">{{ r.aggregate }}</td>
             <td class="mono" style="font-size:11.5px">

@@ -10,10 +10,10 @@
       <div class="mbody">
         <div class="frm cols">
           {% set sel = f.get('leave_type', 'ANNUAL') %}
-          {% set values = {'ANNUAL':'kanoniki_adeia','SICK':'astheneia','UNPAID':'adeia_aneu_apodoxon','MATERNITY':'mitrotita','PARENTAL':'goniki'} %}
+          {% set values = {'ANNUAL':'kanoniki_adeia','SICK':'astheneia','UNPAID':'adeia_aneu_apodoxon','MATERNITY':'mitrotita','PARENTAL':'goniki','CHILDCARE':'frontida_teknou'} %}
           <label>Τύπος
             <select name="leave_type">
-              {% for kind in ['ANNUAL', 'SICK', 'UNPAID', 'MATERNITY', 'PARENTAL'] %}
+              {% for kind in ['ANNUAL', 'SICK', 'UNPAID', 'MATERNITY', 'PARENTAL', 'CHILDCARE'] %}
                 <option value="{{ kind }}" {{ 'selected' if sel == kind }}>{{ leave_labels[values[kind]] }}</option>
               {% endfor %}
             </select>

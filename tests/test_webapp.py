@@ -235,6 +235,16 @@ def test_webapp(fresh_system):
     )
     eid = proj.persons[pid].employment_ids[0]
     check(f"/employments/{eid}", c.get(f"/employments/{eid}"), "Ασφαλιστικό προφίλ")
+    check(f"/employments/{eid} επιδότηση", c.get(f"/employments/{eid}"),
+          "Επιδότηση εργατικής εισφοράς")
+    check(f"/employments/{eid}/modal/childcare",
+          c.get(f"/employments/{eid}/modal/childcare"), "30 μήνες")
+    check(f"/employments/{eid}/childcare",
+          c.post(f"/employments/{eid}/childcare",
+                 data={"date_from": "2026-07-01", "option": "classic"}),
+          "1 ώρ./ημέρα")
+    c.post(f"/employments/{eid}/childcare",
+           data={"date_from": "2026-07-01", "option": ""})  # κατάργηση
     # Το info modal (badge «απασχολήσεις») δείχνει τις περιόδους με link στην καρτέλα
     if f"/employments/{eid}" in body:
         print("  OK   info modal συνδέει με τις καρτέλες απασχόλησης")

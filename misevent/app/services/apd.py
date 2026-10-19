@@ -13,7 +13,13 @@ import misevent.domain.payroll_engine as pe
 import misevent.rules.config as config
 from misevent.domain.events import APDFileGenerated, APDSubmitted
 from misevent.domain.projections import profile_coverages
-from misevent.integrations.apd_files import APDFileBuilder, EmployerInfo, InsuranceRow, InsuredInfo
+from misevent.integrations.apd_files import (
+    APDFileBuilder,
+    EmployerInfo,
+    InsuranceRow,
+    InsuredInfo,
+    SubsidyRow,
+)
 from misevent.rules.calendar_gr import last_working_day_of_month
 
 from ._base import ApdEarnings
@@ -51,10 +57,13 @@ class ApdMixin:
         sick_gross = pe.r2(sum(s["gross"] for s in sick))
         if sick_gross > payroll.gross or sick_days > payroll.insurance_days:
             sick, sick_days, sick_gross = [], 0, 0.0  # ασφαλής υποχώρηση
+        # Οι προσαυξήσεις ΧΩΡΙΣ εισφορές ΔΕΝ δηλώνονται (Εγκ. e-ΕΦΚΑ 21/2025):
+        # η ΑΠΔ γράφει μόνο το ποσό που έχει εισφορές.
+        exempt = (payroll.analysis or {}).get("premium_exempt", 0.0)
         out = [
             ApdEarnings(
                 "001",
-                pe.r2(payroll.gross - sick_gross),
+                pe.r2(payroll.gross - sick_gross - exempt),
                 payroll.insurance_days - sick_days,
             )
         ]
@@ -87,10 +96,13 @@ class ApdMixin:
             emp_parts = self.split_amount(ln["employee"], grosses)
             er_parts = self.split_amount(ln["employer"], grosses)
             for i, cell in enumerate(per_row):
-                cell[(ln["fund"], ln["kpk"])] = (emp_parts[i], er_parts[i])
+                # Η επιδότηση (σταθερό ποσό) πάει ΟΛΗ στις τακτικές (1η γραμμή)
+                sub = ln.get("subsidy", 0.0) if i == 0 else 0.0
+                cell[(ln["fund"], ln["kpk"])] = (emp_parts[i], er_parts[i], sub)
         return [r._replace(contrib=c) for r, c in zip(rows, per_row, strict=True)]
 
-    def _extra_contributions(self, emp, gross, efka_employee, efka_employer, on):
+    def _extra_contributions(self, emp, gross, efka_employee, efka_employer, on,
+                             subsidy=0.0):
         """Εισφορές μιας ΕΚΤΑΚΤΗΣ αμοιβής (Δώρο/Επίδομα Αδείας) ανά κάλυψη.
 
         Το εργοδοτικό σκέλος λείπει από τα ΠΑΛΙΑ events (γράφτηκε αργότερα):
@@ -102,9 +114,9 @@ class ApdMixin:
             rates = self.contribution_rates(emp.insurance_profile, on)
             efka_employer = pe.r2(gross * rates.employer)
         return {
-            (ln["fund"], ln["kpk"]): (ln["employee"], ln["employer"])
+            (ln["fund"], ln["kpk"]): (ln["employee"], ln["employer"], ln.get("subsidy", 0.0))
             for ln in self.contribution_lines(
-                emp.insurance_profile, on, efka_employee, efka_employer)
+                emp.insurance_profile, on, efka_employee, efka_employer, subsidy)
         }
 
     # ------------------------------------------- Παραγωγή αρχείων ΑΠΔ
@@ -129,7 +141,8 @@ class ApdMixin:
                 rows.setdefault(g.employee_id, []).append(
                     ApdEarnings(et, g.gross, 0, contrib=self._extra_contributions(
                         emp, g.gross, g.efka_employee, g.efka_employer,
-                        pe.gift_payment_date(g.gift_type, g.year)))
+                        pe.gift_payment_date(g.gift_type, g.year),
+                        g.subsidy_employee))
                 )
         for a in self.proj.allowances:
             # Το Επίδομα Αδείας δεν έχει σταθερό μήνα: μπαίνει στο αρχείο του
@@ -139,7 +152,7 @@ class ApdMixin:
                 rows.setdefault(a.employee_id, []).append(
                     ApdEarnings("005", a.gross, 0, contrib=self._extra_contributions(
                         emp, a.gross, a.efka_employee, a.efka_employer,
-                        _date(a.year, 7, 31)))
+                        _date(a.year, 7, 31), a.subsidy_employee))
                 )
         return rows
 
@@ -278,12 +291,18 @@ class ApdMixin:
                     is_daily_paid=(is_day and et in ("001", "008")),
                     # ΑΠΟ ΤΟΝ ΥΠΟΛΟΓΙΣΜΟ, ΟΧΙ ΞΑΝΑΫΠΟΛΟΓΙΣΜΟΣ: ό,τι δηλώνεται
                     # είναι ό,τι κρατήθηκε και θα καταβληθεί.
-                    contrib_employee=contrib[0],
+                    # Η ΑΠΔ δηλώνει την ΠΛΗΡΗ εισφορά εργαζομένου και χωριστά
+                    # την επιδότηση (No 49)· καταβλητέο = πλήρεις − επιδότηση.
+                    contrib_employee=pe.r2(contrib[0] + sub(contrib)),
                     contrib_employer=contrib[1],
+                    subsidy_employee=sub(contrib),
                     aux_fund_code=aux_code,
                     weekly_system=empl.weekly_system,
                     repeats_earnings=repeats,
                 )
+
+            def sub(contrib):
+                return contrib[2] if len(contrib) > 2 else 0.0
 
             def amounts(earning, cov, gross):
                 """Οι εισφορές της αμοιβής για ΑΥΤΗ την κάλυψη — από τα events.
@@ -460,7 +479,13 @@ class ApdMixin:
         # Μία γραμμή τη φορά· ο builder τις ΟΜΑΔΟΠΟΙΕΙ ανά ασφαλισμένο
         # (ΜΙΑ εγγραφή τύπου 2 και από κάτω όλες οι τύπου 3 του).
         for info, row in pairs:
-            b.add_insured(info, [row])
+            subs = None
+            if row.subsidy_employee:
+                pct = config.labor_subsidy_for(
+                    last_working_day_of_month(year, month)).pct
+                subs = {0: [SubsidyRow(
+                    "102", pe.r2(pct * 100), row.subsidy_employee, 0.0, 0.0)]}
+            b.add_insured(info, [row], subs)
         return b
 
     def apd_file_bytes(

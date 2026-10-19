@@ -748,7 +748,7 @@ def check_daily_rest(previous, following, previous_label="προηγούμενη
         )
 
 
-def check_schedule(weekly_pattern, weekly_hours=None):
+def check_schedule(weekly_pattern, weekly_hours=None, childcare_hours=0):
     """Το ΠΡΟΓΡΑΜΜΑ ΕΡΓΑΣΙΑΣ είναι ΥΠΟΧΡΕΩΤΙΚΟ στην πρόσληψη — όπως η σύμβαση.
 
     Χωρίς αυτό δεν μπορούν να τεκμαρθούν παρουσίες/απουσίες (συγκεντρωτικό
@@ -760,7 +760,11 @@ def check_schedule(weekly_pattern, weekly_hours=None):
     Το σύνολο του template πρέπει να είναι ΙΣΟ με τις εβδομαδιαίες ώρες της
     σύμβασης. Πρόσθετη εργασία/υπερεργασία/υπερωρία προκύπτει από πραγματική
     απασχόληση ή μεταγενέστερη δήλωση και δεν ενσωματώνεται στο συμβατικό
-    template της πρόσληψης."""
+    template της πρόσληψης.
+
+    `childcare_hours`: μειωμένο ωράριο φροντίδας τέκνου — το σύνολο μπορεί να
+    είναι έως τόσες ώρες ανά ημέρα εργασίας ΚΑΤΩ από τη σύμβαση, που μένει
+    αμετάβλητη (η μείωση λογίζεται πλήρης χρόνος εργασίας)."""
     if not weekly_pattern:
         raise ValueError(
             "Απαιτείται πρόγραμμα εργασίας (τουλάχιστον μία ημέρα με ωράριο) — "
@@ -792,7 +796,15 @@ def check_schedule(weekly_pattern, weekly_hours=None):
         return
     total = schedule_hours(weekly_pattern)
     contract_hours = float(weekly_hours)
-    if abs(total - contract_hours) > HOURS_TOLERANCE:
+    work_days = sum(1 for h in weekly_pattern.values() if parse_day_schedule(h))
+    low = contract_hours - childcare_hours * work_days
+    if not low - HOURS_TOLERANCE <= total <= contract_hours + HOURS_TOLERANCE:
+        if childcare_hours:
+            raise ValueError(
+                f"Το πρόγραμμα δίνει {total:g} ώρες/εβδομάδα. Με μειωμένο "
+                f"ωράριο φροντίδας τέκνου ({childcare_hours:g} ώρ./ημέρα) "
+                f"πρέπει να είναι από {low:g} έως {contract_hours:g}."
+            )
         raise ValueError(
             f"Το πρόγραμμα δίνει {total:g} ώρες/εβδομάδα, αλλά η σύμβαση "
             f"ορίζει {contract_hours:g}. Το σύνολο των ωρών του προγράμματος "

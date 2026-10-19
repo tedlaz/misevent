@@ -3,13 +3,14 @@
    Το native <input type="date"> μορφοποιείται από τη ΓΛΩΣΣΑ ΤΟΥ BROWSER, όχι
    από το lang="el" της σελίδας: σε αγγλικό Chrome εμφανίζεται mm/dd/yyyy. Το
    αρχείο αυτό είναι progressive enhancement: μπροστά από κάθε πεδίο μπαίνει
-   ΔΙΚΟ ΜΑΣ πεδίο κειμένου με μάσκα ΗΗ/ΜΜ/ΕΕΕΕ + κουμπί ημερολογίου.
+   ΔΙΚΟ ΜΑΣ πεδίο κειμένου με μάσκα ΗΗ/ΜΜ/ΕΕΕΕ· κλικ πάνω του = ημερολόγιο.
 
    ⚠️ ΤΟ NATIVE INPUT ΠΑΡΑΜΕΝΕΙ Η ΠΗΓΗ ΑΛΗΘΕΙΑΣ: κρατά name/value σε ISO, άρα
    υποβάλλεται ό,τι και πριν και ΚΑΜΙΑ φόρμα/έλεγχος δεν αλλάζει. Απλώς
    κρύβεται οπτικά (μένει rendered, ώστε να δουλεύει το showPicker()).
    ⚠️ Το `required` ΜΕΤΑΦΕΡΕΤΑΙ στο ορατό πεδίο: ένα κρυμμένο invalid control
    μπλοκάρει σιωπηλά την υποβολή (ο browser δεν μπορεί να το εστιάσει).
+   Το ημερολόγιο είναι flatpickr (static/vendor, ίδιο με το mydata-classifier).
    Τα min/max μένουν στο native (τα τιμά ο picker) και ελέγχονται ΚΑΙ εδώ:
    εκτός ορίων -> το native αδειάζει και το μήνυμα βγαίνει στο ορατό πεδίο. */
 (() => {
@@ -60,19 +61,13 @@
     if (native.title) text.title = native.title;
     if (native.id) text.setAttribute("aria-labelledby", native.id);
 
-    const cal = document.createElement("button");
-    cal.type = "button";  // ΠΟΤΕ submit μέσα σε φόρμα
-    cal.className = "dgr-cal";
-    cal.tabIndex = -1;
-    cal.title = "Άνοιγμα ημερολογίου";
-    cal.textContent = "📅";
-
     native.parentNode.insertBefore(wrap, native);
-    wrap.append(text, cal, native);
+    wrap.append(text, native);
     native.classList.add("dgr-native");
     native.tabIndex = -1;  // εκτός σειράς πλοήγησης: το ορατό πεδίο οδηγεί
 
     let syncing = false;
+    let fp = null;  // flatpickr — δημιουργείται στο πρώτο κλικ
 
     const validate = () => {
       const raw = text.value.trim();
@@ -101,6 +96,7 @@
     const push = () => {
       const iso = validate();
       if (native.value === iso) return;
+      if (fp && iso) fp.setDate(iso, false);  // το ανοιχτό ημερολόγιο ακολουθεί
       syncing = true;
       native.value = iso;
       native.dispatchEvent(new Event("input", {bubbles: true}));
@@ -127,12 +123,38 @@
       validate();
     });
 
-    cal.addEventListener("click", () => {
+    // Ημερολόγιο: ΚΛΙΚ ΠΑΝΩ ΣΤΟ ΠΕΔΙΟ (κανένα χωριστό κουμπί). flatpickr
+    // (όπως στο mydata-classifier) πάνω στο NATIVE — γράφει ISO και στέλνει
+    // change/input, οπότε ο συγχρονισμός native -> ορατό πεδίο παραπάνω
+    // αρκεί. Η πληκτρολόγηση μένει ελεύθερη. Δημιουργείται στο πρώτο κλικ
+    // (λίγα instances παρά τα htmx swaps). Χωρίς flatpickr: showPicker().
+    text.addEventListener("click", () => {
+      if (text.readOnly || text.disabled) return;
+      if (window.flatpickr) {
+        if (!fp) {
+          fp = flatpickr(native, {
+            locale: "gr", dateFormat: "Y-m-d", clickOpens: false,
+            disableMobile: true, positionElement: text,
+            ignoredFocusElements: [text],  // κλικ για πληκτρολόγηση: μένει ανοιχτό
+          });
+          // Το flatpickr το κάνει type="text" — τότε δεν το κρύβει το CSS
+          // (.dgr>input[type=date]) και φαίνεται δίπλα μας σε ISO.
+          native.type = "date";
+        }
+        fp.set("minDate", native.min || null);
+        fp.set("maxDate", native.max || null);
+        fp.setDate(native.value || null, false);
+        fp.open();
+        return;
+      }
       try {
         native.showPicker();
       } catch (err) {
         native.focus();
       }
+    });
+    text.addEventListener("keydown", e => {
+      if (fp && (e.key === "Escape" || e.key === "Tab")) fp.close();
     });
 
     validate();

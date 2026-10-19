@@ -1,7 +1,7 @@
 {# Modal σταθερού εβδομαδιαίου προγράμματος (κενό πεδίο = ρεπό). #}
 {% set f = form or {} %}
 <div class="modal-backdrop">
-  <div class="modal">
+  <div class="modal wide">
     <form hx-post="{{ url_for('employments.schedule', employment_id=e.employment_id) }}"
           hx-target="#employment-card" hx-swap="outerHTML">
       <div class="mhead">
@@ -19,11 +19,18 @@
           <label>Λήξη (προαιρετικό)<input type="date" name="end_date"
             value="{{ f.get('end_date', '') }}"
             title="Κενό = δεν λήγει ποτέ. Μετά τη λήξη δεν ισχύει πρόγραμμα, εκτός αν ακολουθεί νεότερο εβδομαδιαίο."></label>
+          {# Ράγα ωραρίου (static/time-rail.js): ξαναχτίζει τις γραμμές σε
+             πλέγμα με κοινό άξονα· τα πεδία day_XXX μένουν η πηγή της τιμής. #}
+          {% set full = {'MON':'Δευτέρα','TUE':'Τρίτη','WED':'Τετάρτη','THU':'Πέμπτη',
+                         'FRI':'Παρασκευή','SAT':'Σάββατο','SUN':'Κυριακή'} %}
+          <div data-time-rail-week data-contract-hours="{{ '%g'|format(e.weekly_hours) }}"
+               data-childcare-hours="{{ e.childcare_hours_on(today) }}">
           {% for code, lbl in days %}
             <div class="dayrow"><b>{{ lbl }}</b>
-              <input name="day_{{ code }}" placeholder="09:00-17:00"
+              <input name="day_{{ code }}" placeholder="ρεπό" data-time-rail="{{ full[code] }}"
                      value="{{ f.get('day_' ~ code, e.schedule.get(code, '')) }}"></div>
           {% endfor %}
+          </div>
         </div>
       </div>
       <div class="mfoot">

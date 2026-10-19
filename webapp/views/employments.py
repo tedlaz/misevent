@@ -470,6 +470,7 @@ EMP_MODALS = {
     "daily",
     "attendance",
     "leave",
+    "childcare",
 }
 
 
@@ -677,6 +678,27 @@ def _insurance_badges(prof, covs):
     return auxiliary, others
 
 
+def _labor_subsidy_badge(e, on) -> dict:
+    """Badge «Επιδότηση εισφοράς» της καρτέλας: δικαιούται ΣΗΜΕΡΑ; Το ποσό
+    από την ΙΔΙΑ πηγή με τη μισθοδοσία (`svc.labor_subsidy_full`)· ο λόγος
+    του ΟΧΙ είναι μόνο ενημερωτικός."""
+    full = svc.labor_subsidy_full(e, e.monthly_gross, e.weekly_hours, on)
+    if full:
+        return {"label": "ΝΑΙ", "tone": "team", "amount": round(full, 2), "why": ""}
+    prof = e.insurance_profile
+    if prof and prof.labor_subsidy_excluded:
+        why = "δηλωμένη εξαίρεση"
+    elif e.oaed_placement not in ("", "0"):
+        why = "πρόγραμμα ΔΥΠΑ"
+    elif e.pay_type != "monthly":
+        why = "ημερομίσθιος — δεν υποστηρίζεται ακόμη"
+    elif e.weekly_hours < 40:
+        why = "μερική απασχόληση"
+    else:
+        why = "μισθός διαφορετικός από το κατώτατο όριο"
+    return {"label": "ΟΧΙ", "tone": "no", "amount": 0.0, "why": why}
+
+
 def _service_time(e) -> dict:
     """Χρόνος εργασίας σε δεκαδικά έτη (τα αποδίδει το φίλτρο `service_gr`).
 
@@ -735,6 +757,7 @@ def _card(employment_id):
         "employment_status": employment_status,
         "days": DAYS,
         "leave_labels": LEAVE_LABELS,
+        "childcare_options": config.CHILDCARE_REDUCTION_OPTIONS,
         "reasons": TERMINATION_REASONS,
         "entitlement": svc.annual_leave_entitlement(employment_id, year),
         "taken": svc.annual_leave_taken(employment_id, year),
@@ -765,6 +788,7 @@ def _card(employment_id):
             married=e.married,
             extra_pct=e.extra_allowances_pct,
         ),
+        "labor_subsidy": _labor_subsidy_badge(e, today()),
         # Χρόνος εργασίας: δηλωθείσα προϋπηρεσία + χρόνος στον ίδιο εργοδότη
         "service": _service_time(e),
         "today": today(),  # προεπιλογή στα πεδία ημερομηνίας των modals
@@ -1296,6 +1320,7 @@ def insurance(employment_id):
             auxiliary_scheme=f.get("auxiliary_scheme"),
             pron_choice=f.get("pron_choice"),
             branch_no=form_int(f, "branch_no"),
+            labor_subsidy_excluded=bool(f.get("labor_subsidy_excluded")),
         )
         return "Ενημερώθηκε το ασφαλιστικό προφίλ της απασχόλησης"
 
@@ -1319,6 +1344,23 @@ def schedule(employment_id):
     if ok:
         return flash_to(_fragment(employment_id), msg, err=False)
     return _modal_error(employment_id, "schedule", msg)
+
+
+@bp.post("/<employment_id>/childcare")
+def childcare(employment_id):
+    def cmd():
+        f = request.form
+        svc.set_childcare_reduction(
+            employment_id, form_date(f, "date_from"), f.get("option", "")
+        )
+        if not f.get("option"):
+            return "Καταργήθηκε το μειωμένο ωράριο φροντίδας τέκνου"
+        return "Δηλώθηκε μειωμένο ωράριο — άλλαξε τώρα το εβδομαδιαίο πρόγραμμα"
+
+    ok, msg = run_command(cmd)
+    if ok:
+        return flash_to(_fragment(employment_id), msg, err=False)
+    return _modal_error(employment_id, "childcare", msg)
 
 
 @bp.post("/<employment_id>/schedule/daily")

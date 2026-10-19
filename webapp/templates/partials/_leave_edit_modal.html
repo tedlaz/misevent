@@ -12,8 +12,8 @@
           {% set sel = f.get('leave_type', lv.leave_type.name) %}
           <label>Τύπος
             <select name="leave_type">
-              {% for kind in ['ANNUAL', 'SICK', 'UNPAID', 'MATERNITY', 'PARENTAL'] %}
-                {% set values = {'ANNUAL':'kanoniki_adeia','SICK':'astheneia','UNPAID':'adeia_aneu_apodoxon','MATERNITY':'mitrotita','PARENTAL':'goniki'} %}
+              {% for kind in ['ANNUAL', 'SICK', 'UNPAID', 'MATERNITY', 'PARENTAL', 'CHILDCARE'] %}
+                {% set values = {'ANNUAL':'kanoniki_adeia','SICK':'astheneia','UNPAID':'adeia_aneu_apodoxon','MATERNITY':'mitrotita','PARENTAL':'goniki','CHILDCARE':'frontida_teknou'} %}
                 <option value="{{ kind }}" {{ 'selected' if sel == kind }}>{{ leave_labels[values[kind]] }}</option>
               {% endfor %}
             </select>

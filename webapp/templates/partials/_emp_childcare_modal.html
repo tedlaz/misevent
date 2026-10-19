@@ -1,0 +1,42 @@
+{# Modal μειωμένου ωραρίου φροντίδας τέκνου. Η σύμβαση ΔΕΝ αλλάζει: απλώς
+   επιτρέπεται μικρότερο πρόγραμμα. Νέα δήλωση αντικαθιστά την προηγούμενη. #}
+{% set f = form or {} %}
+{% set cur = e.childcare_reduction %}
+<div class="modal-backdrop">
+  <div class="modal">
+    <form hx-post="{{ url_for('employments.childcare', employment_id=e.employment_id) }}"
+          hx-target="#employment-card" hx-swap="outerHTML">
+      <div class="mhead">
+        <h3>👶 Μειωμένο ωράριο φροντίδας τέκνου — {{ e.full_name }}</h3>
+        <span class="muted" style="font-size:12.5px">
+          μετά τη λοχεία · πληρώνεται ως πλήρες ωράριο (μισθός, εισφορές, δώρα
+          αμετάβλητα) · μετά τη δήλωση άλλαξε το εβδομαδιαίο πρόγραμμα</span>
+      </div>
+      <div class="mbody">
+        <div class="frm cols">
+          <label>Έναρξη<input type="date" name="date_from"
+            value="{{ f.get('date_from', (cur[0][0] if cur else today).isoformat()) }}"
+            required></label>
+          {% set sel = f.get('option', '') %}
+          <label>Επιλογή
+            <select name="option">
+              {% for code, (lbl, _) in childcare_options.items() %}
+                <option value="{{ code }}" {{ 'selected' if sel == code }}>{{ lbl }}</option>
+              {% endfor %}
+              {% if cur %}<option value="" {{ 'selected' if sel == '' and f }}>Κατάργηση</option>{% endif %}
+            </select>
+          </label>
+        </div>
+        <div class="muted" style="font-size:12px;margin-top:8px">
+          Ισόχρονη άδεια (συνεχόμενες ημέρες αντί για μείωση): καταχώρησέ την ως
+          άδεια «Φροντίδα τέκνου (ισόχρονη)».</div>
+      </div>
+      <div class="mfoot">
+        <button type="button" class="ghost"
+                hx-get="{{ url_for('employments.modal_close') }}"
+                hx-target="#modal-host" hx-swap="innerHTML">Άκυρο</button>
+        <button class="run" type="submit">Αποθήκευση</button>
+      </div>
+    </form>
+  </div>
+</div>

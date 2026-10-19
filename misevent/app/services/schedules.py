@@ -10,8 +10,10 @@
 from datetime import date, timedelta
 
 import misevent.integrations.ergani as ergani_mod
+import misevent.rules.config as config
 import misevent.rules.constraints as constraints
 from misevent.domain.events import (
+    ChildcareReductionSet,
     DailyScheduleAssigned,
     ScheduleDaysSubmitted,
     WorkScheduleAssigned,
@@ -19,6 +21,21 @@ from misevent.domain.events import (
 
 
 class SchedulesMixin:
+    def set_childcare_reduction(self, employee_id, date_from, option=""):
+        """Μειωμένο ωράριο φροντίδας τέκνου. Η σύμβαση ΔΕΝ αλλάζει· επιτρέπεται
+        απλώς μικρότερο πρόγραμμα, που δηλώνεται στο ΕΡΓΑΝΗ όπως κάθε αλλαγή
+        προγράμματος. Νέα δήλωση αντικαθιστά την προηγούμενη· "" = κατάργηση."""
+        emp = self.proj.employments.get(employee_id)
+        if emp is None:
+            raise ValueError(f"Άγνωστος εργαζόμενος {employee_id}")
+        if option and option not in config.CHILDCARE_REDUCTION_OPTIONS:
+            raise ValueError(f"Άγνωστη επιλογή μειωμένου ωραρίου «{option}»")
+        if option and not emp.active_on(date_from):
+            raise ValueError("Η έναρξη είναι εκτός της περιόδου απασχόλησης")
+        self.store.append(
+            employee_id, ChildcareReductionSet(employee_id, date_from, option)
+        )
+
     def set_schedule(
         self, employee_id, effective_from, weekly_pattern: dict, end_date=None
     ):
@@ -27,7 +44,9 @@ class SchedulesMixin:
             raise ValueError(f"Άγνωστος εργαζόμενος {employee_id}")
         self._check_open_period(effective_from, "αλλαγή προγράμματος")
         # Οι ώρες του προγράμματος πρέπει να συμφωνούν με τη σύμβαση (40 = πλήρης)
-        constraints.check_schedule(weekly_pattern, emp.weekly_hours)
+        constraints.check_schedule(
+            weekly_pattern, emp.weekly_hours, emp.childcare_hours_on(effective_from)
+        )
         if end_date is not None and end_date < effective_from:
             raise ValueError(
                 "Η ημερομηνία λήξης του εβδομαδιαίου δεν μπορεί να είναι "
@@ -185,8 +204,14 @@ class SchedulesMixin:
                 )
                 sunday = monday + timedelta(days=6)
                 label = f"{monday.strftime('%d/%m')}–{sunday.strftime('%d/%m/%Y')}"
+                # Μειωμένο ωράριο φροντίδας τέκνου: λιγότερες ώρες ανά ημέρα εργασίας
+                reduction = sum(
+                    emp.childcare_hours_on(d)
+                    for d in week_days
+                    if constraints.day_schedule_minutes(emp.day_schedule(d))
+                )
                 constraints.check_week_hours_minimum(
-                    total_hours, emp.weekly_hours, label, emp.full_name
+                    total_hours, emp.weekly_hours - reduction, label, emp.full_name
                 )
             grouped[eid] = days
         if not grouped:

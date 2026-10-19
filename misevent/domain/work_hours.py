@@ -271,9 +271,14 @@ def class_rate(cls: str, hourly: float, rules: WorkHourRules) -> float:
 def pay_supplement(rate: float, hours: dict, rules: WorkHourRules) -> dict:
     """Γραμμές επιπλέον αμοιβών από τα 20 πεδία ωρών του φύλλου.
 
-    Επιστρέφει {"lines": {field: {label, hours, mult, amount}}, "total"} —
-    οι γραμμές της απόδειξης αποδοχών. Ποσό = κανονικό ωρομίσθιο x mult x ώρες.
-    Το σκέτο `normal` (ημέρα, εργάσιμη) έχει mult 0 και δεν βγάζει γραμμή."""
+    Επιστρέφει {"lines": {field: {label, hours, mult, amount, premium}},
+    "total", "premium"} — οι γραμμές της απόδειξης αποδοχών. Ποσό = κανονικό
+    ωρομίσθιο x mult x ώρες. Το σκέτο `normal` (ημέρα, εργάσιμη) έχει mult 0
+    και δεν βγάζει γραμμή.
+
+    `premium` = το καθαρό ποσό ΠΡΟΣΑΥΞΗΣΗΣ της γραμμής (Εγκ. e-ΕΦΚΑ 21/2025):
+    εντός ωραρίου ΟΛΟ το ποσό (η ώρα πληρώνεται ήδη με τον μισθό)· πέραν του
+    ωραρίου ό,τι υπερβαίνει την απλή αξία της ώρας (ωρομίσθιο x ώρες)."""
     lines = {}
     for f in SHEET_HOUR_FIELDS:
         h = float(hours.get(f, 0) or 0)
@@ -288,6 +293,8 @@ def pay_supplement(rate: float, hours: dict, rules: WorkHourRules) -> dict:
         label = RATE_LABELS[cls]
         if variant:
             label += f" ({VARIANT_LABELS[variant]})"
+        amount = round(rate * mult * h, 2)
+        plain = 0.0 if cls == "normal" else round(rate * h, 2)
         lines[f] = {
             "label": label,
             "cls": cls,
@@ -296,9 +303,11 @@ def pay_supplement(rate: float, hours: dict, rules: WorkHourRules) -> dict:
             "holiday": holiday,
             "hours": round(h, 2),
             "mult": round(mult, 4),
-            "amount": round(rate * mult * h, 2),
+            "amount": amount,
+            "premium": round(max(amount - plain, 0.0), 2),
         }
     return {
         "lines": lines,
         "total": round(sum(x["amount"] for x in lines.values()), 2),
+        "premium": round(sum(x["premium"] for x in lines.values()), 2),
     }

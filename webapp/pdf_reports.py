@@ -350,7 +350,8 @@ def payroll_statement_pdf(year: int, month: int) -> bytes:
         # Κατανομή των εισφορών ΑΝΑ ΦΟΡΕΑ (ΕΦΚΑ / ΤΕΚΑ / λοιπά ταμεία) —
         # εργαζομένου + εργοδότη, όπως καταβάλλονται στον κάθε φορέα.
         split = q.contribution_split(
-            emp, a["gross"], a["efka_employee"], a["efka_employer"], ref
+            emp, round(a["gross"] - a.get("premium_exempt", 0.0), 2),
+            a["efka_employee"], a["efka_employer"], ref
         )
         for carrier in ("efka", "teka", "other"):
             total["c_" + carrier] += (
@@ -622,11 +623,15 @@ def _wage_composition(pdf: ReportPDF, wb: dict | None):
 
 def _efka_deduction_lines(pdf: ReportPDF, a: dict):
     """Γραμμές ασφαλιστικών κρατήσεων εργαζομένου ανά ταμείο/ΚΠΚ."""
-    for d in a["efka_detail"]:
+    sub = a.get("subsidy_employee") or 0.0
+    for i, d in enumerate(a["efka_detail"]):
         kpk = f" · ΚΠΚ {d['kpk']}" if d.get("kpk") else ""
+        # Η επιδότηση αφαιρείται από την ΚΥΡΙΑ κάλυψη (1η γραμμή)
+        note = (f" — μείον επιδότηση εργατικής εισφοράς (ΔΥΠΑ) {eur(sub)}"
+                if sub and i == 0 else "")
         _line(pdf, f"Εισφορές — {d['label']}{kpk}",
               f"{num(round(d['employee'] * 100, 2))}% επί των ασφαλιστέων "
-              "αποδοχών (μικτά έως το πλαφόν ΕΦΚΑ)",
+              f"αποδοχών (μικτά έως το πλαφόν ΕΦΚΑ){note}",
               d["amount"], color=ROSE, sign="− ")
 
 

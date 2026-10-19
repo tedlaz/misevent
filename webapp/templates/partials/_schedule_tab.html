@@ -14,14 +14,15 @@
       (κενό ≥ 3 ώρες) · πρόθεμα Τ = τηλεεργασία</span>
   </div>
 
-  <div class="wide wk-tpl">
+  {# Ράγα ωραρίου (static/time-rail.js) — σύμβαση από το πεδίο weekly_hours #}
+  <div class="wide wk-tpl" data-time-rail-week data-contract-field="weekly_hours">
     {% for code, lbl, we in [('MON','Δευτέρα',0), ('TUE','Τρίτη',0),
                              ('WED','Τετάρτη',0), ('THU','Πέμπτη',0),
                              ('FRI','Παρασκευή',0), ('SAT','Σάββατο',1),
                              ('SUN','Κυριακή',1)] %}
       <label class="wk-day{{ ' we' if we }}">
         <span class="wk-lbl">{{ lbl }}</span>
-        <input name="day_{{ code }}" placeholder="ρεπό"
+        <input name="day_{{ code }}" placeholder="ρεπό" data-time-rail="{{ lbl }}"
           value="{{ fv.get('day_' ~ code, '09:00-17:00' if code in ('MON','TUE','WED','THU','FRI') else '') }}">
       </label>
     {% endfor %}

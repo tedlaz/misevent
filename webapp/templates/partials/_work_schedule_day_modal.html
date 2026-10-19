@@ -17,7 +17,7 @@
           <label>Έως<input type="date" name="date_to"
             value="{{ f.get('date_to', selected.isoformat()) }}" required></label>
           <label class="wide">Ωράριο (κενό = ΡΕΠΟ)
-            <input name="hours" placeholder="09:00-17:00"
+            <input name="hours" placeholder="ρεπό" data-time-rail
                    value="{{ f.get('hours', current_hours) }}"></label>
         </div>
       </div>

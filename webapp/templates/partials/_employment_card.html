@@ -232,6 +232,11 @@
             {% else %}
               <span class="ins-badge ins-no">ΟΧΙ</span>
             {% endif %}</div>
+          <div class="f"><span>Επιδότηση εργατικής εισφοράς</span>
+            <span class="ins-badge ins-{{ labor_subsidy.tone }}"
+                  title="αρ. 14 ν. 2837/2000 — ΑΠΔ κωδ. 102">{{ labor_subsidy.label }}</span>
+            {% if labor_subsidy.amount %}<small>{{ labor_subsidy.amount|money }} €/πλήρη μήνα</small>
+            {% else %}<small>{{ labor_subsidy.why }}</small>{% endif %}</div>
           <div class="f wide"><span>Ασφαλιστικές καλύψεις (ΚΑΔ · Ειδ. · ΚΠΚ)</span>
             <div class="covs" style="margin-top:3px">
               {% for c in coverages %}
@@ -257,9 +262,18 @@
           <button class="ghost sm"
                   hx-get="{{ url_for('employments.modal', employment_id=mid, name='daily') }}"
                   hx-target="#modal-host" hx-swap="innerHTML">📆 Ημερήσιο</button>
+          <button class="ghost sm"
+                  hx-get="{{ url_for('employments.modal', employment_id=mid, name='childcare') }}"
+                  hx-target="#modal-host" hx-swap="innerHTML">👶 Μειωμένο</button>
           {% endif %}
         </span>
       </h3>
+      {% for a, b, h in e.childcare_reduction %}
+        <div class="muted" style="font-size:12px;margin-bottom:4px">
+          👶 Μειωμένο ωράριο φροντίδας τέκνου: <b>{{ h }} ώρ./ημέρα</b>
+          {{ a|date_gr }} – {{ b|date_gr }}
+          (πληρώνεται ως πλήρες)</div>
+      {% endfor %}
       {% if e.schedule %}
         <div class="wk">
           {% for code, lbl in days %}

@@ -9,6 +9,7 @@ Projections (read models) — η «τρέχουσα κατάσταση» που 
 
 """
 
+import calendar
 from dataclasses import dataclass, field
 from dataclasses import fields as dc_fields
 from datetime import date, timedelta
@@ -24,6 +25,7 @@ from misevent.domain.events import (
     AttendanceSheetApproved,
     CardPunchCancelled,
     CardPunchRecorded,
+    ChildcareReductionSet,
     CompanyBranchDefined,
     CompanyRegistered,
     CompanySpecialtyDefined,
@@ -68,6 +70,13 @@ from misevent.domain.events import (
 )
 from misevent.rules import config
 from misevent.rules.config import sick_leave_rules_for
+
+
+def _add_months(d: date, n: int) -> date:
+    y, m = divmod(d.month - 1 + n, 12)
+    y += d.year
+    return date(y, m + 1, min(d.day, calendar.monthrange(y, m + 1)[1]))
+
 
 # Οικογένεια παραμέτρων ανά event — ΠΑΡΑΓΩΓΟ του μητρώου `config.FAMILIES`.
 # Το config αναφέρει το event με το ΟΝΟΜΑ του (είναι φύλλο του γράφου και δεν
@@ -336,6 +345,8 @@ class EmploymentState:
     leaves: list = field(default_factory=list)  # LeaveRecorded events
     cancelled_leaves: set = field(default_factory=set)
     sickness_benefits: dict = field(default_factory=dict)  # leave_id -> ποσό ΕΦΚΑ
+    # Μειωμένο ωράριο φροντίδας τέκνου: [(από, έως, ώρες/ημέρα)]
+    childcare_reduction: list = field(default_factory=list)
     person: PersonState | None = None  # σύνδεσμος με το φυσικό πρόσωπο
     # ΕΧΕΙ ΥΠΟΒΛΗΘΕΙ Η ΑΝΑΓΓΕΛΙΑ ΠΡΟΣΛΗΨΗΣ (Ε3/WebE3N ή «external»);
     # ΜΟΝΗ πηγή: `ErganiSubmissionRecorded`. Δεν τεκμαίρεται ΠΟΤΕ από τον
@@ -738,6 +749,10 @@ class EmploymentState:
             if t.effective_from is None or t.effective_from <= d
         ]
         return active[-1] if active else self.contract_history[0]
+
+    def childcare_hours_on(self, d: date) -> int:
+        """Ώρες/ημέρα μειωμένου ωραρίου φροντίδας τέκνου που ισχύουν στην `d`."""
+        return next((h for a, b, h in self.childcare_reduction if a <= d <= b), 0)
 
     def scheduled_days_per_week(self) -> int:
         """Πόσες ημέρες την εβδομάδα προβλέπει το εβδομαδιαίο πρόγραμμα.
@@ -1513,6 +1528,16 @@ class Projections:
                         event.leave_id,
                     )
                     break
+
+        elif isinstance(event, ChildcareReductionSet):
+            emp = self.employments[event.employee_id]
+            emp.childcare_reduction = []
+            start = event.date_from
+            _, steps = config.CHILDCARE_REDUCTION_OPTIONS.get(event.option, ("", ()))
+            for months, hours in steps:
+                end = _add_months(start, months)
+                emp.childcare_reduction.append((start, end - timedelta(days=1), hours))
+                start = end
 
         elif isinstance(event, SicknessBenefitRecorded):
             # Νέα καταχώρηση αντικαθιστά την προηγούμενη (διόρθωση ποσού)

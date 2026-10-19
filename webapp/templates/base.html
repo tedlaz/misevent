@@ -7,11 +7,16 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <link rel="icon" href="{{ url_for('static', filename='app.ico') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='vendor/flatpickr.min.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='app.css') }}">
 <script src="{{ url_for('static', filename='htmx.min.js') }}" defer></script>
 {# Ελληνική μορφή ΗΗ/ΜΜ/ΕΕΕΕ σε ΚΑΘΕ πεδίο ημερομηνίας — ο browser θα
    μορφοποιούσε το native input με τη ΔΙΚΗ ΤΟΥ γλώσσα (mm/dd/yyyy) #}
+<script src="{{ url_for('static', filename='vendor/flatpickr.min.js') }}" defer></script>
+<script src="{{ url_for('static', filename='vendor/flatpickr-gr.js') }}" defer></script>
 <script src="{{ url_for('static', filename='date-gr.js') }}" defer></script>
+{# Ράγα ωραρίου: οπτικός επεξεργαστής των πεδίων ωραρίου ([data-time-rail]) #}
+<script src="{{ url_for('static', filename='time-rail.js') }}" defer></script>
 {# Θυμάται ποιες ομάδες του μενού είναι ανοιχτές, μεταξύ σελίδων #}
 <script src="{{ url_for('static', filename='nav-fold.js') }}" defer></script>
 <script src="{{ url_for('static', filename='leave-range.js') }}" defer></script>
@@ -82,10 +87,9 @@
         <input type="hidden" name="next" value="{{ request.full_path }}">
         <label class="ref" title="Το «σήμερα» του συστήματος — άλλαξέ το για να
 δοκιμάσεις μελλοντικές ή παρελθοντικές περιόδους">
-          {# ⚠️ ΚΑΝΕΝΑ 📅 ΕΔΩ: το `date-gr.js` προσθέτει ΤΟ ΔΙΚΟ ΤΟΥ κουμπί
-             ημερολογίου δίπλα σε κάθε πεδίο ημερομηνίας, οπότε ένα δεύτερο,
-             ίδιο εικονίδιο θα ήταν διακοσμητικό και θα έμοιαζε χαλασμένο.
-             Το ρολόι μένει: σημαίνει «η ημερομηνία ΔΕΝ είναι η σημερινή». #}
+          {# ⚠️ ΚΑΝΕΝΑ 📅 ΕΔΩ: το ημερολόγιο ανοίγει με κλικ πάνω στο πεδίο
+             (`date-gr.js`) — ένα εικονίδιο θα έμοιαζε με κουμπί που δεν κάνει
+             τίποτα. Το ρολόι μένει: σημαίνει «η ημερομηνία ΔΕΝ είναι η σημερινή». #}
           {% if time_travel %}🕰️{% endif %}
           <input type="date" name="ref" value="{{ today.isoformat() }}">
         </label>

@@ -14,6 +14,7 @@ from pathlib import Path
 
 from flask import Blueprint, redirect, render_template, request, send_file, url_for
 
+from ..labels import EVENT_LABELS
 from ..queries import emp_name
 from ..system import current_tenant, lock, proj, rebuild_all, store
 from ..tenancy import data_dir
@@ -50,6 +51,7 @@ def index():
             {
                 "seq": rec["seq"],
                 "event": name,
+                "label": EVENT_LABELS.get(name, name),
                 "aggregate": agg,
                 "who": _describe(agg),
                 "occurred_at": datetime.fromisoformat(rec["occurred_at"]),
@@ -60,7 +62,10 @@ def index():
         )
     total = len(rows)
     rows = rows[::-1][:PAGE]  # νεότερα πρώτα
-    types = sorted({rec["event_type"] for rec in log})
+    types = sorted(
+        ((t, EVENT_LABELS.get(t, t)) for t in {rec["event_type"] for rec in log}),
+        key=lambda x: x[1],
+    )
     return render_template(
         "audit.html",
         rows=rows,

@@ -456,16 +456,21 @@ class PayrollMixin:
         out[0] = pe.r2(out[0] + (total - sum(out)))
         return out
 
-    def contribution_lines(self, prof, on, total_employee, total_employer):
+    def contribution_lines(self, prof, on, total_employee, total_employer, subsidy=0.0):
         """Οι ΥΠΟΛΟΓΙΣΜΕΝΕΣ εισφορές, σπασμένες ΑΝΑ ΚΑΛΥΨΗ (ταμείο/ΚΠΚ).
 
         Ο επιμερισμός γίνεται με τα ποσοστά της κάθε κάλυψης, αλλά τα ποσά
         αθροίζουν ΑΚΡΙΒΩΣ στα σύνολα του υπολογισμού — αυτά που θα δηλωθούν
-        και θα καταβληθούν."""
+        και θα καταβληθούν.
+
+        `subsidy` (επιδότηση εργατικής εισφοράς): αφορά ΜΟΝΟ την κύρια κάλυψη
+        (πρώτη γραμμή). Επιμερίζεται η ΠΛΗΡΗΣ εισφορά και η επιδότηση
+        αφαιρείται από την κύρια — αλλιώς θα «μίκραινε» και η επικουρική."""
         rows = self.contribution_breakdown(prof, on)
-        emp_parts = self.split_amount(total_employee, [r["employee"] for r in rows])
+        emp_parts = self.split_amount(
+            pe.r2(total_employee + subsidy), [r["employee"] for r in rows])
         er_parts = self.split_amount(total_employer, [r["employer"] for r in rows])
-        return [
+        out = [
             {
                 "fund": r["fund"], "kpk": r["kpk"],
                 "employee": e, "employer": g,
@@ -473,6 +478,66 @@ class PayrollMixin:
             }
             for r, e, g in zip(rows, emp_parts, er_parts, strict=True)
         ]
+        if subsidy and out:
+            out[0]["employee"] = pe.r2(out[0]["employee"] - subsidy)
+            out[0]["subsidy"] = subsidy
+        return out
+
+    @staticmethod
+    def premium_exempt(emp, premium: dict, on) -> float:
+        """Το ποσό των προσαυξήσεων ΧΩΡΙΣ εισφορές (αρ. 41 ν. 5184/2025, Εγκ.
+        e-ΕΦΚΑ 21/2025): ΜΟΝΟ πλήρης απασχόληση, μόνο το ποσό ΠΡΟΣΑΥΞΗΣΗΣ
+        (`pay_supplement` → `premium`), όχι η απλή αξία της ώρας. Κατάργηση ή
+        έλλειψη κανόνα (π.χ. πριν τις 11/2025) = καμία απαλλαγή."""
+        if emp.weekly_hours < 40 or not premium.get("premium"):
+            return 0.0
+        try:
+            share = config.premium_exemption_for(on).share
+        except ValueError:
+            return 0.0
+        return pe.r2(premium["premium"] * share)
+
+    def labor_subsidy_full(self, emp, wage, weekly_hours, on) -> float:
+        """Επιδότηση εργατικής εισφοράς ΠΛΗΡΟΥΣ μήνα για μισθό `wage` την
+        `on` (0 αν δεν δικαιούται) — βλ. `pe.labor_subsidy_full`. ΜΙΑ πηγή
+        για μισθοδοσία, Δώρα και Επίδομα Αδείας. Το κατώτατο όριο από την
+        ΙΔΙΑ πηγή με τον έλεγχο κατώτατου (`wage_violation_for`)."""
+        if emp.pay_type != "monthly":
+            # ponytail: ημερομίσθιοι εκτός — η εγγραφή επιδότησης ΑΠΔ θέλει
+            # No 33 «όλες εργάσιμες»=1, που ο ημερομίσθιος δεν δηλώνει.
+            return 0.0
+        prof = emp.insurance_profile
+        if (prof and prof.labor_subsidy_excluded) or emp.oaed_placement not in ("", "0"):
+            # ponytail: πρόγραμμα ΔΥΠΑ = εξαίρεση για ΟΛΗ την απασχόληση, όχι μόνο
+            # για τη διάρκειά του — χρειάζεται ημερομηνία λήξης προγράμματος.
+            return 0.0
+        floor = config.minimum_floor_value(
+            "monthly",
+            weekly_hours,
+            on,
+            emp.total_service_years(on),
+            emp.married,
+            emp.extra_allowances_pct,
+        )
+        return pe.labor_subsidy_full(wage, floor, weekly_hours, on)
+
+    def labor_subsidy(self, emp, year: int, month: int, ins_days: int, line: dict) -> float:
+        """Επιδότηση της ΜΙΣΘΟΔΟΣΙΑΣ: πλήρης × (ημέρες ασφάλισης − ½ × ημέρες
+        τριημέρου ασθενείας) ÷ 25 — π.χ. 22 εργασίας + 3 τριήμερο → 23,5/25.
+        Το τριήμερο (μισό ημερομίσθιο) μετρά ½· οι ΥΠΟΛΟΙΠΕΣ ημέρες ασθενείας
+        μετρούν ως εργάσιμες. Οι άνευ αποδοχών ήδη λείπουν από τις ημέρες
+        ασφάλισης. Τριήμερο με την ίδια προτεραιότητα με την περικοπή
+        (`sick_deduction`): το φύλλο, αλλιώς οι άδειες."""
+        period_end = last_working_day_of_month(year, month)
+        full_month = self.labor_subsidy_full(
+            emp, emp.monthly_gross, emp.weekly_hours, period_end)
+        if not full_month:
+            return 0.0
+        half = int(line.get("sick_half", 0))
+        if not half and not line.get("sick_full") and not line.get("sick_benefit"):
+            half = emp.sick_days_in_month(year, month)["half"]
+        units = max(ins_days - half / 2, 0)
+        return pe.r2(full_month * min(units, 25) / 25)
 
     def payroll_calc_for(self, emp, year: int, month: int, line: dict):
         """Ο υπολογισμός μισθοδοσίας ΕΝΟΣ εργαζόμενου για την περίοδο, **ΧΩΡΙΣ
@@ -498,6 +563,7 @@ class PayrollMixin:
             emp.weekly_hours,
         )
         premium = work_hours.pay_supplement(hourly, line, wh_rules)
+        exempt = self.premium_exempt(emp, premium, period_end)
 
         # Κρατήσεις από τα ΚΠΚ των καλύψεων της απασχόλησης (ΕΦΚΑ κύρια
         # + επικουρική + άλλα ταμεία) — βλ. contribution_rates().
@@ -515,6 +581,7 @@ class PayrollMixin:
                 premiums=premium["total"],
                 rates=rates,
                 birth_date=emp.birth_date,
+                exempt=exempt,
             )
         else:
             res = pe.calc_monthly(
@@ -527,6 +594,8 @@ class PayrollMixin:
                 rates=rates,
                 base_days=base_days,
                 birth_date=emp.birth_date,
+                subsidy=self.labor_subsidy(emp, year, month, ins_days, line),
+                exempt=exempt,
             )
 
         # ΠΛΗΡΗΣ ΑΝΑΛΥΣΗ του υπολογισμού — η απόδειξη αποδοχών
@@ -544,9 +613,12 @@ class PayrollMixin:
             "sick_benefit": line.get("sick_benefit", 0.0),
             "premium_lines": premium["lines"],  # ώρες/ποσοστό/ποσό ανά είδος
             "premium_total": premium["total"],
+            # Προσαυξήσεις ΧΩΡΙΣ εισφορές (Εγκ. e-ΕΦΚΑ 21/2025) — εκτός ΑΠΔ
+            "premium_exempt": res.premium_exempt,
             "gross": res.gross,
             "efka_employee": res.efka_employee,
             "efka_employer": res.efka_employer,
+            "subsidy_employee": res.subsidy_employee,
             "taxable": res.taxable,
             "fmy": res.fmy,
             "net": res.net,
@@ -559,6 +631,7 @@ class PayrollMixin:
             "contributions": self.contribution_lines(
                 emp.insurance_profile, period_end,
                 res.efka_employee, res.efka_employer,
+                subsidy=res.subsidy_employee,
             ),
         }
         return {
