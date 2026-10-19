@@ -40,11 +40,11 @@ from .tenancy import data_dir
 # Οι «Παράμετροι» ανήκουν εδώ: οι νομοθετικές παράμετροι και το Μητρώο ΚΠΚ
 # γράφονται στο ΚΟΙΝΟ store (SHARED_EVENT_TYPES) και ισχύουν για ΟΛΕΣ τις
 # εταιρείες — η ενεργή εταιρεία δεν αλλάζει τίποτε σε αυτή τη σελίδα.
-SYSTEM_ENDPOINTS = ("auth.", "companies.", "users.", "settings.")
+SYSTEM_ENDPOINTS = ("auth.", "companies.", "users.", "settings.", "backup.")
 
 # Σελίδες ΜΟΝΟ για διαχειριστές. Οι «Παράμετροι» είναι ΚΟΙΝΕΣ για όλες τις
 # εταιρείες (νέα ΓΣΣΕ/φορολογική κλίμακα) — δεν τις αλλάζει απλός χρήστης.
-ADMIN_ENDPOINTS = ("users.", "settings.")
+ADMIN_ENDPOINTS = ("users.", "settings.", "backup.")
 
 
 def _secret_key() -> bytes:
@@ -76,6 +76,7 @@ def create_app():
     from .views import (
         attendance,
         audit,
+        backup,
         companies,
         company,
         dashboard,
@@ -115,6 +116,7 @@ def create_app():
         company,
         settings,
         audit,
+        backup,
         clock_view,
         auth_view,
         companies,

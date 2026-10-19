@@ -46,6 +46,15 @@ _SCHEMA = (
 )
 
 
+def _without_wal(data: bytes) -> bytes:
+    """Σβήνει τη σημαία WAL (bytes 18-19 του header: 2 -> 1, όπως το
+    `journal_mode=DELETE`). Αλλιώς η SQLite δεν ανοίγει το αρχείο από μνήμη,
+    και το backup είναι αυτόνομο αρχείο, χωρίς -wal δίπλα του."""
+    if data[18:20] == b"":
+        return data[:18] + b"" + data[20:]
+    return data
+
+
 class Database:
     """Μία σύνδεση, ένας πίνακας events, πολλά λογικά stores."""
 
@@ -67,6 +76,47 @@ class Database:
         from misevent.persistence.event_store import EventStore
 
         return EventStore(self, name, registry=registry, shared=shared)
+
+    # ------------------------------------------- backup ΟΛΟΥ του συστήματος
+    def snapshot(self) -> bytes:
+        """Συνεπές αντίγραφο ΟΛΗΣ της βάσης (όλα τα stores) ως αρχείο SQLite.
+        Το backup API της SQLite διαβάζει σωστά και με ενεργό WAL."""
+        mem = sqlite3.connect(MEMORY)
+        try:
+            self.conn.backup(mem)
+            return _without_wal(mem.serialize())
+        finally:
+            mem.close()
+
+    def restore_snapshot(self, data: bytes) -> int:
+        """Αντικαθιστά ατομικά ΟΛΑ τα events με αυτά ενός `snapshot`.
+
+        Δεν αντικαθιστούμε το αρχείο στον δίσκο: η ζωντανή σύνδεση μένει, και
+        η αλλαγή είναι ΜΙΑ συναλλαγή — ή περνά ολόκληρη ή καθόλου. Το replay
+        (και άρα ο έλεγχος ότι τα events αποκωδικοποιούνται) είναι του caller.
+        """
+        src = sqlite3.connect(MEMORY)
+        try:
+            src.deserialize(_without_wal(data))
+            rows = src.execute(
+                "SELECT store, seq, event_id, aggregate_id, event_type, occurred_at, "
+                "payload FROM events"
+            ).fetchall()
+        except sqlite3.Error:
+            raise ValueError("Το αρχείο δεν είναι backup βάσης του misevent") from None
+        finally:
+            src.close()
+        if not any(r[0] == SYSTEM_STORE for r in rows):
+            raise ValueError("Το backup δεν περιέχει χρήστες/εταιρείες")
+        try:
+            self.conn.execute("BEGIN IMMEDIATE")
+            self.conn.execute("DELETE FROM events")
+            self.conn.executemany("INSERT INTO events VALUES (?, ?, ?, ?, ?, ?, ?)", rows)
+            self.conn.commit()
+        except Exception:
+            self.conn.rollback()
+            raise
+        return len(rows)
 
     def close(self):
         self.conn.close()

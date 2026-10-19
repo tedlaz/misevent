@@ -45,3 +45,25 @@ Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Tasks: de
 
 [Run]
 Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchProgram,{#MyAppName}}"; Flags: nowait postinstall skipifsilent
+
+[Code]
+// Τα δεδομένα (%LOCALAPPDATA%\misevent, βλ. launcher.py) ζουν έξω από το {app},
+// οπότε η απεγκατάσταση τα αφήνει. Ερώτηση με προεπιλογή «No»· σε silent
+// απεγκατάσταση δεν σβήνεται τίποτα. Τα κείμενα στα αγγλικά, όπως όλος ο
+// installer (Default.isl, αρχείο χωρίς BOM).
+procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
+var
+  DataDir: String;
+begin
+  if CurUninstallStep <> usPostUninstall then
+    exit;
+  DataDir := ExpandConstant('{localappdata}\misevent');
+  if not DirExists(DataDir) then
+    exit;
+  if SuppressibleMsgBox('Also delete all misevent data (database, users, companies, backups)?'
+      + #13#10#13#10 + DataDir + #13#10#13#10
+      + 'This cannot be undone. Choose No to keep the data for a future reinstall.',
+      mbConfirmation, MB_YESNO or MB_DEFBUTTON2, IDNO) = IDYES then
+    if not DelTree(DataDir, True, True, True) then
+      MsgBox('Could not delete ' + DataDir + '. Delete it manually.', mbError, MB_OK);
+end;

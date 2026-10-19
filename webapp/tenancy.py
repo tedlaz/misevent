@@ -120,6 +120,20 @@ class Registry:
         self.auth_svc.bootstrap_admin()
         self._ensure_default_company()
 
+    def reload(self):
+        """Πλήρες replay ΟΛΟΥ του συστήματος μετά από restore της βάσης.
+
+        Οι φορτωμένες εταιρείες πετιούνται (φορτώνονται ξανά τεμπέλικα) — και
+        μαζί οι handlers τους από το κοινό store, αλλιώς τα παλιά projections
+        θα συνέχιζαν να ακούν τις κοινές παραμέτρους."""
+        self.shared._subscribers.clear()
+        self._tenants.clear()
+        self.auth.rebuild(self.auth_store)
+        for ref in self.auth.active_companies():
+            self.tenant(ref.company_id)  # replay τώρα: ένα χαλασμένο event σκάει ΕΔΩ
+        self.auth_svc.bootstrap_admin()
+        self._ensure_default_company()
+
     # ------------------------------------------------------------ εταιρείες
     def store_name(self, company_id: str) -> str:
         return company_store(company_id)

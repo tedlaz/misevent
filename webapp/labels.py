@@ -141,6 +141,7 @@ NAV_GROUPS = [
         ("companies.index", "🗂️", "Εταιρείες", False),
         ("settings.index", "⚙️", "Παράμετροι", True),
         ("users.index", "🔑", "Χρήστες", True),
+        ("backup.index", "💾", "Backup", True),
     ]),
 ]
 

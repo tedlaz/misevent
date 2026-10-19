@@ -277,14 +277,54 @@ uv run -m webapp        # http://localhost:8000
 Απαιτεί [Inno Setup 6](https://jrsoftware.org/isinfo.php) για τον installer. Το
 `desktop/launcher.py` τρέχει το ίδιο web UI τοπικά (τυχαία θύρα) και ανοίγει τον browser·
 εικονίδιο στο system tray (κάτω δεξιά): δεξί κλικ → Open / Exit, διπλό κλικ → Open
-(καθαρό Win32 μέσω ctypes, χωρίς επιπλέον βιβλιοθήκη). Τα δεδομένα μένουν στο
-`%LOCALAPPDATA%\misevent` και διατηρούνται σε αναβάθμιση και απεγκατάσταση.
+(καθαρό Win32 μέσω ctypes, χωρίς επιπλέον βιβλιοθήκη).
 Ο installer εγκαθιστά ανά χρήστη, χωρίς δικαιώματα διαχειριστή (~15MB).
 
-**Νέα έκδοση:** `.\desktop\release.ps1` (patch) / `… minor` / `… major`
-— κάνει bump στο `pyproject.toml`, commit, tag `vX.Y.Z` και push στο `main`. Το
-push του tag ξεκινά το GitHub Actions (`.github/workflows/windows-release.yml`),
-που χτίζει τον installer και τον ανεβάζει στο GitHub Release.
+### Νέα έκδοση
+
+1. Όλες οι αλλαγές committed (το script αρνείται με «βρώμικο» working tree)
+   και οι έλεγχοι περνούν: `uv run ruff check . && uv run pytest`.
+2. Από τη ρίζα του repo:
+
+   ```powershell
+   .\desktop\release.ps1          # patch: 1.5.0 -> 1.5.1  (διορθώσεις)
+   .\desktop\release.ps1 minor    # minor: 1.5.0 -> 1.6.0  (νέα features)
+   .\desktop\release.ps1 major    # major: 1.5.0 -> 2.0.0  (ασύμβατες αλλαγές)
+   ```
+
+   Κάνει bump στο `pyproject.toml` (`uv version --bump`), commit «bump vX.Y.Z»,
+   tag `vX.Y.Z` και push του `main` μαζί με το tag.
+3. Το push του tag ξεκινά το GitHub Actions (`.github/workflows/windows-release.yml`):
+   ελέγχει ότι το tag ταιριάζει με το `pyproject.toml`, τρέχει το
+   `build-windows.ps1` (με smoke test) και ανεβάζει το
+   `misevent-Setup-X.Y.Z.exe` στο **GitHub Release** του tag (σελίδα *Releases*
+   του repo). Παρακολούθηση στην καρτέλα *Actions*.
+4. Αν αποτύχει το build, διόρθωσε, και ξανάτρεξέ το για το ίδιο tag από
+   *Actions → Build Windows installer → Run workflow* (πεδίο `tag`, π.χ. `v1.5.1`) —
+   ανεβάζει ξανά τον installer στο υπάρχον Release.
+
+### Πού σώζονται τα αρχεία (εγκατάσταση Windows)
+
+| Τι | Πού |
+|---|---|
+| Πρόγραμμα (exe + βιβλιοθήκες) | `%LOCALAPPDATA%\Programs\misevent` |
+| Βάση δεδομένων (όλες οι εταιρείες, χρήστες, παράμετροι) | `%LOCALAPPDATA%\misevent\misevent.db` |
+| Κλειδί υπογραφής session | `%LOCALAPPDATA%\misevent\secret.key` |
+| Αυτόματο αντίγραφο πριν από restore μίας εταιρείας (Audit log) | `%LOCALAPPDATA%\misevent\backups\<εταιρεία>\before-restore-*.json` |
+| Αυτόματο αντίγραφο πριν από restore όλου του συστήματος | `%LOCALAPPDATA%\misevent\backups\system\before-restore-*.db` |
+
+`%LOCALAPPDATA%` = `C:\Users\<χρήστης>\AppData\Local` (γράψε το στη γραμμή
+διευθύνσεων του Explorer). Τα δεδομένα είναι **έξω** από τον φάκελο του
+προγράμματος, οπότε μένουν άθικτα σε αναβάθμιση. Η απεγκατάσταση **ρωτά** αν θα σβηστεί και το
+`%LOCALAPPDATA%\misevent` (προεπιλογή «No» — κρατά τα δεδομένα· «Yes» = πλήρης
+καθαρισμός)· σε silent απεγκατάσταση δεν σβήνεται τίποτα.
+
+**Backup / restore:** μενού «Σύστημα → Backup» (μόνο διαχειριστές). Η «Λήψη
+backup» κατεβάζει ολόκληρη τη βάση (όλες οι εταιρείες, χρήστες, παράμετροι) ως
+ένα αρχείο `.db`· το «Restore» την αντικαθιστά από τέτοιο αρχείο, αφού κρατήσει
+αυτόματο αντίγραφο της τρέχουσας (βλ. πίνακα). Αν το backup δεν φορτώνεται,
+επανέρχεται η προηγούμενη κατάσταση. Έτσι γίνεται και η μεταφορά σε άλλο
+υπολογιστή. Backup μίας μόνο εταιρείας: «Ρυθμίσεις → Audit log».
 
 Για μικρό μέγεθος το πακέτο δεν περιέχει tkinter ούτε Pillow (το fpdf2 το
 φορτώνει προαιρετικά). Το build τελειώνει με `--smoke-test`, που ανοίγει το UI και
