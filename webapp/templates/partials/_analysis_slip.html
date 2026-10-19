@@ -1,0 +1,515 @@
+{# ΜΙΑ «απόδειξη» ανάλυσης ΕΝΟΣ εργαζομένου — ΚΟΙΝΗ για μισθοδοσία, Δώρα και
+   Επίδομα Αδείας (ΜΙΑ πηγή markup: τα modals απλώς την κάνουν include σε
+   βρόχο). Παράμετροι: `r` (γραμμή του queries.payroll_analysis /
+   gift_analysis), `multi` (κλειστό fold όταν οι εργαζόμενοι είναι πολλοί),
+   `png_period` (η περίοδος όπως μπαίνει στο όνομα του PNG).
+
+   Οι ενότητες «Κρατήσεις / εισφορές ανά ταμείο / ΦΜΥ / κόστος εργοδότη»
+   είναι ΙΔΙΕΣ για όλα τα είδη — αλλάζει μόνο η δόμηση των μικτών. #}
+{% set a = r.a %}
+{% set b = a.base_detail %}
+{% set t = a.tax_detail %}
+{% set gift = a.kind in ('easter', 'christmas', 'allowance') %}
+<details class="pslip" {{ '' if multi else 'open' }}>
+  <summary class="pslip-h">
+    <span class="chev">▸</span>
+    <div class="who">
+      <span class="nm">{{ r.name }}</span>
+      <span class="badge {{ 'daily' if r.pay_type == 'daily' else 'monthly' }}">
+        {{ 'Ημερομίσθιος' if r.pay_type == 'daily' else 'Μισθωτός' }}</span>
+      {# Αποθήκευση ΤΗΣ ΑΝΑΛΥΣΗΣ ΑΥΤΟΥ του εργαζομένου σε PNG (client-side,
+         βλ. static/slip-png.js). Είναι <span>, ΟΧΙ <button>: ζει μέσα σε
+         <summary> — ένα κουμπί εκεί θα άνοιγε/έκλεινε το fold με το κλικ. #}
+      <span class="ghost sm png-save" role="button" tabindex="0"
+            data-png-name="{{ r.name }}_{{ png_period }}"
+            title="Αποθήκευση της ανάλυσης σε εικόνα PNG">🖼️ PNG</span>
+    </div>
+    <div class="net-chip">
+      <span>Καθαρά πληρωτέα</span>
+      <b>{{ a.net|money }} €</b>
+    </div>
+  </summary>
+
+  <div class="pslip-body">
+    {# ---- Στοιχεία βάσης ---- #}
+    <div class="chips">
+      {% if gift %}
+        <span class="chip c-base"><i>{{ b.wage_label }}</i>{{ b.wage|money }} €</span>
+        {% if a.kind == 'allowance' %}
+          {% if b.months is not none %}
+            <span class="chip c-days"><i>Μήνες υπηρεσίας</i>{{ b.months }}</span>{% endif %}
+          <span class="chip c-days"><i>Δικαίωμα</i>
+            {{ 'πλήρες (3ο έτος+)' if b.full_year else 'αναλογικό' }}</span>
+        {% else %}
+          <span class="chip c-days"><i>Ημέρες στην περίοδο</i>
+            {{ b.days }} / {{ b.full_days }}</span>
+          <span class="chip c-days"><i>Περίοδος αναφοράς</i>
+            {{ b.period_from.strftime('%d/%m') }}–{{ b.period_to.strftime('%d/%m/%Y') }}</span>
+          {% if a.kind == 'easter' and b.wage_date %}
+            {# Ο μισθός του Δώρου Πάσχα είναι αυτός που ίσχυε 15 ημέρες πριν
+               την καταβολή (Μ. Τετάρτη) — όχι ο σημερινός. #}
+            <span class="chip c-base"><i>Μισθός ισχύος</i>
+              {{ b.wage_date.strftime('%d/%m/%Y') }}</span>
+            <span class="chip c-days"><i>Καταβολή (Μ. Τετάρτη)</i>
+              {{ b.pay_date.strftime('%d/%m/%Y') }}</span>
+          {% endif %}
+        {% endif %}
+      {% else %}
+        {% if r.pay_type == 'daily' %}
+          <span class="chip c-base"><i>ΗΜΕΡΟΜΙΣΘΙΟ</i>{{ a.daily_wage|money }} €</span>
+        {% else %}
+          <span class="chip c-base"><i>ΜΗΝΙΑΙΟΣ ΜΙΣΘΟΣ</i>{{ a.monthly_gross|money }} €</span>
+        {% endif %}
+        <span class="chip c-base"
+              {% if b %}title="{{ b.hourly_formula }} = {{ '%.4f'|format(a.hourly_rate or 0) }} €"{% endif %}>
+          <i>ΩΡΟΜΙΣΘΙΟ</i>{{ '%.2f'|format(a.hourly_rate or 0) }} €</span>
+        {% if b %}
+          <span class="chip c-base"><i>ΤΥΠΟΣ ΩΡΟΜΙΣΘΙΟΥ</i>{{ b.hourly_formula }}</span>
+        {% endif %}
+        <span class="chip c-days"><i>ΗΜΕΡΕΣ ΕΦΚΑ</i>{{ a.efka_days }}</span>
+        {% if b %}
+          <span class="chip c-days"><i>ΩΡΕΣ/ΕΒΔΟΜΑΔΑ</i>{{ '%g'|format(b.weekly_hours) }}
+            {{- ' (ΠΛΗΡΗΣ)' if b.full_time else ' (ΜΕΡΙΚΗ)' }}</span>
+        {% endif %}
+        {% if a.unpaid_days %}
+          <span class="chip c-unpaid"><i>ΑΝΕΥ ΑΠΟΔΟΧΩΝ</i>{{ a.unpaid_days }} ημ.</span>
+        {% endif %}
+      {% endif %}
+      {% if t %}
+        <span class="chip c-fmy"><i>Τέκνα</i>{{ t.children }}</span>
+        {% if t.age is not none %}
+          <span class="chip c-fmy"><i>Ηλικία</i>{{ t.age }} ετών</span>{% endif %}
+      {% endif %}
+    </div>
+
+    {# ---- Δόμηση μικτών ---- #}
+    <div class="grp-label">Αποδοχές</div>
+    <table class="ledger">
+      <tbody>
+        {% if gift %}
+          <tr class="l-base">
+            <td class="lt"><span class="dot"></span>Βάση υπολογισμού
+              <small>{{ b.rule_label }} — {{ b.rule }} = {{ b.base|money }} €
+                {%- if a.kind != 'allowance' %} · απασχόληση {{ b.days }} από
+                  {{ b.full_days }} ημέρες της περιόδου
+                  {{ b.period_from.strftime('%d/%m/%Y') }} –
+                  {{ b.period_to.strftime('%d/%m/%Y') }}{% endif -%}
+              </small></td>
+            <td class="lv">{{ b.base|money }} €</td>
+          </tr>
+          {% if b.leave_coeff %}
+          <tr class="l-prem">
+            <td class="lt"><span class="dot"></span>+ Συντελεστής αδείας
+              <small>{{ b.base|money }} × {{ '%g'|format(b.leave_coeff)|replace('.', ',') }} =
+                {{ (a.gross - b.base)|money }} € (προσαύξηση αδείας 0,04166 επί των Δώρων)</small></td>
+            <td class="lv add">+ {{ (a.gross - b.base)|money }} €</td>
+          </tr>
+          {% endif %}
+          <tr class="l-gross">
+            <td class="lt">= Μικτές αποδοχές
+              {% if b.leave_coeff %}
+              <small>{{ b.base|money }} × (1 + {{ '%g'|format(b.leave_coeff)|replace('.', ',') }}) =
+                {{ a.gross|money }} €</small>{% endif %}</td>
+            <td class="lv">{{ a.gross|money }} €</td>
+          </tr>
+        {% else %}
+          <tr class="l-base">
+            <td class="lt"><span class="dot"></span>Βάση αποδοχών
+              <small>
+                {%- if b -%}
+                  {{ b.base_formula }}
+                  {%- if b.kind == 'monthly' %} · ημερήσιο: {{ b.daily_formula }}
+                    ({{ b.base_days }} συμβατικές ημέρες ΕΦΚΑ
+                    {{- ' — μερική απασχόληση' if not b.full_time }}){% endif -%}
+                {%- else -%}
+                  μισθός/ημερομίσθιο × ημέρες, μείον άνευ αποδοχών
+                {%- endif -%}
+              </small></td>
+            <td class="lv">{{ a.base_gross|money }} €</td>
+          </tr>
+          {% if b and b.kind == 'monthly' and a.unpaid_days %}
+          <tr class="l-sick">
+            <td class="lt"><span class="dot"></span>εξ ων άνευ αποδοχών
+              <small>{{ a.unpaid_days }} ημ. × {{ b.daily_rate|money }} € (ήδη αφαιρεμένες παραπάνω)</small></td>
+            <td class="lv sub">− {{ b.unpaid_amount|money }} €</td>
+          </tr>
+          {% endif %}
+          {% if a.premium_total %}
+          <tr class="l-prem">
+            <td class="lt"><span class="dot"></span>+ Προσαυξήσεις ωρών
+              <small>νύχτα / αργία / υπερεργασία / υπερωρίες — ανάλυση παρακάτω
+                ({{ a.premium_total|money }} €)</small></td>
+            <td class="lv add">+ {{ a.premium_total|money }} €</td>
+          </tr>
+          {% endif %}
+          {% if a.sick_deduction %}
+          {% set sick_half_amount = (a.sick_deduction - (a.sick_benefit or 0))|round(2) %}
+          <tr class="l-sick">
+            <td class="lt"><span class="dot"></span>− Περικοπή ασθενείας
+              <small>
+                {%- if a.sick_half_days %}τριήμερο εργοδότη {{ a.sick_half_days }} ημ. ×
+                  ½ ημερομισθίου = {{ sick_half_amount|money }} €{% endif -%}
+                {%- if a.sick_half_days and a.sick_benefit %} + {% endif -%}
+                {%- if a.sick_benefit %}επίδομα ΕΦΚΑ {{ a.sick_benefit|money }} €
+                  (καταβλήθηκε από τον ΕΦΚΑ, δεν το πληρώνει δεύτερη φορά ο εργοδότης){% endif -%}
+              </small></td>
+            <td class="lv sub">− {{ a.sick_deduction|money }} €</td>
+          </tr>
+          {% endif %}
+          <tr class="l-gross">
+            <td class="lt">= Μικτές αποδοχές
+              {% if a.sick_deduction or a.premium_total %}
+              <small>{{ a.base_gross|money }}
+                {%- if a.sick_deduction %} − {{ a.sick_deduction|money }}{% endif -%}
+                {%- if a.premium_total %} + {{ a.premium_total|money }}{% endif %} =
+                {{ a.gross|money }} €</small>{% endif %}</td>
+            <td class="lv">{{ a.gross|money }} €</td>
+          </tr>
+        {% endif %}
+      </tbody>
+    </table>
+
+    {# ---- Ανάλυση προσαυξήσεων: ΟΜΑΔΟΠΟΙΗΜΕΝΗ ανά κλάση, scrollable ---- #}
+    {% if a.premium_detail %}
+    {% set nlines = a.premium_detail|map(attribute='rows')|map('length')|sum %}
+    <details class="prem-det" open>
+      <summary>Ανάλυση προσαυξήσεων · {{ a.premium_detail|length }} κλάσεις ·
+        {{ nlines }} γραμμές · {{ a.premium_total|money }} €</summary>
+      <div class="pd-intro">
+        Ωρομίσθιο κλάσης = <b>κανονικό ωρομίσθιο</b>
+        ({{ '%.2f'|format(a.hourly_rate or 0) }} €) × (1 + κλάση%).
+        Ποσό γραμμής = ωρομίσθιο κλάσης × <b>(1 + νύχτα 25% + αργία 75%)</b>
+        × ώρες. Οι «εντός ωραρίου» ώρες καλύπτονται ήδη από τον μισθό.
+      </div>
+      <div class="pd-scroll">
+        {% for g in a.premium_detail %}
+          <div class="pd-grp {{ g.cls }}">
+            <div class="pd-grp-h">
+              <div class="pd-grp-name">
+                <span class="pd-cls">{{ g.class_label }}</span>
+                {% if g.covered %}
+                  <span class="pd-tag covered">εντός ωραρίου</span>{% endif %}
+                {% if g.cls == 'illegal' %}
+                  <span class="pd-tag illegal">παράνομη</span>{% endif %}
+                {% if not g.covered and g.class_pct %}
+                  <span class="pd-rate">κλάση +{{ g.class_pct }}% →
+                    {{ '%.2f'|format(g.class_rate) }} €/ω</span>{% endif %}
+              </div>
+              <div class="pd-grp-tot">+ {{ g.total|money }} €</div>
+            </div>
+            <table class="pd-tbl">
+              <thead><tr>
+                <th>Ωράριο</th><th class="rt">Ώρες</th>
+                <th class="rt">Προσαύξ.</th><th class="rt">Συντ/στής</th>
+                <th class="rt">Ποσό</th>
+              </tr></thead>
+              <tbody>
+                {% for row in g.rows %}
+                  <tr>
+                    <td class="oraro">
+                      {% if row.night %}<span class="pd-tag night">🌙 νύχτα</span>{% endif %}
+                      {% if row.holiday %}<span class="pd-tag holiday">🎉 αργία</span>{% endif %}
+                      {% if not row.night and not row.holiday %}
+                        <span class="pd-tag day">ημέρα · εργάσιμη</span>{% endif %}
+                    </td>
+                    <td class="rt mono">{{ '%g'|format(row.hours) }} ω</td>
+                    <td class="rt mono">
+                      {%- if row.night_pct or row.holiday_pct -%}
+                        {% if row.night_pct %}+{{ row.night_pct }}%{% endif -%}
+                        {% if row.night_pct and row.holiday_pct %} {% endif -%}
+                        {% if row.holiday_pct %}+{{ row.holiday_pct }}%{% endif %}
+                      {%- else -%}—{%- endif -%}
+                    </td>
+                    <td class="rt mono">×{{ '%g'|format(row.mult * 100) }}%</td>
+                    <td class="rt mono amt">{{ row.amount|money }} €</td>
+                  </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        {% endfor %}
+      </div>
+      <div class="pd-total">
+        <span>Σύνολο προσαυξήσεων ωρών</span>
+        <b>{{ a.premium_total|money }} €</b>
+      </div>
+    </details>
+    {% endif %}
+
+    {# ---- Κρατήσεις ---- #}
+    <div class="grp-label">Κρατήσεις εργαζομένου</div>
+    <table class="ledger">
+      <tbody>
+        <tr class="l-efka">
+          <td class="lt"><span class="dot"></span>− Ασφαλιστικές εισφορές (ασφ/νου)
+            <small>ασφαλιστέες αποδοχές {{ a.insurable|money }} €
+              {%- if gift %} (τα Δώρα/Επίδομα δεν πλαφονάρονται — εισφορές επί του συνόλου)
+              {%- elif a.gross > a.efka_cap %} (πλαφόν {{ a.efka_cap|money }} €)
+              {%- else %} (= μικτά, κάτω από το πλαφόν {{ a.efka_cap|money }} €){% endif %}
+              × συνολικό ποσοστό ταμείων — ανάλυση παρακάτω</small></td>
+          <td class="lv sub">− {{ a.efka_employee|money }} €</td>
+        </tr>
+        <tr class="l-taxable">
+          <td class="lt"><span class="dot"></span>Φορολογητέο υπόλοιπο
+            <small>μικτά {{ a.gross|money }} − εισφορές {{ a.efka_employee|money }} =
+              {{ a.taxable|money }} €</small></td>
+          <td class="lv">{{ a.taxable|money }} €</td>
+        </tr>
+        <tr class="l-fmy">
+          <td class="lt"><span class="dot"></span>− Παρακράτηση ΦΜΥ
+            <small>
+              {%- if t -%}
+                {{ a.taxable|money }} × {{ '%g'|format(t.periods) }} =
+                {{ t.annual_taxable|money }} € ετήσιο · φόρος
+                {{ t.annual_tax|money }} € / {{ '%g'|format(t.periods) }} =
+                {{ a.fmy|money }} € — ανάλυση παρακάτω
+              {%- else -%}αναγωγή σε ετήσιο εισόδημα{%- endif -%}
+            </small></td>
+          <td class="lv sub">− {{ a.fmy|money }} €</td>
+        </tr>
+        <tr class="l-net">
+          <td class="lt">= Καθαρά πληρωτέα
+            <small>{{ a.taxable|money }} − {{ a.fmy|money }} = {{ a.net|money }} €</small></td>
+          <td class="lv">{{ a.net|money }} €</td>
+        </tr>
+      </tbody>
+    </table>
+
+    {# ---- Ανάλυση εισφορών ΑΝΑ ΤΑΜΕΙΟ/ΚΠΚ ---- #}
+    {% if a.efka_detail %}
+    <details class="prem-det det-efka" open>
+      <summary>Ανάλυση εισφορών ανά ταμείο/ΚΠΚ ·
+        {{ a.efka_detail|length }} καλύψεις · ασφ/νου {{ a.efka_employee|money }} € ·
+        εργοδότη {{ a.efka_employer|money }} €</summary>
+      <div class="pd-intro">
+        Ποσό γραμμής = <b>ασφαλιστέες αποδοχές</b> ({{ a.insurable|money }} €)
+        × <b>ποσοστό του ΚΠΚ</b> της κάλυψης. Ασφαλιστέες =
+        {% if gift %}οι μικτές αποδοχές του Δώρου/Επιδόματος ({{ a.gross|money }} €) —
+          χωρίς εφαρμογή του μηνιαίου πλαφόν
+        {%- else %}μικτά ({{ a.gross|money }} €) έως το μηνιαίο πλαφόν
+          ({{ a.efka_cap|money }} €){% endif %}.
+        Τυχόν υπόλοιπο στρογγυλοποίησης λογίζεται στην κύρια κάλυψη, ώστε
+        το άθροισμα να ισούται ακριβώς με τις εισφορές του υπολογισμού.
+        {% if a.earnings_split %}
+        <br>Στην <b>ΑΠΔ</b> οι αποδοχές δηλώνονται σε <b>περισσότερες από μία
+        αμοιβές</b>: οι <b>αποδοχές ασθενείας</b> πάνε σε ξεχωριστή εγγραφή με
+        τύπο <b>008</b>, με τις <b>ημέρες ασθενείας</b> και το <b>διάστημα της
+        ασθένειας</b> — και αφαιρούνται (ποσό & ημέρες) από τις τακτικές
+        (001). Οι εισφορές παρακάτω κατανέμονται <b>αναλογικά προς τις
+        αποδοχές</b> κάθε αμοιβής και αθροίζουν ακριβώς στις εισφορές του
+        υπολογισμού· στο ίδιο το αρχείο ΑΠΔ υπολογίζονται <b>ανά εγγραφή</b>,
+        οπότε το σύνολό του μπορεί να διαφέρει κατά λεπτά (στρογγυλοποίηση).
+        {% endif %}
+      </div>
+      <div class="pd-scroll">
+        {# Κατανομή ΑΝΑ ΤΥΠΟ ΑΠΟΔΟΧΩΝ της ΑΠΔ — εμφανίζεται μόνο όταν οι
+           αποδοχές σπάνε σε πάνω από μία αμοιβή (σήμερα: αποδοχές ασθενείας
+           008, που δηλώνονται ξεχωριστά με δικές τους ημέρες & διάστημα). #}
+        {% if a.earnings_split %}
+        <div class="pd-grp">
+          <div class="pd-grp-h">
+            <div class="pd-grp-name">
+              <span class="pd-cls">Κατανομή ανά τύπο αποδοχών (ΑΠΔ)</span>
+              <span class="pd-rate">σύνολο {{ a.insurable|money }} €</span>
+            </div>
+            <div class="pd-grp-tot">{{ a.efka_employee|money }} €</div>
+          </div>
+          <table class="pd-tbl">
+            <thead><tr>
+              <th>Τύπος αποδοχών</th><th class="rt">Ημέρες</th>
+              <th>Διάστημα</th><th class="rt">Αποδοχές</th>
+              <th class="rt">Εισφ. ασφ/νου</th><th class="rt">Εισφ. εργοδότη</th>
+            </tr></thead>
+            <tbody>
+              {% for e in a.earnings_split %}
+                <tr>
+                  <td><span class="mono">{{ e.et }}</span> {{ e.label }}</td>
+                  <td class="rt mono">{{ e.days }}</td>
+                  <td class="mono">
+                    {%- if e.date_from %}{{ e.date_from|date_gr }} –
+                      {{ e.date_to|date_gr }}{% else %}—{% endif -%}
+                  </td>
+                  <td class="rt mono">{{ e.gross|money }} €</td>
+                  <td class="rt mono amt">{{ e.employee|money }} €</td>
+                  <td class="rt mono">{{ e.employer|money }} €</td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        {% endif %}
+        <div class="pd-grp">
+          <table class="pd-tbl">
+            <thead><tr>
+              <th>Κάλυψη</th><th>ΚΠΚ</th>
+              <th class="rt">Ασφ/έες</th>
+              <th class="rt">% ασφ/νου</th><th class="rt">Ποσό ασφ/νου</th>
+              <th class="rt">% εργοδότη</th><th class="rt">Ποσό εργοδότη</th>
+            </tr></thead>
+            <tbody>
+              {% for f in a.efka_detail %}
+                <tr>
+                  <td>{{ f.label }}
+                    {% if f.components %}
+                      <div class="muted" style="font-size:10.5px">
+                      {% for c in f.components %}
+                        <span class="mono">{{ c.branch }}
+                          {{ '%.2f'|format(c.employee * 100) }}%/
+                          {{ '%.2f'|format(c.employer * 100) }}%</span>{% if not loop.last %} · {% endif %}
+                      {% endfor %}
+                      </div>
+                    {% endif %}
+                  </td>
+                  <td class="mono">{{ f.kpk }}</td>
+                  <td class="rt mono">{{ f.insurable|money }} €</td>
+                  <td class="rt mono">{{ '%.3f'|format(f.employee * 100) }}%</td>
+                  <td class="rt mono amt">{{ f.amount|money }} €</td>
+                  <td class="rt mono">{{ '%.3f'|format(f.employer * 100) }}%</td>
+                  <td class="rt mono">{{ f.amount_er|money }} €</td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+      <div class="pd-total">
+        <span>Σύνολο εισφορών</span>
+        <b>ασφ/νου {{ a.efka_employee|money }} € · εργοδότη {{ a.efka_employer|money }} €</b>
+      </div>
+    </details>
+    {% endif %}
+
+    {# ---- Ανάλυση ΦΜΥ: αναγωγή σε ετήσιο, κλίμακα, μείωση ---- #}
+    {% if t %}
+    <details class="prem-det det-tax" open>
+      <summary>Ανάλυση παρακράτησης ΦΜΥ · {{ t.model_label }} ·
+        {{ a.fmy|money }} €</summary>
+      <div class="pd-intro">
+        Μέθοδος <b>αναγωγής σε ετήσιο εισόδημα</b>: φορολογητέο
+        <b>{{ t.taxable|money }} €</b> × <b>{{ '%g'|format(t.periods) }}</b>
+        {% if t.periods == 28 %}(αμοιβή ~ΜΙΣΟΥ μισθού: 2 × 14 μισθοί/έτος)
+        {%- else %}(μισθοί/έτος){% endif %} = ετήσιο εισόδημα
+        <b>{{ t.annual_taxable|money }} €</b>.
+        Στο ποσό αυτό εφαρμόζεται η κλίμακα που ισχύει από
+        {{ t.valid_from.strftime('%d/%m/%Y') }} με
+        <b>{{ t.children }} τέκνα</b>{% if t.age is not none %} και ηλικία
+        <b>{{ t.age }} ετών</b>{% endif %}, αφαιρείται η μείωση φόρου, και ο
+        ετήσιος φόρος διαιρείται πάλι διά {{ '%g'|format(t.periods) }}.
+      </div>
+      <div class="pd-scroll">
+        <div class="pd-grp">
+          <div class="pd-grp-h">
+            <div class="pd-grp-name">
+              <span class="pd-cls">Κλίμακα φόρου</span>
+              <span class="pd-rate">ετήσιο {{ t.annual_taxable|money }} €</span>
+            </div>
+            <div class="pd-grp-tot">{{ t.tax_before_reduction|money }} €</div>
+          </div>
+          <table class="pd-tbl">
+            <thead><tr>
+              <th>Κλιμάκιο</th><th class="rt">Φορολογητέο στο κλιμάκιο</th>
+              <th class="rt">Συντελεστής</th><th class="rt">Φόρος</th>
+            </tr></thead>
+            <tbody>
+              {% for bd in t.bands %}
+                <tr>
+                  <td class="mono">{{ bd.from|money }} –
+                    {%- if bd.to is none %} και άνω
+                    {%- else %} {{ bd.to|money }}{% endif %} €</td>
+                  <td class="rt mono">{{ bd.base|money }} €</td>
+                  <td class="rt mono">{{ '%g'|format(bd.rate * 100) }}%</td>
+                  <td class="rt mono amt">{{ bd.tax|money }} €</td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+
+        <div class="pd-grp">
+          <div class="pd-grp-h">
+            <div class="pd-grp-name">
+              <span class="pd-cls">Μείωση φόρου</span>
+              <span class="pd-rate">{{ t.children }} τέκνα</span>
+            </div>
+            <div class="pd-grp-tot">− {{ t.reduction|money }} €</div>
+          </div>
+          <table class="pd-tbl">
+            <tbody>
+              <tr>
+                <td>Βασική μείωση ({{ t.children }} τέκνα)</td>
+                <td class="rt mono amt">{{ t.base_reduction|money }} €</td>
+              </tr>
+              {% if t.extra_child_reduction %}
+              <tr>
+                <td>+ Επιπλέον τέκνα</td>
+                <td class="rt mono amt">+ {{ t.extra_child_reduction|money }} €</td>
+              </tr>
+              {% endif %}
+              {% if t.phaseout %}
+              <tr>
+                <td>− Απομείωση {{ t.phaseout_per_1000|money }} € ανά 1.000 €
+                  άνω των {{ t.phaseout_threshold|money }} €
+                  <small>(ετήσιο {{ t.annual_taxable|money }} €)</small></td>
+                <td class="rt mono">− {{ t.phaseout|money }} €</td>
+              </tr>
+              {% endif %}
+              <tr>
+                <td><b>= Τελική μείωση</b></td>
+                <td class="rt mono amt"><b>{{ t.reduction|money }} €</b></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="pd-grp">
+          <table class="pd-tbl">
+            <tbody>
+              <tr>
+                <td>Φόρος κλίμακας</td>
+                <td class="rt mono">{{ t.tax_before_reduction|money }} €</td>
+              </tr>
+              <tr>
+                <td>− Μείωση φόρου</td>
+                <td class="rt mono">− {{ t.reduction|money }} €</td>
+              </tr>
+              <tr>
+                <td><b>= Ετήσιος φόρος</b></td>
+                <td class="rt mono amt"><b>{{ t.annual_tax|money }} €</b></td>
+              </tr>
+              <tr>
+                <td>÷ {{ '%g'|format(t.periods) }} περίοδοι</td>
+                <td class="rt mono amt"><b>{{ a.fmy|money }} €</b></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+      <div class="pd-total">
+        <span>Παρακράτηση ΦΜΥ</span>
+        <b>{{ a.fmy|money }} €</b>
+      </div>
+    </details>
+    {% endif %}
+
+    {# ---- Κόστος εργοδότη ---- #}
+    <div class="grp-label">Κόστος εργοδότη</div>
+    <table class="ledger">
+      <tbody>
+        <tr class="l-empr">
+          <td class="lt"><span class="dot"></span>Ασφαλιστικές εισφορές (εργοδότη)
+            <small>ασφαλιστέες {{ a.insurable|money }} € × ποσοστά εργοδότη
+              {%- if a.efka_detail %}
+                ({{ '%.3f'|format(a.efka_detail|map(attribute='employer')|sum * 100) }}%
+                — ανάλυση παραπάνω){% endif %}</small></td>
+          <td class="lv">{{ a.efka_employer|money }} €</td>
+        </tr>
+        <tr class="l-cost">
+          <td class="lt">Συνολικό κόστος
+            <small>μικτά {{ a.gross|money }} + εισφορές εργοδότη
+              {{ a.efka_employer|money }} = {{ (a.gross + a.efka_employer)|money }} €</small></td>
+          <td class="lv">{{ (a.gross + a.efka_employer)|money }} €</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</details>

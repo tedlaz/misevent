@@ -1,0 +1,18 @@
+{% extends "auth_base.html" %}
+{% block title %}Σύνδεση{% endblock %}
+{% block heading %}Σύνδεση{% endblock %}
+{% block subheading %}με email και κωδικό{% endblock %}
+
+{% block content %}
+<form class="frm" method="post" action="{{ url_for('auth.login') }}">
+  <input type="hidden" name="next" value="{{ request.args.get('next', '') }}">
+  <label>Email
+    <input name="email" type="email" value="{{ email or '' }}" required autofocus></label>
+  <label>Κωδικός
+    <input name="password" type="password" required></label>
+  <div class="btnrow">
+    <button class="run" type="submit">Σύνδεση</button>
+    <a class="ghost" href="{{ url_for('auth.forgot') }}">Ξέχασα τον κωδικό</a>
+  </div>
+</form>
+{% endblock %}

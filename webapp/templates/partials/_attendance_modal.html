@@ -1,0 +1,87 @@
+{# Modal επεξεργασίας ΕΝΟΣ εργαζόμενου. Κλείνει ΜΟΝΟ με Αποθήκευση/Ακύρωση
+   (το backdrop δεν έχει handler κλεισίματος). Τα inputs έχουν ΣΚΕΤΑ ονόματα
+   (ένας εργαζόμενος)· η Αποθήκευση «σταδιάζει» τις τιμές στον πίνακα. #}
+{% set classes = [
+     ('normal',   'Εντός ωραρίου',     '—'),
+     ('extra',    'Πρόσθετη εργασία',  '12%'),
+     ('overwork', 'Υπερεργασία',       '20%'),
+     ('overtime', 'Υπερωρία',          '40%'),
+     ('illegal',  'Παράνομη υπερωρία', '80%'),
+   ] %}
+<div class="modal-backdrop">
+  <div class="modal">
+    <form hx-post="{{ url_for('attendance.stage', eid=r.eid, y=y, m=m) }}"
+          hx-target="#modal-host" hx-swap="innerHTML">
+      <div class="mhead">
+        <h3>{{ r.name }}</h3>
+        <span class="muted" style="font-size:12.5px">
+          {{ 'Ημερομίσθιος' if r.pay_type == 'daily' else 'Μισθωτός' }} ·
+          {{ '%.2f'|format(r.hourly_rate) }}€/ω · προβλεπόμενες ημέρες ΕΦΚΑ
+          <b>{{ r.expected_efka }}</b></span>
+      </div>
+
+      <div class="mbody">
+        <b class="sec">Ημέρες</b>
+        <div class="frm cols">
+          <label>Ημέρες ΕΦΚΑ <span class="muted">(οδηγούν τη μισθοδοσία)</span>
+            <input type="number" name="efka" min="0" max="25" value="{{ r.efka_days }}"></label>
+          <label>Ημέρες εργασίας
+            <input type="number" name="worked" min="0" max="31" value="{{ r.worked }}"></label>
+          <label>Άνευ αποδοχών
+            <input type="number" name="unpaid" min="0" max="31" value="{{ r.unpaid }}"></label>
+          <label>Λοιπές άδειες
+            <input type="number" name="leave" min="0" max="31" value="{{ r.leave }}"></label>
+        </div>
+
+        <b class="sec">Ασθένεια <span class="muted" style="text-transform:none">
+          — περικόπτει τα μικτά</span></b>
+        <div class="frm cols">
+          <label>Μισές (τριήμερο)
+            <input type="number" name="shalf" min="0" max="31" value="{{ r.sick_half }}"></label>
+          <label>Πλήρεις (μείον επίδομα)
+            <input type="number" name="sfull" min="0" max="31" value="{{ r.sick_full }}"></label>
+          <label>Επίδομα ΕΦΚΑ €
+            <input type="number" step="0.01" name="sben" min="0"
+                   value="{{ '%.2f'|format(r.sick_benefit) }}"></label>
+        </div>
+
+        <b class="sec">Ώρες προσαυξήσεων <span class="muted" style="text-transform:none">
+          — ωρομίσθιο κλάσης × (1 + νύχτα 25% + αργία 75%)</span></b>
+        <table class="tbl grid">
+          <thead><tr>
+            <th>Κλάση</th>
+            <th class="rt" title="Κανονικό ωρομίσθιο × (1 + ποσοστό κλάσης)">Ωρομίσθιο</th>
+            <th class="rt">Ημέρα·Εργ.</th><th class="rt">Νύχτα·Εργ.</th>
+            <th class="rt">Ημέρα·Αργ.</th><th class="rt">Νύχτα·Αργ.</th>
+          </tr></thead>
+          <tbody>
+            {% for cls, label, pct in classes %}
+              <tr>
+                <td>
+                  {% if cls == 'illegal' %}<b style="color:var(--prob)">{{ label }}</b>
+                  {% else %}{{ label }}{% endif %}
+                  <span class="muted" style="font-size:11px">{{ pct }}</span></td>
+                <td class="rt mono">{{ '%.2f'|format(class_rates[cls]) }}€</td>
+                {% for suffix in ('', '_n', '_h', '_nh') %}
+                  {% set f = cls ~ suffix %}
+                  <td class="rt"><input type="number" step="0.25" min="0"
+                        name="{{ f }}" value="{{ '%g'|format(r[f]) }}"></td>
+                {% endfor %}
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+        <div class="muted" style="font-size:12px;margin-top:6px">
+          Οι «εντός ωραρίου» ώρες πληρώνονται ήδη από τον μισθό — μετρά μόνο η
+          προσαύξηση νύχτας/αργίας. Οι υπόλοιπες κλάσεις πληρώνονται ολόκληρες.</div>
+      </div>
+
+      <div class="mfoot">
+        <button type="button" class="ghost"
+                hx-get="{{ url_for('attendance.modal_close') }}"
+                hx-target="#modal-host" hx-swap="innerHTML">Ακύρωση</button>
+        <button class="run" type="submit">Αποθήκευση</button>
+      </div>
+    </form>
+  </div>
+</div>

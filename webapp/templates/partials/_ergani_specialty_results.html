@@ -1,0 +1,11 @@
+{% if rows %}
+  {% for row in rows %}
+    <button type="button"
+            hx-get="{{ url_for('company.ergani_specialty_pick', code=row.code) }}"
+            hx-target="#ergani-specialty-results" hx-swap="innerHTML">
+      <span class="mono">{{ row.code }}</span><span>{{ row.description }}</span>
+    </button>
+  {% endfor %}
+{% elif searched %}
+  <div class="empty">Δεν βρέθηκε ειδικότητα.</div>
+{% endif %}

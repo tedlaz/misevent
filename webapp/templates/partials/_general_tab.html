@@ -1,0 +1,297 @@
+{# Περιεχόμενο του tab «① Γενικά στοιχεία» — ΜΙΑ πηγή markup για ΚΑΙ ΤΙΣ ΔΥΟ
+   φόρμες (σελίδα πρόσληψης `_hire_form.html` & modal (επανα)πρόσληψης
+   `_person_employ_modal.html`).
+
+   Μεταβλητές που περιμένει (τις ορίζει ο καλών ΠΡΙΝ το include):
+     fv           = τιμές φόρμας (dict) — ξαναγέμισμα μετά από σφάλμα
+     ident        = να εμφανιστούν τα πεδία ΤΑΥΤΟΤΗΤΑΣ (νέο πρόσωπο)
+     person       = το πρόσωπο σε επαναπρόσληψη (ή None)
+     person_note  = να μπει η ενημερωτική «ταμπέλα» του προσώπου (μόνο εκεί
+                    που δεν την έχει ήδη η κεφαλίδα του modal)
+     term         = ο όρος αναζήτησης που προσυμπληρώνει επώνυμο/ΑΦΜ
+     specialties  = οι δηλωμένες ειδικότητες της εταιρείας
+     allow_migration = να προσφερθεί η «Παλαιά πρόσληψη» (default: ναι) — η
+                    ΕΠΑΝΑΠΡΟΣΛΗΨΗ το θέτει false: είναι νέα περίοδος που
+                    ξεκινά τώρα, ποτέ παλιά πρόσληψη άλλου προγράμματος
+
+   ΧΡΩΜΑΤΙΚΟΣ ΚΩΔΙΚΑΣ ενοτήτων (app.css §ΕΝΟΤΗΤΕΣ ΦΟΡΜΑΣ): ταυτότητα = μπλε,
+   σύμβαση/αποδοχές = πράσινο, ασφάλιση = τιρκουάζ, προσαυξήσεις = πορτοκαλί.
+   Καθαρό CSS, καμία γραμμή JS. #}
+{% set term = term|default('', true) %}
+{% set allow_migration = true if allow_migration is not defined
+     else allow_migration %}
+<div class="fsecs">
+
+  {# ΣΧΕΣΗ ΑΠΑΣΧΟΛΗΣΗΣ WebE3N. Η ημερομηνία πρόσληψης είναι και η έναρξη
+     της ορισμένου χρόνου σύμβασης. Το δεύτερο πεδίο εμφανίζεται read-only. #}
+  {% set relationship = fv.get('employment_relationship', '0')|string %}
+  <div class="fsec fs-relation" data-employment-relationship-section>
+    <div class="fs-h"><span class="fs-ic">📄</span>
+      <b>Σχέση απασχόλησης</b>
+      <span class="fs-hint">διάρκεια της σύμβασης για την πρόσληψη WebE3N</span></div>
+    <div class="frm cols">
+      <label>Ημ. πρόσληψης
+        <input type="date" name="hire_date" data-hire-date required
+          value="{{ fv.get('hire_date', '') }}"></label>
+      {% set current_branch = fv.get('branch_no', 0)|int %}
+      <label>Παράρτημα
+        <select name="branch_no" required>
+          {% for b in branches %}
+            <option value="{{ b.code }}" {{ 'selected' if current_branch == b.code }}>
+              {{ b.employment_label }}
+            </option>
+          {% endfor %}
+        </select></label>
+      <label>Σχέση απασχόλησης
+        <select name="employment_relationship"
+                data-employment-relationship required>
+          <option value="0" {{ 'selected' if relationship == '0' }}>
+            ΑΟΡΙΣΤΟΥ ΧΡΟΝΟΥ</option>
+          <option value="1" {{ 'selected' if relationship == '1' }}>
+            ΟΡΙΣΜΕΝΟΥ ΧΡΟΝΟΥ</option>
+        </select></label>
+    </div>
+    {# ΟΡΙΣΜΕΝΟΥ ΧΡΟΝΟΥ — ΑΜΕΣΩΣ κάτω από τον επιλογέα της σχέσης, ώστε τα δύο
+       πεδία να διαβάζονται ως συνέχειά του. #}
+    <div class="frm cols fixed-term-fields" data-fixed-term-fields
+         {{ 'hidden' if relationship != '1' }}>
+      <label>Ορισμένου χρόνου — από
+        <input type="date" name="fixed_term_from" data-fixed-term-from
+          value="{{ fv.get('hire_date', '') }}" readonly
+          {{ 'required' if relationship == '1' }}
+          {{ 'disabled' if relationship != '1' }}></label>
+      <label>Ορισμένου χρόνου — έως
+        <input type="date" name="fixed_term_to"
+          value="{{ fv.get('fixed_term_to', '') }}"
+          {{ 'required' if relationship == '1' }}
+          {{ 'disabled' if relationship != '1' }}>
+        <span class="muted" style="font-size:11.5px">σε παλαιά πρόσληψη πρέπει
+          να είναι μετά την έναρξη μισθοδοσίας στο σύστημα</span></label>
+    </div>
+
+    {# ΠΑΛΑΙΑ ΠΡΟΣΛΗΨΗ (μεταφορά από άλλο πρόγραμμα μισθοδοσίας) — εταιρεία με
+       χρήσεις στο παρελθόν: η πρόσληψη είναι παλαιά (μετράει για τριετίες/
+       Δώρα/άδεια), αλλά το σύστημα αναλαμβάνει από συγκεκριμένο μήνα και μετά.
+       Τα πεδία ζουν σε δικό τους πλαίσιο/χρώμα και εμφανίζονται ΜΟΝΟ όταν
+       ζητηθεί (CSS-only :has(), βλ. app.css). #}
+    {% if allow_migration %}
+    <div class="migr-sec">
+      <label class="chk wide"><input type="checkbox" name="migrated" value="1"
+        {{ 'checked' if fv.get('migrated') }}>
+        Παλαιά πρόσληψη</label>
+      <div class="frm cols migr-fields">
+        <label>Έναρξη μισθοδοσίας στο σύστημα
+          <input type="date" name="payroll_from"
+            value="{{ fv.get('payroll_from', '') }}"
+            title="1η του μήνα από τον οποίο υπολογίζει ΑΥΤΟ το πρόγραμμα">
+          <span class="muted" style="font-size:11.5px">1η του μήνα. Πριν από
+            αυτήν δεν γεννιούνται περίοδοι/υποχρεώσεις.</span></label>
+        <label class="chk"><input type="checkbox" name="ergani_hire_done"
+          value="1" {{ 'checked' if fv.get('ergani_hire_done') }}>
+          Εχει υποβληθεί στο ΕΡΓΑΝΗ</label>
+        <label>Αρ. πρωτοκόλλου ΕΡΓΑΝΗ <span class="muted">(προαιρετικό)</span>
+          <input name="ergani_hire_reference" class="mono"
+            value="{{ fv.get('ergani_hire_reference', '') }}"></label>
+      </div>
+    </div>
+    {% endif %}
+  </div>
+
+  {% if person and person_note %}
+    <div class="fsec fs-id compact">
+      <div class="fs-h"><span class="fs-ic">🪪</span>
+        <b>Επαναπρόσληψη: {{ person.full_name }}</b></div>
+      <p class="fs-note">ΑΦΜ {{ person.afm }} · ΑΜΚΑ {{ person.amka }} · τέκνα
+        {{ person.children }} — νέα περίοδος απασχόλησης στο ΙΔΙΟ πρόσωπο· τα
+        στοιχεία ταυτότητας διορθώνονται από τη λίστα
+        <a class="lnk" href="{{ url_for('persons.index') }}">Εργαζόμενοι</a>.</p>
+    </div>
+  {% endif %}
+
+  {% if ident %}
+    {# ① ΤΑΥΤΟΤΗΤΑ — το φυσικό πρόσωπο (σταθερή ταυτότητα, §2) #}
+    <div class="fsec fs-id">
+      <div class="fs-h"><span class="fs-ic">🪪</span>
+        <b>Στοιχεία ταυτότητας</b>
+        <span class="fs-hint">το φυσικό πρόσωπο — καταχωρείται μία φορά</span></div>
+      <div class="frm cols">
+        <label>Επώνυμο<input name="last_name" placeholder="ΓΕΩΡΓΙΟΥ" required
+          value="{{ fv.get('last_name') or (term if term and not term[0].isdigit() else '') }}"></label>
+        <label>Όνομα<input name="first_name" placeholder="ΜΑΡΙΑ" required
+          value="{{ fv.get('first_name', '') }}"></label>
+        <label>Πατρώνυμο<input name="father_name" required
+          value="{{ fv.get('father_name', '') }}"></label>
+        <label>Μητρώνυμο<input name="mother_name" required
+          value="{{ fv.get('mother_name', '') }}"></label>
+        <label>ΑΦΜ (9 ψηφία)<input name="afm" maxlength="9" required
+          inputmode="numeric" value="{{ fv.get('afm') or (term if term and term[0].isdigit() else '') }}"></label>
+        <label>ΑΜΚΑ (11 ψηφία)<input name="amka" maxlength="11" required
+          inputmode="numeric" value="{{ fv.get('amka', '') }}"></label>
+        <label>ΑΜΑ ΕΦΚΑ<input name="ama" maxlength="9" inputmode="numeric"
+          value="{{ fv.get('ama', '') }}"></label>
+        <label>Ημ. γέννησης<input type="date" name="birth_date" required
+          value="{{ fv.get('birth_date', '') }}"></label>
+        <label>Φύλο
+          <select name="sex" required>
+            <option value="">— Επιλογή —</option>
+            <option value="0" {{ 'selected' if fv.get('sex') == '0' }}>Άνδρας</option>
+            <option value="1" {{ 'selected' if fv.get('sex') == '1' }}>Γυναίκα</option>
+          </select></label>
+        <label>Οικογ. Κάτ.
+          <select name="marital_status" required>
+            {% set marital = fv.get('marital_status', '0') %}
+            <option value="0" {{ 'selected' if marital == '0' }}>0 — Άγαμος</option>
+            <option value="1" {{ 'selected' if marital == '1' }}>1 — Έγγαμος</option>
+            <option value="2" {{ 'selected' if marital == '2' }}>2 — Διαζευγμένος</option>
+            <option value="3" {{ 'selected' if marital == '3' }}>3 — Χήρος</option>
+          </select></label>
+        <label>Επίπεδο Μόρφωσης
+          <select name="education_level" required>
+            <option value="">— Επιλογή —</option>
+            {% for row in education_levels %}
+              <option value="{{ row.code }}"
+                {{ 'selected' if fv.get('education_level') == row.code }}>
+                {{ row.code }} — {{ row.description }}</option>
+            {% endfor %}
+          </select></label>
+        <label>Υπηκοότητα
+          {% set nationality = fv.get('nationality_code', '048') %}
+          <select name="nationality_code" data-nationality-select required>
+            <option value="">— Επιλογή —</option>
+            {% for row in nationalities %}
+              <option value="{{ row.code }}"
+                {{ 'selected' if nationality == row.code }}>
+                {{ row.code }} — {{ row.description }}</option>
+            {% endfor %}
+          </select></label>
+        <label>Τύπος ταυτότητας
+          <select name="identity_type" required>
+            <option value="">— Επιλογή —</option>
+            {% for row in identity_types %}
+              <option value="{{ row.code }}"
+                {{ 'selected' if fv.get('identity_type') == row.code }}>
+                {{ row.code }} — {{ row.description }}</option>
+            {% endfor %}
+          </select></label>
+        <label>Αριθμός ταυτότητας
+          <input name="identity_number" maxlength="20" required
+            value="{{ fv.get('identity_number', '') }}"></label>
+        <label>Εκδούσα αρχή
+          <input name="identity_issuer" maxlength="50"
+            value="{{ fv.get('identity_issuer', '') }}"></label>
+        <label>Ημερομηνία έκδοσης
+          <input type="date" name="identity_issue_date"
+            value="{{ fv.get('identity_issue_date', '') }}"></label>
+        <label>Ημερομηνία λήξης ισχύος
+          <input type="date" name="identity_expiry_date"
+            value="{{ fv.get('identity_expiry_date', '') }}"></label>
+        <label>Τέκνα<input type="number" name="children" min="0"
+          value="{{ fv.get('children', '0') }}"></label>
+        <label>Email<input type="email" name="email" placeholder="name@example.com"
+          value="{{ fv.get('email', '') }}"></label>
+      </div>
+    </div>
+  {% endif %}
+
+  {# ② ΠΡΟΣΑΥΞΗΣΕΙΣ ΚΑΤΩΤΑΤΟΥ — ανεβάζουν το ελάχιστο επιτρεπτό (§7), γι' αυτό
+     δηλώνονται ΠΡΙΝ από τις αποδοχές: ο live έλεγχος της επόμενης ενότητας
+     τις λαμβάνει υπόψη. #}
+  <div class="fsec fs-extra">
+    <div class="fs-h"><span class="fs-ic">📈</span>
+      <b>Προσαυξήσεις κατώτατου</b>
+      <span class="fs-hint">τριετίες (ωριμάζουν και με τον χρόνο εδώ), γάμος
+        10%, λοιπές (πτυχίο κ.λπ.)</span></div>
+    <div class="frm cols">
+      <label>Προϋπηρεσία — έτη
+        <input type="number" name="service_years" min="0" step="1"
+               value="{{ fv.get('service_years', '0') }}"
+               title="Αναγνωρισμένη προϋπηρεσία που ΜΕΤΡΑ ΣΤΙΣ ΤΡΙΕΤΙΕΣ (έτη) — ο παγωμένος χρόνος δηλώνεται χωριστά"></label>
+      <label>Προϋπηρεσία — μήνες
+        <input type="number" name="service_months" min="0" max="11" step="1"
+               value="{{ fv.get('service_months', '0') }}"
+               title="Οι επιπλέον μήνες προϋπηρεσίας τριετιών (0–11)"></label>
+      <label data-frozen-service-field hidden>Παγωμένα έτη
+        <input type="number" name="frozen_service_years" min="0" max="11" step="1"
+               value="{{ fv.get('frozen_service_years', '0') }}"
+               title="ΕΠΙΠΛΕΟΝ προϋπηρεσία μέσα στο πάγωμα 14/02/2012–31/12/2023 (έως 11 έτη 10 μήνες) — δεν διαμορφώνει τριετίες"></label>
+      <label data-frozen-service-field hidden>Παγωμένοι μήνες
+        <input type="number" name="frozen_service_months" min="0" max="11" step="1"
+               value="{{ fv.get('frozen_service_months', '0') }}"
+               title="Οι επιπλέον μήνες παγωμένης προϋπηρεσίας (0–11)"></label>
+      <label>Λοιπές προσαυξήσεις %
+        <input type="number" name="extra_allowances_pct" min="0" step="0.5"
+               value="{{ fv.get('extra_allowances_pct', '0') }}"
+               title="π.χ. πτυχίο, μεταπτυχιακό, ξένη γλώσσα"></label>
+      <label class="chk"><input type="checkbox" name="married" value="1"
+        {{ 'checked' if fv.get('married') }}>
+        Επίδομα γάμου 10%</label>
+    </div>
+    <p class="muted" data-frozen-service-field hidden style="margin:6px 0 0;font-size:12px">
+      Ο παγωμένος χρόνος (14/02/2012–31/12/2023) δηλώνεται <b>ΕΠΙΠΛΕΟΝ</b> της
+      προϋπηρεσίας: δεν διαμορφώνει τριετίες κατώτατου, μετρά όμως στον
+      συνολικό χρόνο εργασίας (ημέρες άδειας κ.λπ.). Σύνολο προϋπηρεσίας =
+      προϋπηρεσία + παγωμένος χρόνος (έως 11 έτη 10 μήνες).</p>
+  </div>
+
+  {# ③ ΣΥΜΒΑΣΗ & ΑΠΟΔΟΧΕΣ #}
+  <div class="fsec fs-pay"
+       {% if not readonly|default(false) %}
+         data-minimum-compensation
+         data-minimum-url="{{ url_for('employments.minimum_compensation') }}"
+       {% endif %}>
+    <div class="fs-h"><span class="fs-ic">💶</span>
+      <b>Σύμβαση &amp; αποδοχές</b>
+      <span class="fs-hint">ελέγχονται έναντι του κατώτατου ορίου</span></div>
+    <div class="frm cols">
+      <label>Τύπος αμοιβής
+        <select name="pay_type">
+          <option value="monthly" {{ 'selected' if fv.get('pay_type', 'monthly') == 'monthly' }}>
+            Μισθωτός (€/μήνα)</option>
+          <option value="daily" {{ 'selected' if fv.get('pay_type') == 'daily' }}>
+            Ημερομίσθιος (€/ημέρα)</option>
+        </select></label>
+      <label>Μικτές αποδοχές
+        <input type="number" step="0.01" min="0.01" name="amount"
+               data-compensation-amount required
+               value="{{ fv.get('amount', '') }}"></label>
+      <label>Ώρες / εβδομάδα
+        <input type="number" name="weekly_hours" min="1" max="48" step="0.5"
+               value="{{ fv.get('weekly_hours', '40') }}"></label>
+      {# Σύστημα εβδομαδιαίας εργασίας: γράφεται ΩΣ ΕΧΕΙ στην ΑΠΔ (No 55
+         «Σύστημα Εβδ. Εργασίας», 5 ή 6) — βλ. apd_files._rec3 #}
+      <label>Σύστημα εργασίας
+        <select name="weekly_system"
+                title="Δηλώνεται στην ΑΠΔ (Σύστημα Εβδομαδιαίας Εργασίας)">
+          <option value="5" {{ 'selected' if fv.get('weekly_system', '5')|string == '5' }}>
+            Πενθήμερο (5 ημέρες)</option>
+          <option value="6" {{ 'selected' if fv.get('weekly_system')|string == '6' }}>
+            Εξαήμερο (6 ημέρες)</option>
+        </select></label>
+    </div>
+    {% if not readonly|default(false) %}
+      <div class="minimum-compensation-note" data-minimum-compensation-note
+           role="status" aria-live="polite"></div>
+    {% endif %}
+  </div>
+
+  {# ④ ΑΣΦΑΛΙΣΗ — ΟΛΕΣ οι επιλογές παράγονται από τη ΔΗΛΩΜΕΝΗ ΕΙΔΙΚΟΤΗΤΑ
+     (επιτρεπτοί φορείς επικουρικής, ρυθμίσεις πρόνοιας) και συνοδεύονται από
+     ΖΩΝΤΑΝΗ προεπισκόπηση των γραμμών ΑΠΔ. Το περιεχόμενο ζει σε ξεχωριστό
+     fragment ώστε να ξαναφορτώνεται με htmx σε κάθε αλλαγή. #}
+  <div class="fsec fs-ins">
+    <div class="fs-h"><span class="fs-ic">🛡️</span>
+      <b>Ασφάλιση</b>
+      <span class="fs-hint">ΚΑΔ/ειδικότητα/ΚΠΚ από τη δηλωμένη ειδικότητα</span></div>
+    {% if specialties %}
+      {% include "partials/_insurance_fields.html" %}
+    {% else %}
+      <div class="warnbox">
+        Δεν έχουν δηλωθεί ειδικότητες (θέσεις εργασίας) — δηλώστε τις πρώτα στη
+        σελίδα <a class="lnk" href="{{ url_for('company.index') }}"
+        style="font-weight:700">Εταιρεία</a>. Χωρίς ειδικότητα δεν γίνεται
+        πρόσληψη.
+      </div>
+    {% endif %}
+  </div>
+
+</div>

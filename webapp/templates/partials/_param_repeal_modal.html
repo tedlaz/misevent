@@ -1,0 +1,44 @@
+{# ΚΑΤΑΡΓΗΣΗ κανόνα παραμέτρων.
+
+   Σκόπιμα ΧΩΡΙΣΤΟ modal από το «Νέα ισχύς»: δεν είναι διόρθωση τιμής, είναι
+   δήλωση ότι ο κανόνας ΠΑΥΕΙ να υπάρχει. Σε event sourcing δεν υπάρχει
+   διαγραφή (CLAUDE.md §1 κανόνας #2) — γράφεται κανονική εγγραφή με
+   `repealed=True`, και από εκείνη την ημερομηνία η μισθοδοσία ΣΚΑΕΙ αντί να
+   υποχωρήσει σιωπηλά στην προηγούμενη γραμμή. #}
+{% set f = form or {} %}
+<div class="modal-backdrop">
+  <div class="modal">
+    <form hx-post="{{ url_for('settings.param_repeal', family=family) }}"
+          hx-target="#set-panel" hx-swap="outerHTML">
+      <div class="mhead">
+        <h3>⛔ Κατάργηση — {{ label }}</h3>
+        <span class="muted" style="font-size:12.5px">
+          ο κανόνας παύει να ισχύει από την ημερομηνία που θα δώσετε</span>
+      </div>
+      <div class="mbody">
+        <p class="warnbox" style="margin-top:0">
+          <b>Προσοχή:</b> δεν διαγράφεται τίποτα — καταγράφεται ότι ο κανόνας
+          έπαψε να ισχύει. Οι περίοδοι <b>πριν</b> από αυτή την ημερομηνία
+          υπολογίζονται κανονικά, όπως πάντα. Από την ημερομηνία και μετά η
+          μισθοδοσία <b>θα σταματά με μήνυμα</b> μέχρι να καταχωρήσετε νέα
+          εγγραφή — δεν επανέρχεται σιωπηλά ο προηγούμενος κανόνας.
+        </p>
+        <p class="muted" style="font-size:12.5px">
+          Θέλετε απλώς να <b>διορθώσετε</b> μια γραμμή; Κλείστε αυτό και
+          χρησιμοποιήστε το ✏️ της γραμμής — ίδια «ισχύς από» αντικαθιστά.
+        </p>
+        <div class="frm">
+          <label>Κατάργηση από
+            <input type="date" name="valid_from" required
+                   value="{{ f.get('valid_from', '') }}"></label>
+        </div>
+      </div>
+      <div class="mfoot">
+        <button type="button" class="ghost"
+                hx-get="{{ url_for('settings.modal_close') }}"
+                hx-target="#modal-host" hx-swap="innerHTML">Άκυρο</button>
+        <button class="danger">⛔ Κατάργηση κανόνα</button>
+      </div>
+    </form>
+  </div>
+</div>

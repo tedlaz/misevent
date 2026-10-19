@@ -1,0 +1,21 @@
+{
+  // See https://go.microsoft.com/fwlink/?LinkId=733558
+  // for the documentation about the tasks.json format
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "local server",
+      "type": "shell",
+      "command": "uv run -m webapp",
+      "problemMatcher": []
+    },
+    {
+      "label": "checks",
+      "detail": "lint + όλη η σουίτα tests — η ΜΙΑ εντολή ελέγχου",
+      "type": "shell",
+      "command": "uv run ruff check . && uv run pytest",
+      "group": { "kind": "test", "isDefault": true },
+      "problemMatcher": []
+    }
+  ]
+}

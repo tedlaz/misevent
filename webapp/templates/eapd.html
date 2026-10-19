@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+{% block title %}Αρχεία ΑΠΔ{% endblock %}
+{% block heading %}Αρχεία ΑΠΔ{% endblock %}
+{% block subheading %}Αρχεία CSL01 (e-ΕΦΚΑ / ΤΕΚΑ){% endblock %}
+
+{% block content %}
+<div class="card">
+  <h2>Παραχθέντα αρχεία
+    <span class="norm">— παράγωγα των events, δεν αποθηκεύονται στον δίσκο:
+      παράγονται τη στιγμή που ζητούνται· «Ανάλυση» ανοίγει τον eΑΠΔ viewer
+      (ΠΡΟΒΟΛΗ ΜΟΝΟ), «⬇» κατεβάζει το CSL01 σε ZIP</span></h2>
+
+  {% if rows %}
+    <table class="tbl">
+      <thead><tr>
+        <th>Ταμείο</th><th>Περίοδος</th><th>Αρχείο</th>
+        <th style="text-align:right">Ασφ/νοι</th>
+        <th style="text-align:right">Αποδοχές</th>
+        <th style="text-align:right">Εισφορές</th>
+        <th></th>
+      </tr></thead>
+      <tbody>
+        {% for r in rows %}
+          <tr>
+            <td><b>{{ r.fund_label }}</b></td>
+            <td class="mono">{{ '%02d'|format(r.month) }}/{{ r.year }}</td>
+            <td class="mono" style="font-size:11.5px">{{ r.name }}</td>
+            <td class="num">{{ r.insured }}</td>
+            <td class="num">{{ r.gross|money }} €</td>
+            <td class="num">{{ r.contrib|money }} €</td>
+            <td style="white-space:nowrap">
+              <a type="button" class="ghost"
+                      hx-get="{{ url_for('eapd.modal', fund=r.fund, year=r.year,
+                                         month=r.month) }}"
+                      hx-target="#modal-host" hx-swap="innerHTML">Ανάλυση</a>
+              <a class="ghost" href="{{ url_for('eapd.download', fund=r.fund,
+                                                year=r.year, month=r.month) }}">⬇</a>
+            </td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  {% else %}
+    <div class="empty">Δεν έχει παραχθεί κανένα αρχείο ΑΠΔ.
+      Παράγονται με την υποβολή ΑΠΔ, από τις
+      <a href="{{ url_for('obligations.index') }}">Υποχρεώσεις</a>.</div>
+  {% endif %}
+
+  <div id="modal-host">
+    {% if selected %}
+      {% with r = selected %}{% include "partials/_eapd_modal.html" %}{% endwith %}
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

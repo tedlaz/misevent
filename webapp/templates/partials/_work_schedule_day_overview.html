@@ -1,0 +1,107 @@
+<div class="modal-backdrop work-day-backdrop">
+  <div class="modal work-day-modal" data-work-day-editor
+       data-start="{{ timeline_start }}" data-end="{{ timeline_end }}"
+       data-step="15">
+    <form hx-post="{{ url_for('work_schedules.update_day_overview') }}"
+          hx-target="#work-schedule-panel" hx-swap="outerHTML">
+      <input type="hidden" name="date" value="{{ selected.isoformat() }}">
+      <input type="hidden" name="focus" value="{{ focus_id or '' }}">
+      <div class="mhead work-day-title">
+        <div>
+          <h3>📊 {{ day_name }}, {{ selected|date_gr }} — Πρόγραμμα ημέρας</h3>
+          <span class="muted">Μετακινήστε τη μπάρα ή σύρετε τα άκρα της · βήμα 15 λεπτών</span>
+        </div>
+        <div class="work-day-nav">
+          <button type="button" class="ghost"
+                  hx-get="{{ url_for('work_schedules.day_overview', date=previous_day.isoformat()) }}"
+                  hx-target="#modal-host" hx-swap="innerHTML" aria-label="Προηγούμενη ημέρα">◀</button>
+          <button type="button" class="ghost"
+                  hx-get="{{ url_for('work_schedules.day_overview', date=next_day.isoformat()) }}"
+                  hx-target="#modal-host" hx-swap="innerHTML" aria-label="Επόμενη ημέρα">▶</button>
+        </div>
+      </div>
+
+      <div class="work-day-legend">
+        <span><i class="work-shift-key regular"></i>Κανονική · έως 8ω</span>
+        <span><i class="work-shift-key overwork"></i>Υπερεργασία · 8–9ω</span>
+        <span><i class="work-shift-key overtime"></i>Υπερωρία · πάνω από 9ω</span>
+        <span><i class="work-shift-key telework"></i>Τηλεργασία</span>
+        <span><i class="work-time-key night"></i>Νυχτερινές ώρες</span>
+        <span><i class="work-time-key next-day"></i>Επόμενη ημέρα · μόνο λήξη</span>
+        <span><i class="work-time-key rest"></i>Υποχρεωτική ανάπαυση</span>
+        <small>Double click: νέο ωράριο · Δεξί click στη μπάρα: ενέργειες</small>
+      </div>
+
+      <div class="mbody work-day-body">
+        <div class="work-day-grid" style="--work-slots:{{ slots|length }}">
+          <div class="work-day-corner">Εργαζόμενος</div>
+          <div class="work-hour-head">
+            {% for minute in slots %}
+              <div class="{{ 'is-next-day ' if minute >= 1440 }}{{ 'is-night' if (minute % 1440) >= 1320 or (minute % 1440) < 360 }}"
+                   {% if minute >= 1440 %}title="Επόμενη ημέρα"{% endif %}>{{ (minute // 60) % 24 }}</div>
+            {% endfor %}
+          </div>
+
+          {% for row in rows %}
+            <div class="work-day-person {{ 'focused' if focus_id == row.employment.employment_id }}">
+              <b>{{ row.employment.full_name }}</b>
+              {% if row.absent %}
+                <small class="work-absence-label">Απουσία · {{ row.absence_label }}</small>
+              {% else %}
+                <small data-schedule-label>{{ row.raw or 'ΡΕΠΟ' }}</small>
+              {% endif %}
+            </div>
+            {% if row.absent %}
+              <div class="work-absence-track {{ 'focused' if focus_id == row.employment.employment_id }}"
+                   aria-label="{{ row.employment.full_name }} · {{ row.absence_label }}">
+                <span>Απουσία — {{ row.absence_label }}</span>
+              </div>
+            {% else %}
+            <div class="work-shift-track {{ 'focused' if focus_id == row.employment.employment_id }}"
+                 data-shift-track data-employment-id="{{ row.employment.employment_id }}"
+                 data-min-start="{{ row.minimum_start }}" data-max-end="{{ row.maximum_end }}"
+                 title="Double click για δημιουργία ωραρίου">
+              <input type="hidden" name="hours_{{ row.employment.employment_id }}"
+                     value="{{ row.raw }}" data-schedule-input>
+              <div class="work-hour-grid" aria-hidden="true">
+                {% for minute in slots %}
+                  <i class="{{ 'is-next-day ' if minute >= 1440 }}{{ 'is-night' if (minute % 1440) >= 1320 or (minute % 1440) < 360 }}"></i>
+                {% endfor %}
+              </div>
+              <i class="work-rest-limit previous" aria-hidden="true"><span>11ω ανάπαυση</span></i>
+              <i class="work-rest-limit following" aria-hidden="true"><span>11ω ανάπαυση</span></i>
+              {% for segment in row.segments %}
+                <div class="work-shift-bar {{ 'telework' if segment.telework }}"
+                     data-shift-bar data-start="{{ segment.start }}" data-end="{{ segment.end }}"
+                     data-telework="{{ 1 if segment.telework else 0 }}"
+                     style="left:{{ ((segment.start-timeline_start)*100/timeline_minutes)|round(5) }}%;width:{{ ((segment.end-segment.start)*100/timeline_minutes)|round(5) }}%">
+                  <i class="work-shift-handle left" data-shift-resize="start"></i>
+                  <span>{{ segment.text }}</span>
+                  <i class="work-shift-handle right" data-shift-resize="end"></i>
+                </div>
+              {% endfor %}
+            </div>
+            {% endif %}
+          {% else %}
+            <div class="empty wide">Δεν υπάρχουν ενεργοί εργαζόμενοι.</div>
+          {% endfor %}
+
+          {% if rows %}
+            <div class="work-day-count-label">Εργαζόμενοι</div>
+            <div class="work-staff-count">
+              {% for count in counts %}
+                <div data-staff-slot class="{{ 'is-next-day ' if slots[loop.index0] >= 1440 }}{{ 'is-night' if (slots[loop.index0] % 1440) >= 1320 or (slots[loop.index0] % 1440) < 360 }}">{{ count }}</div>
+              {% endfor %}
+            </div>
+          {% endif %}
+        </div>
+      </div>
+      <div class="mfoot">
+        <button type="button" class="ghost" data-work-day-cancel
+                hx-get="{{ url_for('work_schedules.modal_close') }}"
+                hx-target="#modal-host" hx-swap="innerHTML">Άκυρο</button>
+        <button class="run" type="submit">Αποθήκευση ημερήσιου προγράμματος</button>
+      </div>
+    </form>
+  </div>
+</div>

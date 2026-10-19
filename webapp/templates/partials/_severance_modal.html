@@ -1,0 +1,61 @@
+{# Αποζημίωση απόλυσης: ΔΥΟ πίνακες + η προσαύξηση 1/6.
+
+   Δεν χωρά στο γενικό `_param_modal.html` (βαθμωτά πεδία), γι' αυτό η
+   οικογένεια είναι `ui_mode="custom"` στο μητρώο `config.FAMILIES`. Ίδιο
+   μοτίβο με το `_tax_modal.html`: πίνακες ως κείμενο, μία γραμμή ανά
+   κλιμάκιο. #}
+{% set f = form or p %}
+<div class="modal-backdrop">
+  <div class="modal">
+    <form hx-post="{{ url_for('settings.severance_save') }}"
+          hx-target="#set-panel" hx-swap="outerHTML">
+      <div class="mhead">
+        <h3>{{ '✏️' if edit else '➕' }} Αποζημίωση απόλυσης</h3>
+        <span class="muted" style="font-size:12.5px">
+          ισχύει για απολύσεις ΑΠΟ αυτή την ημερομηνία — οι παλιές
+          αποζημιώσεις κρατούν τον πίνακα που ίσχυε τότε</span>
+      </div>
+      <div class="mbody">
+        <div class="frm">
+          <label>Ισχύς από
+            <input type="date" name="valid_from" required
+                   value="{{ f.get('valid_from', '') }}"></label>
+
+          <label>Μήνες ανά έτη υπηρεσίας
+            <textarea name="months" rows="11" class="mono"
+              placeholder="1;2&#10;4;3&#10;6;4">{{ f.get('months', '') }}</textarea>
+            <span class="muted" style="font-size:12px">μία γραμμή ανά κλιμάκιο:
+              <b>συμπληρωμένα έτη;μήνες</b> — αύξοντα. Κάτω από το πρώτο
+              κατώφλι η αποζημίωση είναι 0. ΜΕ προειδοποίηση = το μισό.</span>
+          </label>
+
+          <label>Προσαύξηση Δώρων/επιδόματος
+            <input type="number" name="gift_factor" step="0.000001" min="1"
+                   max="3" required value="{{ f.get('gift_factor', '') }}">
+            <span class="muted" style="font-size:12px">1,166667 = προσαύξηση
+              1/6 (αναλογία Δώρων και επιδόματος αδείας)</span>
+          </label>
+
+          <label>Κλιμάκια αυτοτελούς φόρου
+            <textarea name="tax_brackets" rows="5" class="mono"
+              placeholder="60000;0&#10;100000;10&#10;;30">{{ f.get('tax_brackets', '') }}</textarea>
+            <span class="muted" style="font-size:12px">μία γραμμή ανά κλιμάκιο:
+              <b>άνω όριο;συντελεστής %</b>. Το <b>τελευταίο</b> αφήνεται
+              ΧΩΡΙΣ όριο (ανοιχτό). Καμία ασφαλιστική κράτηση.</span>
+          </label>
+        </div>
+        <p class="warnbox" style="margin-bottom:0">
+          <b>ΕΝΔΕΙΚΤΙΚΕΣ τιμές</b> — επιβεβαιώστε τις από την ισχύουσα
+          νομοθεσία πριν από παραγωγική χρήση. Η μεταβατική διάταξη 17+ ετών
+          (12/11/2012) <b>δεν</b> υλοποιείται.
+        </p>
+      </div>
+      <div class="mfoot">
+        <button type="button" class="ghost"
+                hx-get="{{ url_for('settings.modal_close') }}"
+                hx-target="#modal-host" hx-swap="innerHTML">Άκυρο</button>
+        <button class="run">Αποθήκευση</button>
+      </div>
+    </form>
+  </div>
+</div>

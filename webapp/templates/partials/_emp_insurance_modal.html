@@ -1,0 +1,52 @@
+{# Modal ενημέρωσης ασφαλιστικού προφίλ: επιλογή ΕΙΔΙΚΟΤΗΤΑΣ (θέσης εργασίας)
+   της εταιρείας — η τριάδα ΕΦΚΑ/ΤΕΚΑ αντλείται από τη δήλωσή της. #}
+{% set f = form or {} %}
+{% set prof = e.insurance_profile %}
+<div class="modal-backdrop">
+  <div class="modal">
+    <form hx-post="{{ url_for('employments.insurance', employment_id=e.employment_id) }}"
+          hx-target="#employment-card" hx-swap="outerHTML">
+      <div class="mhead">
+        <h3>🛡️ Ασφαλιστικό προφίλ — {{ e.full_name }}</h3>
+        <span class="muted" style="font-size:12.5px">
+          η τριάδα ΚΑΔ/ειδικότητα/ΚΠΚ (ΕΦΚΑ & ΤΕΚΑ) ορίζεται στην ειδικότητα —
+          σελίδα <a class="lnk" href="{{ url_for('company.index') }}">Εταιρεία</a></span>
+      </div>
+      <div class="mbody">
+        {% if specialties %}
+          {# ΙΔΙΟ fragment με την πρόσληψη: επιλογές παραγόμενες από την
+             ειδικότητα + ζωντανή προεπισκόπηση γραμμών ΑΠΔ. #}
+          {% include "partials/_insurance_fields.html" %}
+          <div class="frm cols">
+            {% set current_branch = f.get('branch_no', prof.branch_no if prof else 0)|int %}
+            <label>Παράρτημα
+              <select name="branch_no" required>
+                {% for b in branches %}
+                  <option value="{{ b.code }}" {{ 'selected' if current_branch == b.code }}>
+                    {{ b.employment_label }}
+                  </option>
+                {% endfor %}
+              </select></label>
+            {# ΤΟ ΣΥΣΤΗΜΑ ΕΡΓΑΣΙΑΣ (πενθήμερο/εξαήμερο) ΔΕΝ είναι ασφαλιστικό
+               στοιχείο — είναι ΟΡΟΣ ΣΥΜΒΑΣΗΣ και δηλώνεται στην πρόσληψη /
+               «Αλλαγή σύμβασης» (_emp_contract_modal.html). #}
+          </div>
+        {% else %}
+          <div class="warnbox">
+            Δεν έχουν δηλωθεί ειδικότητες (θέσεις εργασίας) — δηλώστε τις
+            πρώτα στη σελίδα <a class="lnk"
+            href="{{ url_for('company.index') }}"
+            style="font-weight:700">Εταιρεία</a>.
+          </div>
+        {% endif %}
+      </div>
+      <div class="mfoot">
+        <button type="button" class="ghost"
+                hx-get="{{ url_for('employments.modal_close') }}"
+                hx-target="#modal-host" hx-swap="innerHTML">Άκυρο</button>
+        <button class="run" type="submit"
+                {{ 'disabled' if not specialties }}>Αποθήκευση προφίλ</button>
+      </div>
+    </form>
+  </div>
+</div>

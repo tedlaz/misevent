@@ -1,0 +1,118 @@
+{# Modal ΚΠΚ σε ΤΡΕΙΣ ενότητες, όπως το μοντέλο των ασφαλιστικών συνδυασμών:
+   ① ΤΑΥΤΟΤΗΤΑ (φορέας · κωδικός · ονομασία · ΒΑΘΜΙΔΑ) — δεν αλλάζει με τον χρόνο
+   ② ΚΑΔ / ΕΙΔ — υπάρχουν ΜΟΝΟ στις βαθμίδες με καθολικά σταθερούς κωδικούς
+     (επικουρική, πρόνοια). Στην κύρια ο κωδικός ειδικότητας αλλάζει ανά
+     επάγγελμα, άρα ορίζεται στην ΕΙΔΙΚΟΤΗΤΑ.
+   ③ ΠΟΣΟΣΤΑ ΑΝΑ ΜΗΝΑ ΙΣΧΥΟΣ — χρονοσειρά: κάθε γραμμή ισχύει από την
+     ημερομηνία της μέχρι να αρχίσει η επόμενη.
+   `entry` = υπάρχον ΚΠΚ (επεξεργασία) ή None. Τα ποσοστά δίνονται σε %
+   (13,37) και αποθηκεύονται στα events ως κλάσματα. #}
+{% set f = form or {} %}
+{% set rows = 8 %}
+{% set series = entry.series if entry else [] %}
+{% set sel_tier = f.get('tier', entry.tier if entry else 'main_auxiliary') %}
+{% set sel_carrier = f.get('carrier', entry.carrier if entry else 'efka') %}
+<div class="modal-backdrop">
+  <div class="modal wide">
+    <form hx-post="{{ url_for('settings.kpk_save') }}"
+          hx-target="#set-panel" hx-swap="outerHTML">
+      <div class="mhead">
+        <h3>{{ '✏️ Επεξεργασία ΚΠΚ' if entry else '➕ Νέο ΚΠΚ' }}</h3>
+        <span class="muted" style="font-size:12.5px">
+          ταυτότητα (σταθερή) + χρονοσειρά ποσοστών — οι υπολογισμοί κάθε
+          περιόδου χρησιμοποιούν τη γραμμή που ίσχυε τότε</span>
+      </div>
+      <div class="mbody">
+        {# Το ταμείο (παράγωγο φορέα+βαθμίδας) ταξιδεύει μόνο για να ξαναβρεί
+           το modal την υπάρχουσα εγγραφή στα refresh — δεν το γράφει ο χρήστης. #}
+        {% if entry %}<input type="hidden" name="fund" value="{{ entry.fund }}">{% endif %}
+
+        {# ------------------------------------------------ ① ΤΑΥΤΟΤΗΤΑ #}
+        <div class="fsec fs-id">
+          <div class="fs-h"><span class="fs-ic">🪪</span><b>Ταυτότητα</b>
+            <span class="fs-hint">δεν αλλάζει με τον χρόνο</span></div>
+          <div class="frm cols">
+            <label>Φορέας
+              <select name="carrier"
+                      hx-post="{{ url_for('settings.kpk_modal_refresh') }}"
+                      hx-target="#modal-host" hx-swap="innerHTML"
+                      hx-include="closest form">
+                {% for code in config.CARRIER_ROLES %}
+                  <option value="{{ code }}"
+                    {{ 'selected' if sel_carrier == code }}>
+                    {{ config.CARRIERS[code] }}</option>
+                {% endfor %}
+              </select></label>
+            <label>ΚΠΚ (κωδικός)
+              <input name="kpk" required maxlength="4" class="mono"
+                placeholder="π.χ. 0101"
+                value="{{ f.get('kpk', entry.kpk if entry else '') }}"
+                {{ 'readonly' if entry }}></label>
+            <label class="wide">Ονομασία
+              <input name="name" required placeholder="π.χ. ΙΚΑ-ΤΕΑΜ ΜΙΚΤΑ"
+                value="{{ f.get('name', entry.name if entry else '') }}"></label>
+            <label class="wide">Βαθμίδα ασφάλισης
+              {% set allowed = config.tiers_for_carrier(sel_carrier) %}
+              {% if allowed|length == 1 %}
+                <input type="hidden" name="tier" value="{{ allowed[0] }}">
+                <div class="lockbox">🔒 Ο φορέας
+                  <b>{{ config.CARRIERS[sel_carrier] }}</b> επιτρέπει μόνο
+                  βαθμίδα <b>{{ config.TIERS[allowed[0]] }}</b>.</div>
+              {% else %}
+                <select name="tier"
+                        hx-post="{{ url_for('settings.kpk_modal_refresh') }}"
+                        hx-target="#modal-host" hx-swap="innerHTML"
+                        hx-include="closest form">
+                  {% for t in allowed %}
+                    <option value="{{ t }}" {{ 'selected' if sel_tier == t }}>
+                      {{ config.TIERS[t] }}</option>
+                  {% endfor %}
+                </select>
+              {% endif %}</label>
+          </div>
+        </div>
+
+        {# -------------------------------------- ② ΧΡΟΝΟΣΕΙΡΑ ΠΟΣΟΣΤΩΝ #}
+        <div class="fsec fs-pay">
+          <div class="fs-h"><span class="fs-ic">%</span>
+            <b>Ποσοστά ανά ημερομηνία ισχύος</b>
+            <span class="fs-hint">κάθε γραμμή ισχύει μέχρι να αρχίσει η
+              επόμενη· κενή ημερομηνία = η γραμμή αγνοείται</span></div>
+          <table class="tbl kpk-rates">
+            <thead><tr><th>Ισχύς από</th><th class="rt">Εργαζόμενος %</th>
+              <th class="rt">Εργοδότης %</th></tr></thead>
+            <tbody>
+            {% for i in range(rows) %}
+              {% set r = series[i] if i < series|length else None %}
+              <tr>
+                <td><input type="date" name="rate{{ i }}_valid_from"
+                  value="{{ f.get('rate%d_valid_from'|format(i),
+                            r.valid_from.isoformat() if r else '') }}"></td>
+                <td><input type="number" name="rate{{ i }}_employee" step="0.01"
+                  min="0" max="99.99" value="{{ f.get('rate%d_employee'|format(i),
+                    '%.2f'|format(r.employee * 100) if r else '') }}"></td>
+                <td><input type="number" name="rate{{ i }}_employer" step="0.01"
+                  min="0" max="99.99" value="{{ f.get('rate%d_employer'|format(i),
+                    '%.2f'|format(r.employer * 100) if r else '') }}"></td>
+              </tr>
+            {% endfor %}
+            </tbody>
+          </table>
+        </div>
+
+        {% if usage %}
+          <div class="muted" style="font-size:12px;margin-top:10px">
+            Χρησιμοποιείται από τις ειδικότητες:
+            <b>{{ usage|join(', ') }}</b> — αλλαγή βαθμίδας ή κωδικών επηρεάζει
+            τις επόμενες δηλώσεις τους.</div>
+        {% endif %}
+      </div>
+      <div class="mfoot">
+        <button type="button" class="ghost"
+                hx-get="{{ url_for('settings.modal_close') }}"
+                hx-target="#modal-host" hx-swap="innerHTML">Άκυρο</button>
+        <button class="run" type="submit">Αποθήκευση ΚΠΚ</button>
+      </div>
+    </form>
+  </div>
+</div>

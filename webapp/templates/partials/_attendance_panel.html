@@ -1,0 +1,92 @@
+{# Παρουσίες περιόδου: READ-ONLY πίνακας. Η επεξεργασία κάθε εργαζόμενου
+   γίνεται σε MODAL (κλείνει μόνο με Αποθήκευση/Ακύρωση). Οι διορθώσεις
+   σταδιάζονται στα κρυφά inputs του #sheet-form και γράφονται με «Έγκριση». #}
+<div id="attendance-panel">
+  <div class="card">
+    <h2>Παρουσίες {{ m }}/{{ y }}
+      <span class="norm">— {{ 'εγκεκριμένο' if done else 'προσχέδιο' }}</span></h2>
+
+    <form class="btnrow" style="margin-bottom:14px"
+          hx-get="{{ url_for('attendance.index') }}" hx-target="body"
+          hx-swap="outerHTML" hx-push-url="true">
+      <label class="ref">Περίοδος
+        <input type="number" name="m" value="{{ m }}" min="1" max="12" style="width:70px">
+        <input type="number" name="y" value="{{ y }}" min="2020" max="2100" style="width:90px">
+      </label>
+      <button class="ghost" type="submit">Προβολή</button>
+    </form>
+
+    {# Εισαγωγή πραγματικών παρουσιών από «Κάρτα Εργασίας» ΕΡΓΑΝΗ (xlsx) #}
+    <form class="btnrow" style="margin-bottom:14px"
+          hx-post="{{ url_for('attendance.import_karta') }}"
+          hx-target="#attendance-panel" hx-swap="outerHTML"
+          hx-encoding="multipart/form-data">
+      <label class="ref">Κάρτα ΕΡΓΑΝΗ (xlsx)
+        <input type="file" name="karta" accept=".xlsx" required></label>
+      <button class="ghost" type="submit">📇 Εισαγωγή παρουσιών</button>
+      <span class="muted" style="font-size:12.5px">
+        Αντιστοίχιση με ΑΦΜ· οι βάρδιες κάθε ημέρας αθροίζονται και
+        κατατάσσονται (νύχτα/αργία/υπερωρίες).</span>
+    </form>
+
+    {% if not rows %}
+      <div class="empty">Καμία απασχόληση στην περίοδο {{ m }}/{{ y }}.</div>
+    {% else %}
+      {% if period_closed %}
+        <div class="warnbox closedbox" style="margin-bottom:14px">
+          🔒 Η <b>μισθοδοσία {{ m }}/{{ y }}</b> έχει κλείσει — η περίοδος είναι
+          κλειδωμένη. Δεν επιτρέπονται αλλαγές σε παρουσίες, πρόγραμμα, άδειες,
+          προσλήψεις ή αποχωρήσεις.
+        </div>
+      {% endif %}
+      {% if ergani_pending %}
+        <div class="warnbox" style="margin-bottom:14px">
+          ⚠️ Εκκρεμούν υποβολές <b>ΕΡΓΑΝΗ (Ε3 πρόσληψης / δήλωση προγράμματος)</b>
+          — προαπαιτούμενο των παρουσιών. Το Ε3 υποβάλλεται από την καρτέλα της
+          απασχόλησης· το πρόγραμμα δηλώνεται από το «Πρόγραμμα»:
+          <ul style="margin:6px 0 0 18px">
+            {% for p in ergani_pending %}
+              <li><a class="lnk"
+                href="{{ url_for('employments.detail', employment_id=p.eid) }}">
+                {{ p.name }}</a> — λείπει {{ p.missing|join(' + ') }}</li>
+            {% endfor %}
+          </ul>
+        </div>
+      {% endif %}
+
+      <form id="sheet-form"
+            hx-post="{{ url_for('attendance.approve', y=y, m=m) }}"
+            hx-target="#attendance-panel" hx-swap="outerHTML">
+        <div class="atbl">
+          <div class="atbl-head">
+            <div>Εργαζόμενος</div>
+            <div class="rt" title="Ημέρες ασφάλισης — οδηγούν τη μισθοδοσία">Ημ. ΕΦΚΑ</div>
+            <div class="rt">Εργασία</div>
+            <div class="rt">Άνευ απ.</div>
+            <div class="rt">Άδειες</div>
+            <div class="rt" title="Ημέρες ασθενείας · επίδομα ΕΦΚΑ">Ασθένεια</div>
+            <div class="rt" title="Επιπλέον αμοιβές ωρών (νύχτα/αργία/υπερωρίες)">Προσαύξ.</div>
+            <div class="rt"></div>
+          </div>
+          {% for r in rows %}
+            {% include "partials/_attendance_row.html" %}
+          {% endfor %}
+        </div>
+
+        <div class="btnrow" style="margin-top:14px">
+          <button class="run" type="submit"
+                  {{ 'disabled' if ergani_pending or period_closed }}>
+            {{ 'Επανέγκριση' if done else 'Έγκριση' }} παρουσιών {{ m }}/{{ y }}
+          </button>
+          {% if done %}<span class="tag ok">Εγκρίθηκε</span>{% endif %}
+          <span class="muted" style="font-size:12.5px">
+            Πάτησε ✏️ σε έναν εργαζόμενο για διόρθωση. Μετά την έγκριση
+            ανοίγει η μισθοδοσία της περιόδου.</span>
+        </div>
+      </form>
+    {% endif %}
+  </div>
+
+  {# Εδώ φορτώνεται το modal επεξεργασίας (κενό όσο είναι κλειστό) #}
+  <div id="modal-host"></div>
+</div>

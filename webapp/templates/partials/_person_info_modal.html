@@ -1,0 +1,108 @@
+{# Modal πληροφοριών προσώπου (read-only): περίοδοι απασχόλησης, υπόλοιπο
+   κανονικής άδειας και τελευταία ασθένεια. Κλείνει ΜΟΝΟ με «Κλείσιμο». #}
+{% from "_macros.html" import emp_status, emp_pay %}
+<div class="modal-backdrop">
+  <div class="modal">
+    <div class="mhead">
+      <h3>{{ person.full_name }}</h3>
+      <span class="muted" style="font-size:12.5px">
+        ΑΦΜ {{ person.afm }} · ΑΜΚΑ {{ person.amka }} ·
+        {% if person.email %}{{ person.email }} · {% endif %}
+        {{ employments|length }} περίοδοι απασχόλησης</span>
+    </div>
+
+    <div class="mbody">
+      <b class="sec">Στοιχεία ταυτοποίησης WebE3N</b>
+      <div class="frm cols">
+        <label>Φύλο<input value="{{
+          'Άνδρας' if person.sex == '0' else
+          'Γυναίκα' if person.sex == '1' else '—' }}" disabled></label>
+        <label>Οικογ. Κάτ.<input value="{{
+          'Άγαμος' if person.marital_status == '0' else
+          'Έγγαμος' if person.marital_status == '1' else
+          'Διαζευγμένος' if person.marital_status == '2' else
+          'Χήρος' if person.marital_status == '3' else '—' }}" disabled></label>
+        <label>Επίπεδο Μόρφωσης<input value="{{ education_level_label }}"
+          disabled></label>
+        <label>Υπηκοότητα<input value="{{ person.nationality_code or '—' }}"
+          disabled></label>
+        <label>Τύπος ταυτότητας<input value="{{ person.identity_type or '—' }}"
+          disabled></label>
+        <label>Αριθμός ταυτότητας<input value="{{ person.identity_number or '—' }}"
+          disabled></label>
+        <label>Εκδούσα αρχή<input value="{{ person.identity_issuer or '—' }}"
+          disabled></label>
+        <label>Ημερομηνία έκδοσης<input value="{{
+          person.identity_issue_date|date_gr if person.identity_issue_date else '—'
+        }}" disabled></label>
+        <label>Λήξη ισχύος<input value="{{
+          person.identity_expiry_date|date_gr if person.identity_expiry_date else '—'
+        }}" disabled></label>
+      </div>
+
+      {% if person.res_permit_inst or person.res_permit_ap or person.res_permit_visa %}
+        <b class="sec">Στοιχεία πολίτη τρίτης χώρας</b>
+        <div class="frm cols">
+          <label>Άδεια άμεσης πρόσβασης<input value="{{
+            person.res_permit_inst_number or '—' }}" disabled></label>
+          <label>Άδεια με πρόσθετη έγκριση<input value="{{
+            person.res_permit_ap_number or '—' }}" disabled></label>
+          <label>Θεώρηση εισόδου<input value="{{
+            person.res_permit_visa_number or '—' }}" disabled></label>
+        </div>
+      {% endif %}
+
+      <b class="sec">Περίοδοι απασχόλησης</b>
+      {% if employments %}
+        <table class="tbl">
+          <thead><tr>
+            <th>Πρόσληψη</th><th>Λήξη</th><th>Αμοιβή</th><th>Κατάσταση</th><th></th>
+          </tr></thead>
+          <tbody>
+            {% for e in employments %}
+              <tr>
+                <td class="mono">{{ e.hire_date|date_gr }}</td>
+                <td class="mono">{{ e.termination_date|date_gr if e.termination_date else '—' }}</td>
+                <td>{{ emp_pay(e) }}</td>
+                <td>{{ emp_status(e) }}</td>
+                <td><a class="lnk"
+                  href="{{ url_for('employments.detail', employment_id=e.employment_id) }}">
+                  Καρτέλα →</a></td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      {% else %}
+        <div class="empty">Καμία απασχόληση ακόμη.</div>
+      {% endif %}
+
+      <b class="sec">Κανονική άδεια
+        {% if leave %}<span class="muted" style="text-transform:none">
+          — έτος {{ leave.year }}</span>{% endif %}</b>
+      {% if leave %}
+        <div class="frm cols">
+          <label>Δικαίωμα<input value="{{ leave.entitlement }} ημέρες" disabled></label>
+          <label>Ελήφθησαν<input value="{{ leave.taken }} ημέρες" disabled></label>
+          <label>Υπόλοιπο<input value="{{ leave.remaining }} ημέρες" disabled></label>
+        </div>
+      {% else %}
+        <div class="empty">Δεν υπάρχει ενεργή/πρόσφατη απασχόληση.</div>
+      {% endif %}
+
+      <b class="sec">Τελευταία ασθένεια</b>
+      {% if last_sick %}
+        <div class="box" style="font-size:13px">
+          {{ last_sick.date_from|date_gr }} – {{ last_sick.date_to|date_gr }}
+        </div>
+      {% else %}
+        <div class="empty">Καμία καταγεγραμμένη ασθένεια.</div>
+      {% endif %}
+    </div>
+
+    <div class="mfoot">
+      <button type="button" class="ghost"
+              hx-get="{{ url_for('persons.modal_close') }}"
+              hx-target="#modal-host" hx-swap="innerHTML">Κλείσιμο</button>
+    </div>
+  </div>
+</div>

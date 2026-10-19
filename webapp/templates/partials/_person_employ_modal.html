@@ -1,0 +1,60 @@
+{# Modal (επανα)πρόσληψης σε TABS (CSS-only): νέα περίοδος απασχόλησης στο ΙΔΙΟ
+   πρόσωπο — ΠΟΤΕ νέο Person. Κλείνει με «Άκυρο» ή επιτυχή υποβολή (αντικαθιστά
+   το #persons-panel με κενό modal-host). Σε σφάλμα ξαναγεμίζει με τα δεδομένα. #}
+{% set f = form or {} %}
+{% set fv = f %}
+{% set rehire = (p.employment_ids|length) > 0 %}
+<div class="modal-backdrop">
+  <div class="modal wide">
+    <form hx-post="{{ url_for('persons.employ', person_id=p.person_id) }}"
+          hx-target="#persons-panel" hx-swap="outerHTML">
+      <div class="mhead">
+        <h3>{{ 'Επαναπρόσληψη' if rehire else 'Πρόσληψη' }} — {{ p.full_name }}</h3>
+        <span class="muted" style="font-size:12.5px">
+          νέα περίοδος απασχόλησης στο ίδιο πρόσωπο — ΠΟΤΕ νέο πρόσωπο</span>
+      </div>
+
+      <div class="mbody">
+        <input class="tabradio" type="radio" name="_tab" id="tab-general" checked>
+        <input class="tabradio" type="radio" name="_tab" id="tab-oaed">
+        <input class="tabradio" type="radio" name="_tab" id="tab-schedule">
+        <div class="tabbar">
+          <label for="tab-general">① Γενικά στοιχεία</label>
+          <label for="tab-schedule">② Πρόγραμμα εργασίας</label>
+          <label for="tab-oaed">③ ΟΑΕΔ</label>
+        </div>
+
+        {# ───────────────────── TAB 1: Γενικά στοιχεία ───────────────────
+           ΚΟΙΝΟ markup με τη σελίδα πρόσληψης: partials/_general_tab.html #}
+        <div class="tabpane tp-general">
+          {% set ident = false %}
+          {% set person = p %}
+          {% set person_note = false %}
+          {# Η ΕΠΑΝΑΠΡΟΣΛΗΨΗ είναι νέα περίοδος που ξεκινά τώρα — ποτέ παλαιά
+             πρόσληψη μεταφερόμενη από άλλο πρόγραμμα μισθοδοσίας. #}
+          {% set allow_migration = not rehire %}
+          {% include "partials/_general_tab.html" %}
+        </div>
+
+        {# ───────────────────── TAB 2: Πρόγραμμα εργασίας ──────────────── #}
+        <div class="tabpane tp-schedule">
+          {% include "partials/_schedule_tab.html" %}
+        </div>
+
+        <div class="tabpane tp-oaed">
+          {% include "partials/_oaed_tab.html" %}
+        </div>
+      </div>
+
+      <div class="mfoot">
+        <button type="button" class="ghost"
+                hx-get="{{ url_for('persons.modal_close') }}"
+                hx-target="#modal-host" hx-swap="innerHTML">Άκυρο</button>
+        {# Η καταχώρηση ΔΕΝ υποβάλλει στο ΕΡΓΑΝΗ: το Ε3/ΟΧΕ τα στέλνει
+           χειροκίνητα ο χρήστης από την καρτέλα της απασχόλησης (§5.7). #}
+        <button class="run" type="submit" {{ 'disabled' if not specialties }}>
+          Προσωρινή αποθήκευση</button>
+      </div>
+    </form>
+  </div>
+</div>

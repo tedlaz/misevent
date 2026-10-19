@@ -1,0 +1,23 @@
+{% extends "auth_base.html" %}
+{% block title %}Πρόσκληση{% endblock %}
+{% block heading %}Δημιουργία λογαριασμού{% endblock %}
+{% block subheading %}με πρόσκληση διαχειριστή{% endblock %}
+
+{% block content %}
+{% if blocked %}
+  <div class="warnbox">{{ blocked }}</div>
+  <div class="btnrow"><a class="ghost" href="{{ url_for('auth.login') }}">Πίσω στη σύνδεση</a></div>
+{% else %}
+  <form class="frm" method="post" action="{{ url_for('auth.invite', token=token) }}">
+    <label>Email
+      <input name="email" type="email" value="{{ email or '' }}" required autofocus></label>
+    <label>Κωδικός
+      <input name="password" type="password" required></label>
+    <label>Επανάληψη κωδικού
+      <input name="repeat" type="password" required></label>
+    <p class="muted" style="font-size:12.5px">Μετά τη δημιουργία, ο διαχειριστής
+      θα σας δώσει πρόσβαση στις εταιρείες που σας αφορούν.</p>
+    <div class="btnrow"><button class="run" type="submit">Δημιουργία λογαριασμού</button></div>
+  </form>
+{% endif %}
+{% endblock %}

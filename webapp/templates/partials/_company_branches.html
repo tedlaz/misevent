@@ -1,0 +1,48 @@
+{# `oob`: το panel έρχεται ως δευτερεύουσα απάντηση (εισαγωγή JSON). #}
+<div id="branches-panel" {% if oob %}hx-swap-oob="outerHTML"{% endif %}>
+  <p class="muted" style="font-size:12.5px;margin-bottom:14px">
+    Το βασικό παράρτημα έχει πάντα κωδικό <b>0</b>. Οι υπηρεσίες και ο ΚΑΔ
+    επιλέγονται από το μητρώο παραμέτρων ΕΡΓΑΝΗ.
+  </p>
+
+  {% if not has_main_branch %}
+    <div class="box">
+      <h3 style="margin-bottom:12px">Εισαγωγή βασικού παραρτήματος</h3>
+      {% set branch = branches[0] if branches else none %}
+      {% set suggested_code = 0 %}
+      {% set first_branch = true %}
+      {% include "partials/_company_branch_form.html" %}
+    </div>
+  {% else %}
+    <div class="btnrow" style="justify-content:flex-end;margin-bottom:12px">
+      <button class="run" type="button"
+              hx-get="{{ url_for('company.branch_modal') }}"
+              hx-target="#branch-modal-host" hx-swap="innerHTML">
+        + Νέο παράρτημα
+      </button>
+    </div>
+    <table class="tbl">
+      <thead><tr>
+        <th>Κωδικός</th><th>Διεύθυνση</th><th>ΣΕΠΕ</th><th>ΟΑΕΔ</th>
+        <th>ΚΑΔ</th><th>Καλλικράτης</th><th></th>
+      </tr></thead>
+      <tbody>
+      {% for b in branches %}
+        {% set desc = branch_descriptions.get(b.code, {}) %}
+        <tr>
+          <td class="mono"><b>{{ b.code }}</b>{% if b.code == 0 %} <span class="tag ok">βασικό</span>{% endif %}</td>
+          <td>{{ b.street }} {{ b.street_no }}{% if b.city %}<br><span class="muted">{{ b.postal_code }} {{ b.city }}</span>{% endif %}</td>
+          <td>{{ b.sepe_code }}{% if desc.get('sepe') %}<br><span class="muted">{{ desc.sepe }}</span>{% endif %}</td>
+          <td>{{ b.oaed_code }}{% if desc.get('oaed') %}<br><span class="muted">{{ desc.oaed }}</span>{% endif %}</td>
+          <td>{{ b.kad_code }}{% if desc.get('kad') %}<br><span class="muted">{{ desc.kad }}</span>{% endif %}</td>
+          <td>{{ b.kallikratis_code }}{% if desc.get('koinotites') %}<br><span class="muted">{{ desc.koinotites }}</span>{% endif %}</td>
+          <td><button class="ghost sm" type="button"
+                      hx-get="{{ url_for('company.branch_modal', code=b.code) }}"
+                      hx-target="#branch-modal-host" hx-swap="innerHTML">Διόρθωση</button></td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  {% endif %}
+  <div id="branch-modal-host"></div>
+</div>

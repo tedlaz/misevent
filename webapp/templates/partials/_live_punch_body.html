@@ -1,0 +1,87 @@
+{# ΣΩΜΑ του modal «Χτύπημα κάρτας» — ΜΙΑ πηγή markup: το ίδιο fragment
+   σερβίρεται (α) μέσα στο modal κατά το άνοιγμα, (β) ως απάντηση σε κάθε
+   καταγραφή/ακύρωση/αλλαγή εργαζομένου ή ημέρας, οπότε η λίστα διελεύσεων
+   και οι παραγόμενες βάρδιες συμφωνούν ΠΑΝΤΑ με ό,τι μόλις καταχωρήθηκε.
+
+   Η ΚΑΡΤΑ ΚΑΤΑΓΡΑΦΕΙ ΩΜΑ ΓΕΓΟΝΟΤΑ: μία εγγραφή ανά διέλευση (είσοδος ή
+   έξοδος). Οι βάρδιες ΔΕΝ καταχωρούνται — παράγονται με ζευγάρωμα
+   (`card_punches.py`) και εμφανίζονται εδώ, ώστε ο χρήστης να βλέπει αμέσως
+   τι σχηματίστηκε ΚΑΙ τι έμεινε ελλιπές (ανοιχτή βάρδια / ορφανή έξοδος). #}
+<div id="punch-body">
+
+  <div class="frm cols">
+    <label>Εργαζόμενος
+      <select name="eid" required
+              hx-post="{{ url_for('live.punch_panel') }}"
+              hx-include="#punch-body" hx-target="#punch-body"
+              hx-swap="outerHTML">
+        <option value="">— επιλέξτε —</option>
+        {% for e in employees %}
+          <option value="{{ e.eid }}" {{ 'selected' if e.eid == eid }}>
+            {{ e.name }}</option>
+        {% endfor %}
+      </select></label>
+    <label>Ημερομηνία
+      <input type="date" name="pdate" value="{{ day.isoformat() }}" required
+             hx-post="{{ url_for('live.punch_panel') }}"
+             hx-include="#punch-body" hx-target="#punch-body"
+             hx-swap="outerHTML"></label>
+    <label>Ώρα
+      <input type="time" name="time" required></label>
+    <label>Τύπος διέλευσης
+      <span class="kindpick">
+        <label class="chk k-in"><input type="radio" name="kind" value="in"
+               checked> Είσοδος</label>
+        <label class="chk k-out"><input type="radio" name="kind" value="out">
+          Έξοδος</label>
+      </span></label>
+    <label class="wide">Σημείωση <span class="muted">(προαιρετικά)</span>
+      <input type="text" name="note" maxlength="80"
+             placeholder="π.χ. συμπλήρωση χτυπήματος που ξεχάστηκε"></label>
+  </div>
+
+  <div class="punch-go">
+    <button type="button" class="run"
+            hx-post="{{ url_for('live.punch') }}"
+            hx-include="#punch-body" hx-target="#punch-body"
+            hx-swap="outerHTML">➕ Καταγραφή διέλευσης</button>
+    <span class="muted" style="font-size:12px">Το grid ενημερώνεται αμέσως.</span>
+  </div>
+
+  {# --------------------------------- Ο,ΤΙ ΕΧΕΙ ΚΑΤΑΓΡΑΦΕΙ ΓΙΑ ΤΗΝ ΗΜΕΡΑ #}
+  <b class="sec">Κάρτα {{ day|date_gr }}</b>
+  {% if not card.rows %}
+    <div class="empty">Καμία διέλευση{{ ' για τον εργαζόμενο' if eid }} αυτή
+      την ημέρα.</div>
+  {% endif %}
+  {% for r in card.rows %}
+    <div class="cardday">
+      <div class="cd-head">
+        <b>{{ r.name }}</b>
+        <span class="muted">σύνολο {{ '%g'|format(r.hours) }}ω</span>
+      </div>
+      <div class="cd-chips">
+        {% for p in r.punches %}
+          <span class="punchchip {{ p.kind }}"
+                title="{{ p.label }} {{ p.time }}{% if p.note %} · {{ p.note }}{% endif %}">
+            <b>{{ p.time }}</b> {{ p.label }}
+            <button type="button" class="x" title="Ακύρωση διέλευσης"
+                    hx-post="{{ url_for('live.punch_cancel') }}"
+                    hx-vals='{"punch_id": "{{ p.id }}", "eid": "{{ eid }}", "pdate": "{{ day.isoformat() }}"}'
+                    hx-target="#punch-body" hx-swap="outerHTML">✕</button>
+          </span>
+        {% endfor %}
+      </div>
+      {# Οι ΠΑΡΑΓΟΜΕΝΕΣ βάρδιες: τι σχημάτισε το ζευγάρωμα — και τι έμεινε
+         ελλιπές (η κάρτα δεν «διορθώνεται» για να βγει ζευγάρι) #}
+      <div class="cd-chips">
+        {% for s in r.shifts %}
+          <span class="shiftchip {{ 'open' if s.open }} {{ 'orphan' if s.orphan }}"
+                title="{% if s.open %}Είσοδος χωρίς έξοδο — η βάρδια είναι ανοιχτή{% elif s.orphan %}Έξοδος χωρίς είσοδο — ελλιπής καταγραφή{% else %}Βάρδια από ζευγάρωμα εισόδου/εξόδου{% endif %}">
+            {{ s.text }}{% if s.h %} <i>{{ '%g'|format(s.h) }}ω</i>{% endif %}
+          </span>
+        {% endfor %}
+      </div>
+    </div>
+  {% endfor %}
+</div>

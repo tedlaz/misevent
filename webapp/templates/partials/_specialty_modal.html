@@ -1,0 +1,152 @@
+{# Ρύθμιση ειδικότητας σε ΤΡΕΙΣ ΒΑΘΜΙΔΕΣ ασφάλισης:
+   ① Κύρια — πάντα ΕΦΚΑ, δεδομένη (οι κωδικοί της ορίζονται μαζί με την
+     επικουρική, γιατί το ΚΠΚ διαφέρει ανάλογα με τον φορέα).
+   ② Επικουρική — ΕΦΚΑ (ενιαίο πακέτο κύριας+επικουρικής) ή/και ΤΕΚΑ (κύρια
+     χωριστά + ΤΕΚΑ). Η ειδικότητα δηλώνει ΠΟΙΟΥΣ φορείς επιτρέπει· η
+     πρόσληψη διαλέγει έναν από αυτούς.
+   ③ Πρόνοια — προαιρετική, με δικές της ρυθμίσεις (υποχρεωτική; νέοι/παλαιοί;).
+
+   Τα dropdowns κάθε ρόλου δείχνουν ΜΟΝΟ ΚΠΚ της βαθμίδας που δέχεται ο ρόλος
+   (ο κανόνας ΔΕΝ επιβάλλεται από τη βάση — βλ. services._build_package). #}
+{% set f = form or {} %}
+{% set carriers = f.getlist('epik_carriers') if form
+                  else (sp.epik_carriers if sp else ['efka']) %}
+{# Σε checkbox η ΑΠΟΥΣΙΑ του πεδίου σημαίνει «όχι» — γι' αυτό `is not none`. #}
+{% set pr = ({'enabled': f.get('pron_enabled') is not none,
+              'name': f.get('pron_name', ''),
+              'mandatory': f.get('pron_mandatory') is not none,
+              'differentiated': f.get('pron_differentiated') is not none}
+             if form else (sp.pron_settings if sp else config.PRON_DEFAULTS)) %}
+
+{% macro pkg_editor(role) %}
+  {% set spec_role = config.SPECIALTY_ROLES[role] %}
+  {% set pkg = sp.package(role) if sp else None %}
+  {% set kpk_val = f.get(role ~ '_kpk', pkg.kpk if pkg else '') %}
+  {% set options = kpks_by_tier[spec_role.tier] %}
+  <div class="frm cols pkg-row">
+    {# Η τριάδα ΚΑΔ/ειδικότητα/ΚΠΚ της ΑΠΔ (No 31/35/37) δηλώνεται ΕΔΩ για
+       ΚΑΘΕ ρόλο: εξαρτάται από το επάγγελμα, όχι από το πακέτο κάλυψης. #}
+    <label>ΚΑΔ<input name="{{ role }}_kad" maxlength="4" class="mono"
+      value="{{ f.get(role ~ '_kad', pkg.kad if pkg else '') }}"></label>
+    <label>Κωδ. ειδικότητας
+      <input name="{{ role }}_code" maxlength="6" class="mono"
+        value="{{ f.get(role ~ '_code', pkg.specialty_code if pkg else '') }}"></label>
+    <label>
+      ΚΠΚ · {{ config.TIERS[spec_role.tier] }}
+      <select name="{{ role }}_kpk">
+        <option value="">— επιλογή ΚΠΚ —</option>
+        {% for k in options %}
+          <option value="{{ k.kpk }}" {{ 'selected' if kpk_val == k.kpk }}>
+            {{ config.CARRIERS[k.carrier] }} · {{ k.kpk }} — {{ k.name }}</option>
+        {% endfor %}
+      </select>
+      {% if not options %}
+        <span class="muted" style="font-size:11.5px">Κανένα ΚΠΚ βαθμίδας
+          «{{ config.TIERS[spec_role.tier] }}» — δηλώστε το πρώτα στο Μητρώο ΚΠΚ
+          (σελίδα «Παράμετροι»).</span>
+      {% endif %}
+    </label>
+  </div>
+{% endmacro %}
+
+<div class="modal-backdrop">
+  <div class="modal wide specialty-modal">
+    <form hx-post="{{ url_for('company.specialty_save') }}"
+          hx-target="#spec-panel" hx-swap="outerHTML">
+      <div class="mhead">
+        <h3>{{ '✏️ Επεξεργασία ειδικότητας' if sp else '➕ Νέα ειδικότητα' }}</h3>
+        <span class="muted" style="font-size:12.5px">
+          ασφαλιστικός συνδυασμός σε τρεις βαθμίδες — η πρόσληψη διαλέγει
+          μόνο φορέα επικουρικής και πρόνοια</span>
+      </div>
+      <div class="mbody">
+        <div class="frm cols">
+          <label class="wide">Ονομασία θέσης εργασίας
+            <input name="name" required placeholder="π.χ. ΠΩΛΗΤΗΣ"
+              value="{{ f.get('name', sp.name if sp else '') }}"
+              {{ 'readonly' if sp }}></label>
+          {% set ergani_code = f.get('ergani_specialty_code',
+              sp.ergani_specialty_code if sp else '') %}
+          {% set ergani_description = f.get('ergani_specialty_description',
+              sp.ergani_specialty_description if sp else '') %}
+          {% include "partials/_ergani_specialty_fields.html" %}
+        </div>
+
+        {# ---------------------------------------------- ① ΚΥΡΙΑ #}
+        <div class="fsec fs-id">
+          <div class="fs-h"><span class="fs-ic">1️⃣</span><b>Κύρια ασφάλιση</b>
+            <span class="fs-hint">βαθμίδα 1</span></div>
+          <div class="lockbox">🔒 Φορέας: <b>ΕΦΚΑ</b> — δεδομένη για όλους.
+            Οι κωδικοί της ορίζονται μαζί με την επικουρική (το ΚΠΚ διαφέρει
+            ανάλογα με τον φορέα της).</div>
+        </div>
+
+        {# ------------------------------------------ ② ΕΠΙΚΟΥΡΙΚΗ #}
+        <div class="fsec fs-ins">
+          <div class="fs-h"><span class="fs-ic">2️⃣</span>
+            <b>Επικουρική ασφάλιση</b>
+            <span class="fs-hint">επιτρεπτοί φορείς & πακέτα</span></div>
+
+          <div class="opt {{ 'sel' if 'efka' in carriers }}">
+            <label class="chk"><input type="checkbox" name="epik_carriers"
+              value="efka" {{ 'checked' if 'efka' in carriers }}>
+              <b>ΕΦΚΑ</b> <span class="tag">ενιαίο πακέτο: κύρια + επικουρική</span>
+            </label>
+            {{ pkg_editor('MAIN_EPIK') }}
+          </div>
+
+          <div class="opt {{ 'sel' if 'teka' in carriers }}">
+            <label class="chk"><input type="checkbox" name="epik_carriers"
+              value="teka" {{ 'checked' if 'teka' in carriers }}>
+              <b>ΤΕΚΑ</b> <span class="tag">δύο πακέτα: κύρια χωριστά + ΤΕΚΑ</span>
+            </label>
+            <div class="sublbl">Κύρια ΕΦΚΑ (μόνη της)</div>
+            {{ pkg_editor('MAIN') }}
+            <div class="sublbl">Επικουρική ΤΕΚΑ</div>
+            {{ pkg_editor('TEKA') }}
+          </div>
+        </div>
+
+        {# --------------------------------------------- ③ ΠΡΟΝΟΙΑ #}
+        {# `pron-sec`: το toggle «Διαφοροποίηση νέων/παλαιών» κρύβει τα πακέτα
+           που ΔΕΝ έχουν νόημα (CSS-only, βλ. app.css) — έτσι η φόρμα δεν
+           μπορεί να προτείνει συνδυασμό που θα απορριφθεί. #}
+        <div class="fsec fs-extra pron-sec">
+          <div class="fs-h"><span class="fs-ic">3️⃣</span>
+            <b>Προνοιακή ασφάλιση</b>
+            <span class="fs-hint">προαιρετική ανά ειδικότητα</span></div>
+          <div class="frm cols">
+            <label class="chk wide"><input type="checkbox" name="pron_enabled"
+              {{ 'checked' if pr.enabled }}> Η ειδικότητα έχει προνοιακή
+              ασφάλιση</label>
+            <label class="wide">Ονομασία προνοιακής
+              <input name="pron_name" placeholder="π.χ. Πρόνοια Εμπόρων"
+                value="{{ pr.name }}"></label>
+            <label class="chk"><input type="checkbox" name="pron_mandatory"
+              {{ 'checked' if pr.mandatory }}> Υποχρεωτική για τον εργαζόμενο
+              <span class="muted">(αλλιώς μπορεί να επιλέξει «Όχι»)</span></label>
+            <label class="chk"><input type="checkbox" name="pron_differentiated"
+              {{ 'checked' if pr.differentiated }}> Διαφοροποίηση νέων /
+              παλαιών <span class="muted">(αλλιώς ενιαίος κωδικός)</span></label>
+          </div>
+          <div class="pron-diff">
+            <div class="sublbl">Διαφοροποιημένη — ΝΕΟΙ</div>
+            {{ pkg_editor('PRON_NEW') }}
+            <div class="sublbl">Διαφοροποιημένη — ΠΑΛΑΙΟΙ</div>
+            {{ pkg_editor('PRON_OLD') }}
+          </div>
+          <div class="pron-uniform">
+            <div class="sublbl">Ενιαία (όλοι)</div>
+            {{ pkg_editor('PRON_UNIFORM') }}
+          </div>
+        </div>
+      </div>
+      <div class="mfoot">
+        <button type="button" class="ghost"
+                hx-get="{{ url_for('company.specialty_modal_close') }}"
+                hx-target="#modal-host" hx-swap="innerHTML">Άκυρο</button>
+        <button class="run" type="submit">Αποθήκευση ειδικότητας</button>
+      </div>
+    </form>
+  </div>
+</div>

@@ -1,0 +1,72 @@
+{# Στοιχεία WebE3N που αφορούν αποκλειστικά πολίτες τρίτων χωρών. #}
+{% set fv = fv|default({}, true) %}
+{% set inst = fv.get('res_permit_inst', person.res_permit_inst if person else '') %}
+{% set ap = fv.get('res_permit_ap', person.res_permit_ap if person else '') %}
+{% set visa = fv.get('res_permit_visa', person.res_permit_visa if person else '') %}
+<div class="fsecs">
+  <div class="fsec fs-id compact">
+    <div class="fs-h"><span class="fs-ic">🌍</span>
+      <b>Πολίτες τρίτων χωρών</b></div>
+    <p class="fs-note">Συμπληρώνεται μόνο για εργαζομένους εκτός Ελλάδας και
+      Ευρωπαϊκής Ένωσης. Για τους υπόλοιπους εργαζομένους τα πεδία παραμένουν
+      κενά.</p>
+  </div>
+
+  <div class="fsec fs-ins">
+    <div class="fs-h"><b>Άδεια διαμονής με άμεση πρόσβαση στην αγορά εργασίας</b></div>
+    <div class="frm cols">
+      <label>Αφορά
+        <select name="res_permit_inst">
+          <option value="" {{ 'selected' if inst == '' }}>— Δεν αφορά —</option>
+          <option value="0" {{ 'selected' if inst == '0' }}>0 — Όχι</option>
+          <option value="1" {{ 'selected' if inst == '1' }}>1 — Ναι</option>
+        </select></label>
+      <label>Είδος άδειας<input name="res_permit_inst_type" maxlength="5"
+        inputmode="numeric" value="{{ fv.get('res_permit_inst_type', person.res_permit_inst_type if person else '') }}"></label>
+      <label>Αριθμός άδειας<input name="res_permit_inst_number" maxlength="20"
+        value="{{ fv.get('res_permit_inst_number', person.res_permit_inst_number if person else '') }}"></label>
+      <label>Ημερομηνία λήξης<input type="date" name="res_permit_inst_expiry_date"
+        value="{{ fv.get('res_permit_inst_expiry_date') or
+          (person.res_permit_inst_expiry_date.isoformat() if person and person.res_permit_inst_expiry_date else '') }}"></label>
+    </div>
+  </div>
+
+  <div class="fsec fs-ins">
+    <div class="fs-h"><b>Άδεια διαμονής που απαιτεί πρόσθετη έγκριση</b></div>
+    <div class="frm cols">
+      <label>Αφορά
+        <select name="res_permit_ap">
+          <option value="" {{ 'selected' if ap == '' }}>— Δεν αφορά —</option>
+          <option value="0" {{ 'selected' if ap == '0' }}>0 — Όχι</option>
+          <option value="1" {{ 'selected' if ap == '1' }}>1 — Ναι</option>
+        </select></label>
+      <label>Είδος άδειας<input name="res_permit_ap_type" maxlength="5"
+        inputmode="numeric" value="{{ fv.get('res_permit_ap_type', person.res_permit_ap_type if person else '') }}"></label>
+      <label>Αριθμός άδειας<input name="res_permit_ap_number" maxlength="20"
+        value="{{ fv.get('res_permit_ap_number', person.res_permit_ap_number if person else '') }}"></label>
+      <label>Ημερομηνία λήξης<input type="date" name="res_permit_ap_expiry_date"
+        value="{{ fv.get('res_permit_ap_expiry_date') or
+          (person.res_permit_ap_expiry_date.isoformat() if person and person.res_permit_ap_expiry_date else '') }}"></label>
+    </div>
+  </div>
+
+  <div class="fsec fs-ins">
+    <div class="fs-h"><b>Εποχική απασχόληση με θεώρηση εισόδου</b></div>
+    <div class="frm cols">
+      <label>Αφορά
+        <select name="res_permit_visa">
+          <option value="" {{ 'selected' if visa == '' }}>— Δεν αφορά —</option>
+          <option value="0" {{ 'selected' if visa == '0' }}>0 — Όχι</option>
+          <option value="1" {{ 'selected' if visa == '1' }}>1 — Ναι</option>
+        </select></label>
+      <label>Αριθμός θεώρησης<input name="res_permit_visa_number" maxlength="20"
+        value="{{ fv.get('res_permit_visa_number', person.res_permit_visa_number if person else '') }}"></label>
+      <label>Ισχύς από<input type="date" name="res_permit_visa_from"
+        value="{{ fv.get('res_permit_visa_from') or
+          (person.res_permit_visa_from.isoformat() if person and person.res_permit_visa_from else '') }}"></label>
+      <label>Ισχύς έως<input type="date" name="res_permit_visa_to"
+        value="{{ fv.get('res_permit_visa_to') or
+          (person.res_permit_visa_to.isoformat() if person and person.res_permit_visa_to else '') }}"></label>
+    </div>
+  </div>
+</div>

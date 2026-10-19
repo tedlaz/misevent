@@ -1,0 +1,25 @@
+{# Modal «Χτύπημα κάρτας» (μοτίβο §9: κλείνει ΜΟΝΟ με το κουμπί — το
+   backdrop δεν έχει handler). ΔΕΝ είναι <form>: κάθε ενέργεια στέλνει τα
+   πεδία με `hx-include="#punch-body"`, ώστε η ίδια περιοχή να ξαναχτίζεται
+   είτε αλλάξει εργαζόμενος/ημέρα είτε καταγραφεί/ακυρωθεί διέλευση. #}
+<div class="modal-backdrop">
+  <div class="modal">
+    <div class="mhead">
+      <h3>🕘 Ψηφιακή κάρτα — χειροκίνητη καταχώρηση</h3>
+      <span class="muted" style="font-size:12.5px">
+        Καταγράφεται ΜΙΑ διέλευση κάθε φορά (είσοδος ή έξοδος). Οι βάρδιες
+        προκύπτουν από το ζευγάρωμα εισόδων/εξόδων — μια είσοδος χωρίς έξοδο
+        μένει ορατή ως ανοιχτή, δεν «συμπληρώνεται» αυτόματα.</span>
+    </div>
+
+    <div class="mbody">
+      {% include "partials/_live_punch_body.html" %}
+    </div>
+
+    <div class="mfoot">
+      <button type="button" class="ghost"
+              hx-get="{{ url_for('live.punch_modal_close') }}"
+              hx-target="#modal-host" hx-swap="innerHTML">Κλείσιμο</button>
+    </div>
+  </div>
+</div>

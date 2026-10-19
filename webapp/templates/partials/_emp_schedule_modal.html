@@ -1,0 +1,39 @@
+{# Modal σταθερού εβδομαδιαίου προγράμματος (κενό πεδίο = ρεπό). #}
+{% set f = form or {} %}
+<div class="modal-backdrop">
+  <div class="modal">
+    <form hx-post="{{ url_for('employments.schedule', employment_id=e.employment_id) }}"
+          hx-target="#employment-card" hx-swap="outerHTML">
+      <div class="mhead">
+        <h3>🗓️ Εβδομαδιαίο πρόγραμμα — {{ e.full_name }}</h3>
+        <span class="muted" style="font-size:12.5px">
+          οι ώρες πρέπει να συμφωνούν με τη σύμβαση
+          ({{ '%g'|format(e.weekly_hours) }} ώρες/εβδομάδα) · κενό = ρεπό ·
+          σπαστό: 09:00-13:00+16:00-20:00 (κενό ≥ 3 ώρες) ·
+          πρόθεμα Τ = τηλεεργασία (π.χ. Τ09:00-17:00)</span>
+      </div>
+      <div class="mbody">
+        <div class="frm">
+          <label>Ισχύς από<input type="date" name="effective_from"
+            value="{{ f.get('effective_from', today.isoformat()) }}" required></label>
+          <label>Λήξη (προαιρετικό)<input type="date" name="end_date"
+            value="{{ f.get('end_date', '') }}"
+            title="Κενό = δεν λήγει ποτέ. Μετά τη λήξη δεν ισχύει πρόγραμμα, εκτός αν ακολουθεί νεότερο εβδομαδιαίο."></label>
+          {% for code, lbl in days %}
+            <div class="dayrow"><b>{{ lbl }}</b>
+              <input name="day_{{ code }}" placeholder="09:00-17:00"
+                     value="{{ f.get('day_' ~ code, e.schedule.get(code, '')) }}"></div>
+          {% endfor %}
+        </div>
+      </div>
+      <div class="mfoot">
+        <button type="button" class="ghost"
+                hx-get="{{ url_for('employments.modal_close') }}"
+                hx-target="#modal-host" hx-swap="innerHTML">Άκυρο</button>
+        <button class="run" type="submit">
+          {% if e.schedule_mode == 'variable' %}Αποθήκευση template{% else %}Αποθήκευση → ΕΡΓΑΝΗ (ΟΧΕ){% endif %}
+        </button>
+      </div>
+    </form>
+  </div>
+</div>

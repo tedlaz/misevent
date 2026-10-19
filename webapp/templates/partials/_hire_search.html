@@ -1,0 +1,83 @@
+{# Αποτελέσματα αναζήτησης μητρώου + η φόρμα πρόσληψης που θα επιλεγεί #}
+<div id="hire-search">
+  {% set term = term|default('') %}
+  {% set results = results|default([]) %}
+
+  {% if term %}
+    {% if results %}
+      <table class="tbl">
+        <thead><tr>
+          <th>Πρόσωπο</th><th>ΑΦΜ</th><th>ΑΜΚΑ</th><th>Τελευταία περίοδος</th>
+          <th>Κατάσταση</th><th></th>
+        </tr></thead>
+        <tbody>
+          {% for r in results %}
+            <tr>
+              <td>
+                {{ r.person.full_name }}
+                <span class="muted" style="font-size:12px">
+                  ({{ r.person.father_name }} / {{ r.person.mother_name }})</span>
+              </td>
+              <td class="mono">{{ r.person.afm }}</td>
+              <td class="mono">{{ r.person.amka }}</td>
+              <td class="mono">
+                {% if r.last %}
+                  {{ r.last.hire_date|date_gr }} →
+                  {{ r.last.termination_date|date_gr if r.last.termination_date else '…' }}
+                {% else %}—{% endif %}
+              </td>
+              <td>
+                {% if r.active and r.active_emp.lifecycle == 'pending' %}
+                  <span class="tag warn"
+                        title="Δεν έχει υποβληθεί η αναγγελία πρόσληψης (Ε3)"
+                        >Εκκρεμής πρόσληψη</span>
+                {% elif r.active %}<span class="tag ok">Ενεργή απασχόληση</span>
+                {% elif r.last %}<span class="tag">Ανενεργός</span>
+                {% else %}<span class="tag">Χωρίς απασχόληση</span>{% endif %}
+              </td>
+              <td>
+                {% if r.rehirable %}
+                  <button class="ghost"
+                          hx-get="{{ url_for('employments.hire_form',
+                                             person_id=r.person.person_id) }}"
+                          hx-target="#hire-form" hx-swap="outerHTML">
+                    {{ '➕ Επαναπρόσληψη' if r.last else '➕ Πρόσληψη' }}
+                  </button>
+                {% else %}
+                  <span class="muted" style="font-size:12.5px">
+                    Εργάζεται ήδη — πρώτα αποχώρηση</span>
+                {% endif %}
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      <div class="btnrow" style="margin-top:12px">
+        <span class="muted" style="font-size:12.5px">Δεν είναι κανένα από αυτά;</span>
+        <button class="ghost"
+                hx-get="{{ url_for('employments.hire_form', q=term) }}"
+                hx-target="#hire-form" hx-swap="outerHTML">
+          ➕ Νέος εργαζόμενος
+        </button>
+      </div>
+    {% else %}
+      <div class="empty">
+        Κανένα πρόσωπο δεν ταιριάζει με «{{ term }}».
+        <div class="btnrow" style="margin-top:12px;justify-content:center">
+          <button class="run"
+                  hx-get="{{ url_for('employments.hire_form', q=term) }}"
+                  hx-target="#hire-form" hx-swap="outerHTML">
+            ➕ Νέος εργαζόμενος — καταχώρηση στοιχείων
+          </button>
+        </div>
+      </div>
+    {% endif %}
+  {% else %}
+    <div class="empty">
+      Αναζητήστε με ΑΦΜ, ΑΜΚΑ, ΑΜΑ ή όνομα. Αν το πρόσωπο υπάρχει ήδη και είναι
+      ανενεργό, επιλέξτε το για επαναπρόσληψη — δεν καταχωρείται ξανά.
+    </div>
+  {% endif %}
+
+  <div id="hire-form"></div>
+</div>

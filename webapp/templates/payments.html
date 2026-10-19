@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+{% block title %}Πληρωμές{% endblock %}
+{% block heading %}Πληρωμές{% endblock %}
+{% block subheading %}Καταβολές μισθών, εισφορών, ΦΜΥ{% endblock %}
+
+{% block content %}
+<div class="card">
+  <h2>Πληρωμές περιόδου
+    <span class="norm">— μία γραμμή ανά <b>μήνα καταβολής</b> (οι εισφορές της
+      περιόδου πληρώνονται τον επόμενο μήνα, ο ΦΜΥ δύο μήνες μετά)· περνώντας
+      το ποντίκι πάνω από ένα ποσό βλέπεις από πού προέρχεται</span></h2>
+
+  {% if rows %}
+    <table class="tbl">
+      <thead><tr>
+        <th>Μήνας πληρωμής</th>
+        {% for col, label in columns %}
+          <th class="rt">{{ label }}</th>
+        {% endfor %}
+        <th class="rt">Σύνολο</th>
+      </tr></thead>
+      <tbody>
+        {% for r in rows %}
+          <tr>
+            <td class="mono">{{ r.label }}</td>
+            {% for col, label in columns %}
+              {% set c = r.cells[col] %}
+              <td class="num">
+                {% if c.amount %}
+                  <span class="tip" data-tip="{{ c.tip }}">{{ c.amount|money }} €</span>
+                {% else %}
+                  <span class="muted">—</span>
+                {% endif %}
+              </td>
+            {% endfor %}
+            <td class="num"><b>{{ r.total|money }} €</b></td>
+          </tr>
+        {% endfor %}
+      </tbody>
+      {# Τα σύνολα ως <td class="num"> (ΟΧΙ <th>): ίδια στοίχιση/γραμματοσειρά
+         με τις αναλυτικές γραμμές — τα th είναι αριστερά & uppercase. #}
+      <tfoot><tr class="tot">
+        <td>Σύνολο</td>
+        {% for col, label in columns %}
+          <td class="num">{{ totals[col]|money }} €</td>
+        {% endfor %}
+        <td class="num">{{ totals.total|money }} €</td>
+      </tr></tfoot>
+    </table>
+  {% else %}
+    <div class="empty">Καμία πληρωμή ακόμη. Οι καταβολές εκτελούνται από τις
+      <a href="{{ url_for('obligations.index') }}">Υποχρεώσεις</a>.</div>
+  {% endif %}
+</div>
+{% endblock %}

@@ -1,0 +1,11 @@
+{% extends "base.html" %}
+{% block title %}Υποχρεώσεις — misevent{% endblock %}
+{% block heading %}Υποχρεώσεις{% endblock %}
+{% block subheading %}
+  {{ counts.ready }} διαθέσιμες · {{ counts.warning }} λήγουν σύντομα ·
+  {{ counts.problem }} με πρόβλημα · {{ counts.done }} ολοκληρωμένες
+{% endblock %}
+
+{% block content %}
+  {% include "partials/_ob_panel.html" %}
+{% endblock %}

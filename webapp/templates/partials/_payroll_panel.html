@@ -1,0 +1,280 @@
+{% from "_macros.html" import rows_table %}
+<div id="payroll-panel">
+  <div id="modal-host"></div>
+
+  {# Επιλογέας έτους — οδηγεί Δώρα & Επίδομα Αδείας. Η προεπισκόπηση της
+     τρέχουσας μισθοδοσίας αφαιρέθηκε: ο υπολογισμός και η πληρωμή είναι
+     ομαδικές ενέργειες των Υποχρεώσεων (§5.5), και κάθε υπολογισμένη
+     περίοδος έχει τις εκτυπώσεις της στα «Σύνολα ανά περίοδο». #}
+  <form class="btnrow" style="margin-bottom:16px"
+        hx-get="{{ url_for('payroll.index') }}" hx-target="body" hx-swap="outerHTML"
+        hx-push-url="true">
+    <label class="ref">Έτος
+      <input type="number" name="gy" value="{{ gyear }}" min="2020" max="2100"
+             style="width:90px">
+    </label>
+    <button class="ghost" type="submit">Προβολή</button>
+  </form>
+
+  <div class="card">
+    <h2>Δώρα — έτος {{ gyear }}</h2>
+    {% for kind, g in gifts.items() %}
+      <details class="box">
+        <summary>
+          {{ g.label }}
+          {% if g.done %}<span class="tag ok">Υπολογισμένο</span>
+          {% else %}<span class="tag">Προεπισκόπηση</span>{% endif %}
+          {% if g.totals %}
+            <span class="muted" style="font-weight:400">
+              — μικτά {{ g.totals['Μικτά']|money }} €</span>
+          {% endif %}
+        </summary>
+        <div class="frm">
+          {{ rows_table(g.rows, g.totals) }}
+          {% if not g.done and g.rows %}
+            <button class="run"
+                    hx-post="{{ url_for('payroll.gift', kind=kind, gy=gyear) }}"
+                    hx-target="#payroll-panel" hx-swap="outerHTML">
+              Υπολογισμός — {{ g.label }} {{ gyear }}
+            </button>
+          {% elif g.done %}
+            <div class="btnrow" style="margin-bottom:8px">
+              <a class="ghost sm"
+                 hx-get="{{ url_for('payroll.gift_analysis_modal',
+                                    kind=kind, gy=gyear) }}"
+                 hx-target="#modal-host" hx-swap="innerHTML">🔍 Ανάλυση</a>
+              <a class="ghost sm" target="_blank"
+                 href="{{ url_for('payroll.print_gift_statement',
+                                  kind=kind, gy=gyear) }}">
+                🖨️ Κατάσταση (PDF)</a>
+              <a class="ghost sm" target="_blank"
+                 href="{{ url_for('payroll.print_gift_slips',
+                                  kind=kind, gy=gyear) }}">
+                🧾 Αποδείξεις (PDF)</a>
+              <a class="ghost sm" target="_blank"
+                 href="{{ url_for('payroll.print_gift_slips_zip',
+                                  kind=kind, gy=gyear) }}">
+                📦 ZIP (ανά ΑΦΜ)</a>
+            </div>
+          {% endif %}
+          <span class="muted" style="font-size:12.5px">
+            Δεν έχει δική του υποβολή — μπαίνει στο αρχείο ΑΠΔ της επόμενης
+            μισθολογικής περιόδου.</span>
+        </div>
+      </details>
+    {% endfor %}
+  </div>
+
+  <div class="card" style="margin-top:20px">
+    <h2>Επίδομα Αδείας — έτος {{ gyear }}
+      <span class="norm">— μία περίοδος ανά μήνα πρώτης κανονικής άδειας</span></h2>
+    {% for a in allowances %}
+      <details class="box">
+        <summary>
+          Επίδομα Αδείας {{ a.month }}/{{ gyear }}
+          {% if a.done %}<span class="tag ok">Υπολογισμένο</span>
+          {% else %}<span class="tag">Προεπισκόπηση</span>{% endif %}
+          <span class="muted" style="font-weight:400">
+            — {{ a.rows|length }} εργαζόμενοι
+            {%- if a.totals %} · μικτά {{ a.totals['Μικτά']|money }} €{% endif %}</span>
+        </summary>
+        <div class="frm">
+          {{ rows_table(a.rows, a.totals) }}
+          {# Η ΠΑΡΑΔΟΧΗ του 1ου/2ου έτους διαβάζεται ΠΡΙΝ πατηθεί ο
+             υπολογισμός — γι' αυτό κάθεται πάνω από το κουμπί. #}
+          {% if a.warnings %}
+            <ul class="warn-list">
+              {% for w in a.warnings %}<li>{{ w }}</li>{% endfor %}
+            </ul>
+          {% endif %}
+          {% if not a.done and a.rows %}
+            <button class="run"
+                    hx-post="{{ url_for('payroll.gift', kind='allowance',
+                                        gy=gyear, gm=a.month) }}"
+                    hx-target="#payroll-panel" hx-swap="outerHTML">
+              Υπολογισμός — Επίδομα Αδείας {{ a.month }}/{{ gyear }}
+            </button>
+          {% elif a.done %}
+            <div class="btnrow" style="margin-bottom:8px">
+              <a class="ghost sm"
+                 hx-get="{{ url_for('payroll.gift_analysis_modal',
+                                    kind='allowance', gy=gyear, gm=a.month) }}"
+                 hx-target="#modal-host" hx-swap="innerHTML">🔍 Ανάλυση</a>
+              <a class="ghost sm" target="_blank"
+                 href="{{ url_for('payroll.print_gift_statement',
+                                  kind='allowance', gy=gyear, gm=a.month) }}">
+                🖨️ Κατάσταση (PDF)</a>
+              <a class="ghost sm" target="_blank"
+                 href="{{ url_for('payroll.print_gift_slips',
+                                  kind='allowance', gy=gyear, gm=a.month) }}">
+                🧾 Αποδείξεις (PDF)</a>
+              <a class="ghost sm" target="_blank"
+                 href="{{ url_for('payroll.print_gift_slips_zip',
+                                  kind='allowance', gy=gyear, gm=a.month) }}">
+                📦 ZIP (ανά ΑΦΜ)</a>
+            </div>
+          {% endif %}
+          <span class="muted" style="font-size:12.5px">
+            Καταβάλλεται όταν ο εργαζόμενος πάρει την άδειά του· μπαίνει στο
+            αρχείο ΑΠΔ της επόμενης περιόδου.</span>
+        </div>
+      </details>
+    {% else %}
+      <div class="empty">Καμία κανονική άδεια {{ gyear }} — άρα κανένα Επίδομα
+        Αδείας. Γεννιέται αυτόματα με την πρώτη άδεια κάθε εργαζόμενου.</div>
+    {% endfor %}
+  </div>
+
+  {# ---------------------------------- Εκκαθαρίσεις αποχώρησης (ανά άτομο) #}
+  {% macro settlement_card(title, note, rows, totals, kind, empty) %}
+    <div class="card" style="margin-top:20px">
+      <h2>{{ title }} <span class="norm">— {{ note }}</span></h2>
+      {% if rows %}
+        <table class="tbl">
+          <thead><tr>
+            <th>Εργαζόμενος</th><th>Λήξη</th>
+            <th style="text-align:right">Μικτά</th>
+            <th style="text-align:right">Φόρος</th>
+            <th style="text-align:right">Καθαρά</th>
+            <th></th>
+          </tr></thead>
+          <tbody>
+            {% for r in rows %}
+              <tr>
+                <td>{{ r.name }}
+                  <span class="muted" style="font-size:11px">— {{ r.note }}</span></td>
+                <td class="mono">{{ r.date|date_gr }}</td>
+                <td class="num">{{ r.gross|money }}</td>
+                <td class="num">{{ r.fmy|money }}</td>
+                <td class="num">{{ r.net|money }}</td>
+                <td style="text-align:right">
+                  <a class="ghost sm" target="_blank"
+                     href="{{ url_for('employments.detail',
+                                      employment_id=r.eid) }}">👤 Καρτέλα</a>
+                  <a class="ghost sm" target="_blank"
+                     href="{{ url_for('payroll.print_settlement',
+                                      kind=kind, employment_id=r.eid) }}">
+                    🧾 Απόδειξη</a>
+                  <a class="ghost sm" target="_blank"
+                     href="{{ url_for('payroll.print_exit_settlement',
+                                      employment_id=r.eid) }}">
+                    📄 Εκκαθάριση</a>
+                </td>
+              </tr>
+            {% endfor %}
+            <tr class="tot">
+              <td>Σύνολο ({{ rows|length }})</td><td></td>
+              <td class="num">{{ totals.gross|money }}</td>
+              <td class="num">{{ totals.fmy|money }}</td>
+              <td class="num">{{ totals.net|money }}</td>
+              <td></td>
+            </tr>
+          </tbody>
+        </table>
+      {% else %}
+        <div class="empty">{{ empty }}</div>
+      {% endif %}
+    </div>
+  {% endmacro %}
+
+  {{ settlement_card(
+       "Αποζημίωση Απόλυσης",
+       "καταγγελία σύμβασης · αυτοτελής φόρος, καμία ασφαλιστική κράτηση",
+       severances, severance_totals, "severance",
+       "Καμία αποζημίωση απόλυσης — υπολογίζεται αυτόματα σε αποχώρηση με
+        καταγγελία σύμβασης (υπηρεσία ≥ 1 έτος).") }}
+
+  {{ settlement_card(
+       "Αποζημίωση μη ληφθείσας Αδείας",
+       "εκκαθάριση αποχώρησης · μόνο ΦΜΥ, καμία ασφαλιστική κράτηση",
+       leave_comps, leave_comp_totals, "leave",
+       "Καμία αποζημίωση αδείας — υπολογίζεται αυτόματα στην αποχώρηση, όταν
+        υπάρχει υπόλοιπο κανονικής άδειας.") }}
+
+  <div class="card" style="margin-top:20px">
+    <h2>Σύνολα ανά περίοδο
+      <span class="norm">— έτος {{ gyear }}: κάθε καταβολή του έτους ανά μήνα
+        και είδος, νεότερος μήνας πρώτος</span></h2>
+    {% if not ledger %}
+      <div class="empty">Καμία υπολογισμένη καταβολή για το {{ gyear }} —
+        ο υπολογισμός της περιόδου γίνεται από τις Υποχρεώσεις.</div>
+    {% else %}
+    <table class="tbl">
+      <thead><tr>
+        <th>Περίοδος</th><th>Τύπος</th>
+        <th style="text-align:right">Μικτά</th>
+        {# Δίπλωμα σε δύο σειρές: οι κεφαλίδες του .tbl είναι nowrap, άρα ο
+           μακρύς τίτλος τραβούσε πλάτος από τις υπόλοιπες στήλες. #}
+        <th style="text-align:right">Εισφορές<br>Εργαζομένου</th>
+        <th style="text-align:right">ΦΜΥ</th>
+        <th style="text-align:right">Καθαρά</th>
+        <th style="text-align:right">Κόστος</th>
+        <th></th>
+      </tr></thead>
+      <tbody>
+        {% for r in ledger %}
+          <tr>
+            <td class="mono">{{ r.month }}/{{ gyear }}</td>
+            <td>{{ r.label }}</td>
+            <td class="num">{{ r.gross|money }}</td>
+            <td class="num">{{ r.efka_employee|money }}</td>
+            <td class="num">{{ r.fmy|money }}</td>
+            <td class="num">{{ r.net|money }}</td>
+            <td class="num"><b>{{ r.cost|money }}</b></td>
+            <td style="text-align:right">
+              {# Κάθε είδος έχει ΤΙΣ ΔΙΚΕΣ ΤΟΥ εκτυπώσεις — οι αποζημιώσεις
+                 είναι ατομικές (ανά εργαζόμενο) και ζουν στις κάρτες πιο
+                 πάνω, γι' αυτό δεν φέρουν εδώ κουμπιά. #}
+              {% if r.kind == 'payroll' %}
+                <a class="ghost sm"
+                        hx-get="{{ url_for('payroll.analysis_modal',
+                                           y=gyear, m=r.month) }}"
+                        hx-target="#modal-host" hx-swap="innerHTML">
+                  🔍 Ανάλυση</a>
+                <a class="ghost sm" target="_blank"
+                   href="{{ url_for('payroll.print_statement',
+                                    y=gyear, m=r.month) }}">🖨️ PDF</a>
+                <a class="ghost sm" target="_blank"
+                   href="{{ url_for('payroll.print_slips',
+                                    y=gyear, m=r.month) }}">🧾 Αποδείξεις</a>
+                <a class="ghost sm" target="_blank"
+                   href="{{ url_for('payroll.print_slips_zip',
+                                    y=gyear, m=r.month) }}">📦 ZIP</a>
+              {% elif r.kind in ('easter', 'christmas', 'allowance') %}
+                {% set gm = r.month if r.kind == 'allowance' else none %}
+                <a class="ghost sm"
+                   hx-get="{{ url_for('payroll.gift_analysis_modal',
+                                      kind=r.kind, gy=gyear, gm=gm) }}"
+                   hx-target="#modal-host" hx-swap="innerHTML">🔍 Ανάλυση</a>
+                <a class="ghost sm" target="_blank"
+                   href="{{ url_for('payroll.print_gift_statement',
+                                    kind=r.kind, gy=gyear, gm=gm) }}">
+                  🖨️ PDF</a>
+                <a class="ghost sm" target="_blank"
+                   href="{{ url_for('payroll.print_gift_slips',
+                                    kind=r.kind, gy=gyear, gm=gm) }}">
+                  🧾 Αποδείξεις</a>
+                <a class="ghost sm" target="_blank"
+                   href="{{ url_for('payroll.print_gift_slips_zip',
+                                    kind=r.kind, gy=gyear, gm=gm) }}">
+                  📦 ZIP</a>
+              {% endif %}
+            </td>
+          </tr>
+        {% endfor %}
+        <tr class="tot">
+          <td class="mono">Σύνολο {{ gyear }}</td>
+          <td>όλες οι καταβολές</td>
+          <td class="num">{{ ledger_sum.gross|money }}</td>
+          <td class="num">{{ ledger_sum.efka_employee|money }}</td>
+          <td class="num">{{ ledger_sum.fmy|money }}</td>
+          <td class="num">{{ ledger_sum.net|money }}</td>
+          <td class="num">{{ ledger_sum.cost|money }}</td>
+          <td></td>
+        </tr>
+      </tbody>
+    </table>
+    {% endif %}
+  </div>
+
+</div>

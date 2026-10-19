@@ -1,0 +1,19 @@
+{% extends "auth_base.html" %}
+{% block title %}Νέος κωδικός{% endblock %}
+{% block heading %}Ορισμός νέου κωδικού{% endblock %}
+{% block subheading %}από σύνδεσμο επαναφοράς{% endblock %}
+
+{% block content %}
+{% if blocked %}
+  <div class="warnbox">{{ blocked }}</div>
+  <div class="btnrow"><a class="ghost" href="{{ url_for('auth.login') }}">Πίσω στη σύνδεση</a></div>
+{% else %}
+  <form class="frm" method="post" action="{{ url_for('auth.reset', token=token) }}">
+    <label>Νέος κωδικός
+      <input name="password" type="password" required autofocus></label>
+    <label>Επανάληψη κωδικού
+      <input name="repeat" type="password" required></label>
+    <div class="btnrow"><button class="run" type="submit">Αποθήκευση</button></div>
+  </form>
+{% endif %}
+{% endblock %}

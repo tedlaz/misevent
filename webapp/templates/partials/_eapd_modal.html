@@ -1,0 +1,33 @@
+{# Modal «Ανάλυση αρχείου» — ο eΑΠΔ viewer σε iframe, ΠΡΟΒΟΛΗ ΜΟΝΟ.
+   Κλείνει ΜΟΝΟ με το κουμπί (το backdrop δεν έχει handler). #}
+<div class="modal-backdrop eapd-backdrop">
+  <div class="modal eapd-modal">
+    <div class="mhead">
+      <div class="eapd-title">
+        <div>
+          <h3>📄 Ανάλυση αρχείου — {{ r.fund_label }}
+            {{ '%02d'|format(r.month) }}/{{ r.year }}</h3>
+          <span class="muted" style="font-size:12.5px">
+            ΠΡΟΒΟΛΗ ΜΟΝΟ — το αρχείο είναι παράγωγο των events, δεν
+            αποθηκεύεται στον δίσκο ούτε συντάσσεται εδώ ·
+            <span class="mono">{{ r.name }}</span>
+          </span>
+        </div>
+        <div class="eapd-actions">
+          <a class="ghost" href="{{ url_for('eapd.download', fund=r.fund,
+                                            year=r.year, month=r.month) }}">⬇ Λήψη</a>
+          <button type="button" class="ghost"
+                  hx-get="{{ url_for('eapd.modal_close') }}"
+                  hx-target="#modal-host" hx-swap="innerHTML">Κλείσιμο</button>
+        </div>
+      </div>
+    </div>
+    <div class="mbody eapd-body">
+      <iframe class="eapd-frame"
+              src="{{ url_for('eapd.app_index', fund=r.fund, readonly=1,
+                              src=url_for('eapd.raw', fund=r.fund, year=r.year,
+                                          month=r.month)) }}"
+              title="eΑΠΔ"></iframe>
+    </div>
+  </div>
+</div>

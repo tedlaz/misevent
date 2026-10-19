@@ -1,0 +1,340 @@
+{# Σελίδα Παραμέτρων: όλα τα δεδομένα εδώ είναι events (*Defined). Οι τιμές
+   του config.py είναι ΜΟΝΟ προτεινόμενες αρχικές (πηγή «config») ώσπου να
+   επιβεβαιωθούν από το wizard ή να καταχωρηθούν χειροκίνητα. Το #modal-host
+   είναι ΜΕΣΑ στο panel: επιτυχής αποθήκευση (που αντικαθιστά όλο το panel)
+   κλείνει αυτόματα το modal (μοτίβο company/attendance). #}
+<div id="set-panel">
+
+  {# ------------------------------------------- Αρχείο παραμέτρων (JSON) #}
+  {# ΕΝΑ αρχείο για ΟΛΗ τη σελίδα: οικογένειες παραμέτρων με το ιστορικό
+     ισχύος τους, φορολογική κλίμακα, αποζημίωση, «Διάφορα», προθεσμίες
+     τύπων υποχρεώσεων και Μητρώο ΚΠΚ. Η εξαγωγή είναι απλό κατέβασμα (ο
+     browser ρωτά πού θα αποθηκευτεί)· η εισαγωγή περνά από τα κανονικά
+     commands (γράφονται events) και ξαναχτίζει όλο το panel. #}
+  <div class="card">
+    <h2 class="bar" style="margin-bottom:0"><span>Αρχείο παραμέτρων</span>
+      <span class="norm">— αποθήκευση ΟΛΩΝ των τιμών αυτής της σελίδας σε
+        JSON και φόρτωσή τους σε άλλο σύστημα. Η εισαγωγή δεν διαγράφει
+        τίποτα: κάθε γραμμή γράφεται ως event (ίδια ισχύς = αντικατάσταση)</span>
+      <span class="acts">
+        <a class="ghost" href="{{ url_for('settings.export_json') }}"
+           download>⬇️ Εξαγωγή αρχείου</a>
+        <form hx-post="{{ url_for('settings.import_json') }}"
+              hx-target="#set-panel" hx-swap="outerHTML"
+              hx-encoding="multipart/form-data" class="btnrow">
+          <input type="file" name="file" accept=".json,application/json" required
+                 style="font-size:12px;max-width:210px">
+          <button class="ghost" type="submit">⬆️ Εισαγωγή αρχείου</button>
+        </form>
+      </span>
+    </h2>
+  </div>
+
+  {% if not confirmed %}
+    <div class="card" style="margin-top:16px;border-left:4px solid var(--warn)">
+      <h2>🚀 Πρώτο τρέξιμο — επιβεβαίωση παραμέτρων</h2>
+      <p class="muted" style="max-width:72ch">
+        Το μητρώο παραμέτρων (ΓΣΣΕ, ΕΦΚΑ, φορολογική κλίμακα κ.λπ.) δεν έχει
+        ακόμη καμία καταχώρηση — χωρίς αυτό η μισθοδοσία δεν εκτελείται.
+        Η επιβεβαίωση καταγράφει ως events τις <b>αρχικές τιμές</b>
+        {% if init_file %}του αρχείου <code>data/init_parameters.json</code>
+        {%- else %}που προτείνει η εφαρμογή (<code>config.py</code>) — το
+        αρχείο <code>data/init_parameters.json</code> δεν βρέθηκε
+        {%- endif %}. Οι πίνακες παρακάτω δείχνουν τις προτεινόμενες τιμές·
+        μπορείτε επίσης να καταχωρήσετε τις δικές σας ή να φορτώσετε
+        «Αρχείο παραμέτρων».
+      </p>
+      <div class="btnrow" style="margin-top:10px">
+        <button class="run" hx-post="{{ url_for('settings.confirm') }}"
+                hx-target="#set-panel" hx-swap="outerHTML">
+          ✅ Επιβεβαίωση αρχικών τιμών</button>
+        <span class="muted" style="font-size:12.5px">
+          γράφει ένα event ανά γραμμή πίνακα — μετά, κάθε αλλαγή νόμου είναι
+          απλή προσθήκη νέας γραμμής με ημερομηνία ισχύος</span>
+      </div>
+    </div>
+  {% endif %}
+
+  {# ------------------------------------------------ Πίνακες παραμέτρων #}
+  {% for fam in families %}
+    <div class="card" style="margin-top:16px">
+      <h2 class="bar"><span>{{ fam.label }}</span>
+        <span class="norm">— {{ fam.note }}</span>
+        <span class="acts">
+          {% if fam.source == 'config' %}
+            <span class="muted" style="font-size:12px">προτεινόμενες τιμές
+              (config) — δεν έχουν επιβεβαιωθεί</span>
+          {% endif %}
+          <button class="run"
+                  hx-get="{{ url_for('settings.param_modal', family=fam.key) }}"
+                  hx-target="#modal-host" hx-swap="innerHTML">➕ Νέα ισχύς</button>
+          {% if fam.source == 'events' %}
+            <button class="ghost sm" title="Ο κανόνας παύει να ισχύει από μια
+                    ημερομηνία (δεν διαγράφεται τίποτα)"
+                    hx-get="{{ url_for('settings.param_repeal_modal', family=fam.key) }}"
+                    hx-target="#modal-host" hx-swap="innerHTML">⛔ Κατάργηση</button>
+          {% endif %}
+        </span>
+      </h2>
+      {% if fam.as_cards %}
+        {# Πολλά πεδία (όρια ωρών): μία ΚΑΡΤΕΛΑ ανά ισχύ, με ζεύγη
+           ετικέτα/τιμή σε πλέγμα — όχι φαρδύς πίνακας που ξεχειλώνει. #}
+        {% for r in fam.rows %}
+          <div style="border:1px solid #e3e6ec;border-radius:10px;
+                      padding:10px 12px;margin-top:{{ '0' if loop.first else '10px' }}">
+            <div class="bar" style="display:flex;align-items:center;gap:8px">
+              <b>Ισχύς από {{ r.valid_from|date_gr }}</b>
+              {% if r.repealed %}<span class="tag warn">⛔ καταργήθηκε</span>{% endif %}
+              <span class="grow"></span>
+              {% if fam.source == 'events' %}
+                <button class="ghost sm" title="Διόρθωση (ίδια ισχύς = αντικατάσταση)"
+                        hx-get="{{ url_for('settings.param_modal', family=fam.key,
+                                           valid_from=r.valid_from.isoformat()) }}"
+                        hx-target="#modal-host" hx-swap="innerHTML">✏️</button>
+              {% endif %}
+            </div>
+            <div style="display:grid;gap:6px 18px;margin-top:8px;
+                        grid-template-columns:repeat(auto-fill, minmax(230px, 1fr))">
+              {% for name, label, typ in fam.fields %}
+                {% set v = r["values"][name] %}
+                <div style="display:flex;justify-content:space-between;gap:8px;
+                            font-size:13px;border-bottom:1px dotted #e3e6ec">
+                  <span class="muted">{{ label }}</span>
+                  <b class="mono">
+                    {%- if typ == 'pct' -%}{{ '%g'|format(v * 100) }}%
+                    {%- elif typ == 'money' -%}{{ '%.2f'|format(v) }} €
+                    {%- else -%}{{ v }}{%- endif -%}
+                  </b>
+                </div>
+              {% endfor %}
+            </div>
+          </div>
+        {% endfor %}
+      {% else %}
+        <table class="tbl">
+          <thead><tr><th>Ισχύς από</th>
+            {% for name, label, typ in fam.fields %}<th class="rt">{{ label }}</th>{% endfor %}
+            <th></th></tr></thead>
+          <tbody>
+            {% for r in fam.rows %}
+              <tr{% if r.repealed %} class="muted"{% endif %}>
+                <td class="mono">{{ r.valid_from|date_gr }}
+                  {%- if r.repealed %} <span class="tag warn">⛔ καταργήθηκε</span>{% endif %}</td>
+                {% for name, label, typ in fam.fields %}
+                  <td class="num">
+                    {%- set v = r["values"][name] -%}
+                    {%- if typ == 'pct' -%}{{ '%.2f'|format(v * 100) }}%
+                    {%- elif typ == 'money' -%}{{ '%.2f'|format(v) }} €
+                    {%- else -%}{{ v }}{%- endif -%}
+                  </td>
+                {% endfor %}
+                <td style="text-align:right">
+                  {% if fam.source == 'events' %}
+                    <button class="ghost sm" title="Διόρθωση (ίδια ισχύς = αντικατάσταση)"
+                            hx-get="{{ url_for('settings.param_modal', family=fam.key,
+                                               valid_from=r.valid_from.isoformat()) }}"
+                            hx-target="#modal-host" hx-swap="innerHTML">✏️</button>
+                  {% endif %}
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      {% endif %}
+    </div>
+  {% endfor %}
+
+  {# ------------------------------------------------ Φορολογική κλίμακα #}
+  <div class="card" style="margin-top:16px">
+    <h2 class="bar"><span>Φορολογική κλίμακα (ΦΜΥ)</span>
+      <span class="norm">— κάθε γραμμή = κλίμακα με ημερομηνία ισχύος·
+        το ΚΑΘΕΣΤΩΣ υπολογισμού (π.χ. 2026: συντελεστές ανά τέκνα/ηλικία)
+        είναι κώδικας — εδώ επιλέγεται ποιο ισχύει και με ποιες τιμές</span>
+      <span class="acts">
+        {% if tax_source == 'config' %}
+          <span class="muted" style="font-size:12px">προτεινόμενες τιμές
+            (config) — δεν έχουν επιβεβαιωθεί</span>
+        {% endif %}
+        <button class="run" hx-get="{{ url_for('settings.tax_modal') }}"
+                hx-target="#modal-host" hx-swap="innerHTML">➕ Νέα κλίμακα</button>
+      </span>
+    </h2>
+    <table class="tbl">
+      <thead><tr><th>Ισχύς από</th><th>Καθεστώς</th><th>Κλιμάκια</th>
+        <th>Μειώσεις τέκνων (€)</th><th></th></tr></thead>
+      <tbody>
+        {% for r in tax_rows %}
+          <tr>
+            <td class="mono">{{ r.valid_from|date_gr }}</td>
+            <td>{{ r.model_label }}</td>
+            <td style="font-size:12.5px">{{ r.brackets }}</td>
+            <td class="mono" style="font-size:12.5px">{{ r.reductions }}</td>
+            <td style="text-align:right">
+              {% if tax_source == 'events' %}
+                <button class="ghost sm"
+                        hx-get="{{ url_for('settings.tax_modal',
+                                           valid_from=r.valid_from.isoformat()) }}"
+                        hx-target="#modal-host" hx-swap="innerHTML">✏️</button>
+              {% endif %}
+            </td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  {# --------------------------------------------- Αποζημίωση απόλυσης #}
+  <div class="card" style="margin-top:16px">
+    <h2 class="bar"><span>Αποζημίωση απόλυσης</span>
+      <span class="norm">— πίνακας μηνών ανά έτη υπηρεσίας ΣΤΟΝ ΙΔΙΟ εργοδότη,
+        προσαύξηση 1/6 και αυτοτελής φόρος· κάθε απόλυση χρησιμοποιεί τον
+        πίνακα που ίσχυε ΤΟΤΕ</span>
+      <span class="acts">
+        {% if sev_source == 'config' %}
+          <span class="muted" style="font-size:12px">προτεινόμενες τιμές
+            (config) — δεν έχουν επιβεβαιωθεί</span>
+        {% endif %}
+        <button class="run" hx-get="{{ url_for('settings.severance_modal') }}"
+                hx-target="#modal-host" hx-swap="innerHTML">➕ Νέα ισχύς</button>
+        {% if sev_source == 'events' %}
+          <button class="ghost sm" title="Ο κανόνας παύει να ισχύει από μια
+                  ημερομηνία (δεν διαγράφεται τίποτα)"
+                  hx-get="{{ url_for('settings.param_repeal_modal', family='severance') }}"
+                  hx-target="#modal-host" hx-swap="innerHTML">⛔ Κατάργηση</button>
+        {% endif %}
+      </span>
+    </h2>
+    <table class="tbl">
+      <thead><tr><th>Ισχύς από</th><th>Μήνες ανά έτη</th>
+        <th class="rt">Προσαύξηση</th><th>Αυτοτελής φόρος</th><th></th></tr></thead>
+      <tbody>
+        {% for r in sev_rows %}
+          <tr{% if r.repealed %} class="muted"{% endif %}>
+            <td class="mono">{{ r.valid_from|date_gr }}
+              {%- if r.repealed %} <span class="tag warn">⛔ καταργήθηκε</span>{% endif %}</td>
+            <td style="font-size:12.5px">{{ r.months }}</td>
+            <td class="num mono">×{{ '%.4f'|format(r.gift_factor) }}</td>
+            <td style="font-size:12.5px">{{ r.tax }}</td>
+            <td style="text-align:right">
+              {% if sev_source == 'events' %}
+                <button class="ghost sm"
+                        hx-get="{{ url_for('settings.severance_modal',
+                                           valid_from=r.valid_from.isoformat()) }}"
+                        hx-target="#modal-host" hx-swap="innerHTML">✏️</button>
+              {% endif %}
+            </td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  {# ------------------------------------------------------- Διάφορα #}
+  <div class="card" style="margin-top:16px">
+    <h2 class="bar"><span>Διάφορα</span>
+      <span class="norm">— λειτουργικές προτιμήσεις της εφαρμογής (όχι
+        νομοθετικές παράμετροι/υπολογισμοί)</span>
+    </h2>
+    <form class="frm" hx-post="{{ url_for('settings.misc_save') }}"
+          hx-target="#set-panel" hx-swap="outerHTML">
+      <label class="chk">
+        <input type="checkbox" name="save_zip" value="1"
+               {{ 'checked' if misc.save_zip }}>
+        Αποθήκευση των ZIP αποδείξεων στον φάκελο <code>apodeijeis/</code>
+        <span class="muted" style="font-size:12.5px">— αλλιώς μόνο κατέβασμα
+          (προεπιλογή)</span>
+      </label>
+      <label class="chk">
+        <input type="checkbox" name="show_employer_cost" value="1"
+               {{ 'checked' if misc.show_employer_cost }}>
+        Εμφάνιση των στοιχείων κόστους εργοδότη στην απόδειξη αποδοχών
+        <span class="muted" style="font-size:12.5px">— προεπιλογή:
+          εμφανίζονται</span>
+      </label>
+      <label class="chk">
+        <input type="checkbox" name="keep_wage_excess" value="1"
+               {{ 'checked' if misc.keep_wage_excess }}>
+        Προσαρμογή μισθού (τριετία/ΓΣΣΕ): <b>διατήρηση</b> της διαφοράς πάνω
+        από το όριο
+        <span class="muted" style="font-size:12.5px">— η αύξηση περνά στον
+          μισθό. Αν ξετσεκαριστεί: <b>συμψηφισμός</b> (η διαφορά απορροφά την
+          αύξηση· προεπιλογή)</span>
+      </label>
+      <div class="btnrow" style="margin-top:10px">
+        <button class="run" type="submit">Αποθήκευση προτιμήσεων</button>
+      </div>
+    </form>
+  </div>
+
+  {# --------------------------------------------- Αλυσίδα υποχρεώσεων #}
+  <div class="card" style="margin-top:16px">
+    <h2 class="bar"><span>Αλυσίδα υποχρεώσεων</span>
+      <span class="norm">— ποιο βήμα προαπαιτεί ποιο· οι διακεκομμένες ακμές
+        δείχνουν σε ΑΛΛΗ περίοδο. Κάθε κόμβος δείχνει γέννηση/προθεσμία/
+        παράταση — <b>κλικ πάνω του για επεξεργασία</b>. Οι εξαρτήσεις και
+        οι εντολές είναι κώδικας (μητρώο obligation_types)</span>
+    </h2>
+    {% include "partials/_chain_graph.html" %}
+  </div>
+
+  {# ------------------------------------------------------- Μητρώο ΚΠΚ #}
+  {# ΘΕΣΜΙΚΟ, ΟΧΙ ΕΤΑΙΡΙΚΟ: οι κωδικοί πακέτων κάλυψης και τα ποσοστά
+     κρατήσεων ορίζονται από ΕΦΚΑ/ΤΕΚΑ και ισχύουν για ΟΛΟΥΣ τους εργοδότες,
+     γι' αυτό ζουν εδώ και όχι στη σελίδα «Εταιρεία». #}
+  <div class="card" style="margin-top:16px">
+    <h2 class="bar"><span>Μητρώο ΚΠΚ</span>
+      <span class="norm">— κάθε ΚΠΚ καθορίζει τα ποσοστά κρατήσεων
+        εργαζομένου/εργοδότη, με ημερομηνία ισχύος· κοινό για όλες τις
+        εταιρείες</span>
+      <span class="acts">
+        <button class="run"
+                hx-get="{{ url_for('settings.kpk_modal') }}"
+                hx-target="#modal-host" hx-swap="innerHTML">➕ Νέο ΚΠΚ / ποσοστά</button>
+      </span>
+    </h2>
+
+    {% if kpk_entries %}
+      <table class="tbl">
+        <thead><tr><th>Φορέας</th><th>ΚΠΚ</th><th>Ονομασία</th><th>Βαθμίδα</th>
+          <th>Ισχύον από</th>
+          <th class="rt">Εργαζόμενος</th><th class="rt">Εργοδότης</th>
+          <th class="rt">Σύνολο</th><th></th></tr></thead>
+        <tbody>
+          {% for r in kpk_entries %}
+            {% set cur = r.current %}
+            <tr>
+              <td><span class="cov {{ r.carrier }}"><i>{{ r.carrier_label }}</i></span></td>
+              <td class="mono"><b>{{ r.kpk }}</b></td>
+              <td>{{ r.name }}</td>
+              <td>{{ r.tier_label }}</td>
+              <td class="mono">{{ cur.valid_from|date_gr if cur else '—' }}
+                {% if r.series|length > 1 %}
+                  <div class="muted" style="font-size:11.5px">
+                    {{ r.series|length }} γραμμές ισχύος</div>
+                {% endif %}</td>
+              <td class="num">{{ '%.2f'|format(cur.employee * 100) if cur else '—' }}{{ '%' if cur }}</td>
+              <td class="num">{{ '%.2f'|format(cur.employer * 100) if cur else '—' }}{{ '%' if cur }}</td>
+              <td class="num">{{ '%.2f'|format((cur.employee + cur.employer) * 100) if cur else '—' }}{{ '%' if cur }}</td>
+              <td style="text-align:right">
+                <button class="ghost sm"
+                        hx-get="{{ url_for('settings.kpk_modal', fund=r.fund,
+                                           kpk=r.kpk) }}"
+                        hx-target="#modal-host" hx-swap="innerHTML">✏️</button>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    {% else %}
+      <div class="empty">Κανένα ΚΠΚ — χωρίς ΚΠΚ δεν μπορούν να δηλωθούν
+        ειδικότητες σε καμία εταιρεία. Καταχωρήστε χειροκίνητα
+        («➕ Νέο ΚΠΚ / ποσοστά») ή φορτώστε αρχείο εξαγωγής JSON — είτε το
+        «Αρχείο παραμέτρων» αυτής της σελίδας, είτε το αρχείο της σελίδας
+        «Εταιρεία → ① Στοιχεία εργοδότη».
+        Τα ΚΑΔ/ειδικότητα δεν ορίζονται εδώ — ζουν στην κάθε
+        <b>ειδικότητα</b> (σελίδα «Εταιρεία»).</div>
+    {% endif %}
+  </div>
+
+  <div id="modal-host"></div>
+</div>

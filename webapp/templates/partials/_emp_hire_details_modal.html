@@ -1,0 +1,84 @@
+{# Η ίδια ακριβώς φόρμα με την αρχική (επανα)πρόσληψη. Πριν από WebE3N
+   διορθώνεται· μετά την υποβολή τα controls κλειδώνουν για read-only θέαση. #}
+{% set fv = form|default(hire_values, true) %}
+<div class="modal-backdrop">
+  <div class="modal wide">
+    <form {% if not readonly %}
+          hx-post="{{ url_for('employments.correct_hire_details', employment_id=e.employment_id) }}"
+          hx-target="#employment-card" hx-swap="outerHTML"{% endif %}>
+      <div class="mhead">
+        <h3>{{ 'Επαναπρόσληψη' if e.is_rehire else 'Πρόσληψη' }}
+          — {{ e.full_name }}</h3>
+        <span class="muted" style="font-size:12.5px">
+          {% if readonly %}
+            η φόρμα έχει υποβληθεί στο ΕΡΓΑΝΗ — μόνο για προβολή
+          {% else %}
+            διορθώνεται μέχρι την υποβολή της Αναγγελίας Πρόσληψης WebE3N
+          {% endif %}
+        </span>
+      </div>
+
+      <div class="mbody">
+        <input class="tabradio" type="radio" name="_tab" id="tab-general" checked>
+        <input class="tabradio" type="radio" name="_tab" id="tab-oaed">
+        <input class="tabradio" type="radio" name="_tab" id="tab-schedule">
+        <input class="tabradio" type="radio" name="_tab" id="tab-json">
+        <div class="tabbar">
+          <label for="tab-general">① Γενικά στοιχεία</label>
+          <label for="tab-schedule">② Πρόγραμμα εργασίας</label>
+          <label for="tab-json">③ JSON</label>
+          <label for="tab-oaed">④ ΟΑΕΔ</label>
+        </div>
+
+        <div class="tabpane tp-general">
+          <fieldset {{ 'disabled' if readonly }}
+                    style="border:0;padding:0;margin:0;min-width:0">
+            {% set ident = false %}
+            {% set person = e.person %}
+            {% set person_note = false %}
+            {# ΙΔΙΟ mode με τη φόρμα που δημιούργησε την απασχόληση: σε
+               επαναπρόσληψη δεν προσφέρεται «Παλαιά πρόσληψη» — εκτός αν η
+               απασχόληση ΕΙΝΑΙ ήδη μεταφερμένη (τότε πρέπει να διορθώνεται). #}
+            {% set allow_migration = e.migrated or not e.is_rehire %}
+            {% include "partials/_general_tab.html" %}
+          </fieldset>
+        </div>
+
+        <div class="tabpane tp-schedule">
+          <fieldset {{ 'disabled' if readonly }}
+                    style="border:0;padding:0;margin:0;min-width:0">
+            {% include "partials/_schedule_tab.html" %}
+          </fieldset>
+        </div>
+
+        <div class="tabpane tp-json">
+          {% include "partials/_hire_json_preview.html" %}
+        </div>
+
+        <div class="tabpane tp-oaed">
+          <fieldset {{ 'disabled' if readonly }}
+                    style="border:0;padding:0;margin:0;min-width:0">
+            {% include "partials/_oaed_tab.html" %}
+          </fieldset>
+        </div>
+      </div>
+
+      <div class="mfoot">
+        <button type="button" class="ghost"
+                hx-get="{{ url_for('employments.modal_close') }}"
+                hx-target="#modal-host" hx-swap="innerHTML">
+          {{ 'Κλείσιμο' if readonly else 'Άκυρο' }}</button>
+        {% if not readonly %}
+          {# ΔΙΑΓΡΑΦΗ εκ παραδρομής καταχώρησης — μόνο πριν το ΕΡΓΑΝΗ. Το
+             command layer ξαναελέγχει τα πάντα (svc.delete_employment). #}
+          <button type="button" class="run danger"
+                  hx-post="{{ url_for('employments.delete_employment',
+                                      employment_id=e.employment_id) }}"
+                  hx-confirm="Διαγραφή της απασχόλησης «{{ e.full_name }}»; Η
+                    περίοδος απασχόλησης αφαιρείται ΟΛΟΚΛΗΡΗ.">Διαγραφή</button>
+          <button class="run" type="submit">Αποθήκευση διορθώσεων</button>
+        {% endif %}
+      </div>
+    </form>
+  </div>
+</div>

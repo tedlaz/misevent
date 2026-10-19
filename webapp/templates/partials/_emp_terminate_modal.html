@@ -1,0 +1,56 @@
+{# Modal αποχώρησης — ΔΕΝ αποχωρεί μόνο του: δείχνει ΤΙ θα υπολογιστεί
+   (προεπισκόπηση χωρίς event) και η λήξη καταχωρείται μόνο με το κουμπί
+   «Επιβεβαίωση αποχώρησης». Κάθε αλλαγή ημερομηνίας/αιτίας ξαναχτίζει
+   ΜΟΝΟ το #term-preview (καθαρό htmx, μηδέν JS). #}
+{% set f = form or {} %}
+<div class="modal-backdrop">
+  <div class="modal">
+    <form hx-post="{{ url_for('employments.terminate', employment_id=e.employment_id) }}"
+          hx-target="#employment-card" hx-swap="outerHTML">
+      <div class="mhead">
+        <h3>🚪 Αποχώρηση — {{ e.full_name }}</h3>
+        <span class="muted" style="font-size:12.5px">
+          η απασχόληση λήγει· επαναπρόσληψη = νέα απασχόληση στο ίδιο πρόσωπο</span>
+      </div>
+      <div class="mbody">
+        <div class="frm cols"
+             hx-post="{{ url_for('employments.terminate_preview', employment_id=e.employment_id) }}"
+             hx-trigger="change" hx-target="#term-preview" hx-swap="outerHTML"
+             hx-include="[name='termination_date'],[name='reason']">
+          {# Η λήξη επιτρέπεται ΜΟΝΟ μέσα στον τρέχοντα μήνα μισθοδοσίας
+             (ίδιος κανόνας με το command layer — εδώ ως min/max) #}
+          <label>Ημερομηνία λήξης
+            <input type="date" name="termination_date" required
+              value="{{ f.get('termination_date', term_default) }}"
+              {% if term_min %}min="{{ term_min }}" max="{{ term_max }}"{% endif %}>
+            {% if term_period %}
+              <span class="muted" style="font-size:12px">τρέχων μήνας
+                μισθοδοσίας: {{ term_period }}</span>
+            {% endif %}</label>
+          {% set sel = f.get('reason', '') %}
+          <label>Αιτία
+            <select name="reason">
+              {% for code, lbl in reasons %}
+                <option value="{{ code }}" {{ 'selected' if code == sel }}>{{ lbl }}</option>
+              {% endfor %}
+            </select></label>
+          <label class="chk">
+            <input type="checkbox" name="with_notice" value="1"
+              {{ 'checked' if f.get('with_notice') }}>
+            Με προειδοποίηση
+            <span class="muted" style="font-size:12px">— μόνο σε καταγγελία
+              σύμβασης· η αποζημίωση απόλυσης γίνεται η μισή</span></label>
+        </div>
+
+        <h3 class="sec">Υπολογισμοί εκκαθάρισης</h3>
+        {% include "partials/_emp_terminate_preview.html" %}
+      </div>
+      <div class="mfoot">
+        <button type="button" class="ghost"
+                hx-get="{{ url_for('employments.modal_close') }}"
+                hx-target="#modal-host" hx-swap="innerHTML">Άκυρο</button>
+        <button class="run danger" type="submit">Επιβεβαίωση αποχώρησης</button>
+      </div>
+    </form>
+  </div>
+</div>

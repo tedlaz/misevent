@@ -1,0 +1,715 @@
+{
+  "_comment": "GOLDEN CONFORMANCE FIXTURE. Οι παράμετροι είναι ΚΑΡΦΩΜΕΝΕΣ εδώ — δεν διαβάζονται από το config.py — ώστε τα ποσά να μένουν σταθερά όταν αλλάξουν τα defaults ή μετακινηθεί ένας κανόνας σε μητρώο παραμέτρων. Το πεδίο `source` κάθε σεναρίου λέει ΑΠΟ ΠΟΥ προήλθε ο αριθμός.",
+  "params": {
+    "minimum_wage": [
+      {
+        "valid_from": "2024-04-01",
+        "monthly": 830.0,
+        "daily": 37.07
+      },
+      {
+        "valid_from": "2025-04-01",
+        "monthly": 880.0,
+        "daily": 39.3
+      },
+      {
+        "valid_from": "2026-04-01",
+        "monthly": 920.0,
+        "daily": 41.09
+      }
+    ],
+    "efka": [
+      {
+        "valid_from": "2025-01-01",
+        "employee": 0.1337,
+        "employer": 0.2179,
+        "monthly_cap": 7572.62
+      }
+    ],
+    "tax": [
+      {
+        "valid_from": "2025-01-01",
+        "brackets": [
+          {
+            "up_to": 10000,
+            "rate": 0.09
+          },
+          {
+            "up_to": 20000,
+            "rate": 0.22
+          },
+          {
+            "up_to": 30000,
+            "rate": 0.28
+          },
+          {
+            "up_to": 40000,
+            "rate": 0.36
+          },
+          {
+            "up_to": null,
+            "rate": 0.44
+          }
+        ],
+        "reductions": [
+          777.0,
+          900.0,
+          1120.0,
+          1340.0,
+          1580.0
+        ],
+        "extra_child_reduction": 220.0,
+        "phaseout_threshold": 12000.0,
+        "phaseout_per_1000": 20.0,
+        "model": "standard"
+      },
+      {
+        "valid_from": "2026-01-01",
+        "brackets": [
+          {
+            "up_to": 10000,
+            "rate": 0.09
+          },
+          {
+            "up_to": 20000,
+            "rate": 0.2
+          },
+          {
+            "up_to": 30000,
+            "rate": 0.26
+          },
+          {
+            "up_to": 40000,
+            "rate": 0.34
+          },
+          {
+            "up_to": 60000,
+            "rate": 0.39
+          },
+          {
+            "up_to": null,
+            "rate": 0.44
+          }
+        ],
+        "reductions": [
+          777.0,
+          900.0,
+          1120.0,
+          1340.0,
+          1580.0,
+          1780.0
+        ],
+        "extra_child_reduction": 220.0,
+        "phaseout_threshold": 12000.0,
+        "phaseout_per_1000": 20.0,
+        "band1_child_rates": [
+          0.09,
+          0.09,
+          0.09,
+          0.09,
+          0.0
+        ],
+        "band2_child_rates": [
+          0.2,
+          0.18,
+          0.16,
+          0.09,
+          0.0
+        ],
+        "band3_child_rates": [
+          0.26,
+          0.24,
+          0.22,
+          0.2,
+          0.18
+        ],
+        "band3_extra_child_step": 0.02,
+        "band1_index": 0,
+        "band2_index": 1,
+        "band3_index": 2,
+        "youth_zero_max_age": 25,
+        "youth_low_max_age": 30,
+        "youth_low_rate": 0.09,
+        "model": "youth2026"
+      }
+    ],
+    "sick_leave": [
+      {
+        "valid_from": "2024-01-01",
+        "half_wage_days": 3,
+        "limit_under_year": 13,
+        "limit_over_year": 26
+      }
+    ],
+    "allowance": [
+      {
+        "valid_from": "2024-01-01",
+        "monthly_triennium_pct": 0.1,
+        "monthly_max_triennia": 3,
+        "daily_triennium_pct": 0.05,
+        "daily_max_triennia": 6,
+        "marriage_pct": 0.1
+      }
+    ],
+    "work_hours": [
+      {
+        "valid_from": "2024-01-01",
+        "night_start": 22,
+        "night_end": 6,
+        "night_premium": 0.25,
+        "holiday_premium": 0.75,
+        "extra_premium": 0.12,
+        "overwork_premium": 0.2,
+        "overtime_premium": 0.4,
+        "illegal_premium": 0.8,
+        "weekly_legal_5": 45,
+        "weekly_legal_6": 48,
+        "daily_legal_5": 9,
+        "daily_legal_6": 8,
+        "daily_overwork_start": 8,
+        "overtime_day_cap": 3,
+        "overtime_year_cap": 150
+      }
+    ]
+  },
+  "cases": [
+    {
+      "name": "Μισθωτός 1.200€, 1 τέκνο, Μάρτιος 2026",
+      "scenario": "monthly_full",
+      "source": "τρέχουσα υλοποίηση — ΟΧΙ επίσημο",
+      "input": {
+        "monthly_gross": 1200.0,
+        "children": 1,
+        "period_end": "2026-03-31"
+      },
+      "expect": {
+        "gross": 1200.0,
+        "efka_employee": 160.44,
+        "efka_employer": 261.48,
+        "taxable": 1039.56,
+        "fmy": 62.2,
+        "net": 977.36
+      }
+    },
+    {
+      "name": "ΙΔΙΟΣ εργαζόμενος — Μάρτιος 2025 (παλιά κλίμακα)",
+      "scenario": "monthly_full",
+      "source": "τρέχουσα υλοποίηση — ΟΧΙ επίσημο",
+      "input": {
+        "monthly_gross": 1200.0,
+        "children": 1,
+        "period_end": "2025-03-31"
+      },
+      "expect": {
+        "gross": 1200.0,
+        "efka_employee": 160.44,
+        "efka_employer": 261.48,
+        "taxable": 1039.56,
+        "fmy": 75.21,
+        "net": 964.35
+      }
+    },
+    {
+      "name": "ΙΔΙΟΣ εργαζόμενος — Ιούνιος 2026 (κλίμακα 2026)",
+      "scenario": "monthly_full",
+      "source": "τρέχουσα υλοποίηση — ΟΧΙ επίσημο",
+      "input": {
+        "monthly_gross": 1200.0,
+        "children": 1,
+        "period_end": "2026-06-30"
+      },
+      "expect": {
+        "gross": 1200.0,
+        "efka_employee": 160.44,
+        "efka_employer": 261.48,
+        "taxable": 1039.56,
+        "fmy": 62.2,
+        "net": 977.36
+      }
+    },
+    {
+      "name": "Νέος έως 25 ετών, 1.200€, Ιούνιος 2026 (0% στα δύο πρώτα)",
+      "scenario": "monthly_full",
+      "source": "τρέχουσα υλοποίηση — ΟΧΙ επίσημο",
+      "input": {
+        "monthly_gross": 1200.0,
+        "children": 0,
+        "period_end": "2026-06-30",
+        "birth_date": "2003-05-10"
+      },
+      "expect": {
+        "gross": 1200.0,
+        "efka_employee": 160.44,
+        "efka_employer": 261.48,
+        "taxable": 1039.56,
+        "fmy": 0.0,
+        "net": 1039.56
+      }
+    },
+    {
+      "name": "Τετράτεκνος 1.200€, Ιούνιος 2026",
+      "scenario": "monthly_full",
+      "source": "τρέχουσα υλοποίηση — ΟΧΙ επίσημο",
+      "input": {
+        "monthly_gross": 1200.0,
+        "children": 4,
+        "period_end": "2026-06-30"
+      },
+      "expect": {
+        "gross": 1200.0,
+        "efka_employee": 160.44,
+        "efka_employer": 261.48,
+        "taxable": 1039.56,
+        "fmy": 0.0,
+        "net": 1039.56
+      }
+    },
+    {
+      "name": "Μερική απασχόληση 20ω/εβδ, 600€, Ιούνιος 2026",
+      "scenario": "monthly_partial",
+      "source": "τρέχουσα υλοποίηση — ΟΧΙ επίσημο",
+      "input": {
+        "monthly_gross": 600.0,
+        "children": 0,
+        "weekly_hours": 20.0,
+        "period_end": "2026-06-30"
+      },
+      "expect": {
+        "base_days": 13.0,
+        "gross": 600.0,
+        "efka_employee": 80.22,
+        "efka_employer": 130.74,
+        "taxable": 519.78,
+        "fmy": 0.0,
+        "net": 519.78
+      }
+    },
+    {
+      "name": "Μερική 20ω με 3 ημέρες άνευ αποδοχών",
+      "scenario": "monthly_partial",
+      "source": "τρέχουσα υλοποίηση — ΟΧΙ επίσημο",
+      "input": {
+        "monthly_gross": 600.0,
+        "children": 0,
+        "weekly_hours": 20.0,
+        "unpaid_days": 3,
+        "period_end": "2026-06-30"
+      },
+      "expect": {
+        "base_days": 13.0,
+        "gross": 461.54,
+        "efka_employee": 61.71,
+        "efka_employer": 100.57,
+        "taxable": 399.83,
+        "fmy": 0.0,
+        "net": 399.83
+      }
+    },
+    {
+      "name": "Ημερομίσθιος 45 ευρω x 25 ημερες, Ιούνιος 2026",
+      "scenario": "daily",
+      "source": "τρέχουσα υλοποίηση — ΟΧΙ επίσημο",
+      "input": {
+        "daily_wage": 45.0,
+        "days_worked": 25,
+        "children": 0,
+        "period_end": "2026-06-30"
+      },
+      "expect": {
+        "gross": 1125.0,
+        "efka_employee": 150.41,
+        "efka_employer": 245.14,
+        "taxable": 974.59,
+        "fmy": 63.2,
+        "net": 911.39
+      }
+    },
+    {
+      "name": "Ασθένεια: τριήμερο εργοδότη (μισο ημερομισθιο x 3)",
+      "scenario": "sick",
+      "source": "τρέχουσα υλοποίηση — ΟΧΙ επίσημο",
+      "input": {
+        "monthly_gross": 1200.0,
+        "children": 0,
+        "half_days": 3,
+        "period_end": "2026-06-30"
+      },
+      "expect": {
+        "sick_deduction": 72.0,
+        "gross": 1128.0,
+        "efka_employee": 150.81,
+        "efka_employer": 245.79,
+        "taxable": 977.19,
+        "fmy": 63.77,
+        "net": 913.42
+      }
+    },
+    {
+      "name": "Ασθένεια: τριήμερο + επίδομα ΕΦΚΑ 150€",
+      "scenario": "sick",
+      "source": "τρέχουσα υλοποίηση — ΟΧΙ επίσημο",
+      "input": {
+        "monthly_gross": 1200.0,
+        "children": 0,
+        "half_days": 3,
+        "efka_benefit": 150.0,
+        "period_end": "2026-06-30"
+      },
+      "expect": {
+        "sick_deduction": 222.0,
+        "gross": 978.0,
+        "efka_employee": 130.76,
+        "efka_employer": 213.11,
+        "taxable": 847.24,
+        "fmy": 35.38,
+        "net": 811.86
+      }
+    },
+    {
+      "name": "Δώρο Χριστουγέννων πλήρες (πρόσληψη πριν την 1/5)",
+      "scenario": "christmas_gift",
+      "source": "τρέχουσα υλοποίηση — ΟΧΙ επίσημο",
+      "input": {
+        "monthly_gross": 1200.0,
+        "children": 0,
+        "year": 2026,
+        "hire": "2024-01-15"
+      },
+      "expect": {
+        "gross": 1249.99,
+        "efka_employee": 167.12,
+        "efka_employer": 272.37,
+        "taxable": 1082.87,
+        "fmy": 87.02,
+        "net": 995.85
+      }
+    },
+    {
+      "name": "Δώρο Χριστουγέννων μερικό (πρόσληψη 1/9/2026 — κανόνας 2/25 ανά 19 ημέρες)",
+      "scenario": "christmas_gift",
+      "source": "τρέχουσα υλοποίηση — ΟΧΙ επίσημο",
+      "input": {
+        "monthly_gross": 1200.0,
+        "children": 0,
+        "year": 2026,
+        "hire": "2026-09-01"
+      },
+      "expect": {
+        "gross": 642.1,
+        "efka_employee": 85.85,
+        "efka_employer": 139.91,
+        "taxable": 556.25,
+        "fmy": 0.0,
+        "net": 556.25
+      }
+    },
+    {
+      "name": "Δώρο Πάσχα πλήρες — Μ. Τετάρτη & μισθός 15 ημέρες πριν",
+      "scenario": "easter_gift",
+      "source": "τρέχουσα υλοποίηση — ΟΧΙ επίσημο",
+      "input": {
+        "monthly_gross": 1200.0,
+        "children": 0,
+        "year": 2026,
+        "hire": "2024-01-15"
+      },
+      "expect": {
+        "payment_date": "2026-04-08",
+        "wage_date": "2026-03-24",
+        "gross": 625.0,
+        "efka_employee": 83.56,
+        "efka_employer": 136.19,
+        "taxable": 541.44,
+        "fmy": 43.51,
+        "net": 497.93
+      }
+    },
+    {
+      "name": "Δώρο Πάσχα μερικό (πρόσληψη 1/3/2026 — κανόνας 1/15 ανά 8 ημέρες)",
+      "scenario": "easter_gift",
+      "source": "τρέχουσα υλοποίηση — ΟΧΙ επίσημο",
+      "input": {
+        "monthly_gross": 1200.0,
+        "children": 0,
+        "year": 2026,
+        "hire": "2026-03-01"
+      },
+      "expect": {
+        "payment_date": "2026-04-08",
+        "wage_date": "2026-03-24",
+        "gross": 317.71,
+        "efka_employee": 42.48,
+        "efka_employer": 69.23,
+        "taxable": 275.23,
+        "fmy": 0.0,
+        "net": 275.23
+      }
+    },
+    {
+      "name": "Επίδομα Αδείας 3ο έτος+ (ολόκληρο, μισός μισθός)",
+      "scenario": "leave_allowance",
+      "source": "τρέχουσα υλοποίηση — ΟΧΙ επίσημο",
+      "input": {
+        "monthly_gross": 1200.0,
+        "children": 0,
+        "year": 2026,
+        "hire": "2023-01-10",
+        "full_year": true
+      },
+      "expect": {
+        "gross": 600.0,
+        "efka_employee": 80.22,
+        "efka_employer": 130.74,
+        "taxable": 519.78,
+        "fmy": 38.74,
+        "net": 481.04
+      }
+    },
+    {
+      "name": "Επίδομα Αδείας 1ο έτος — πρόσληψη Μάρτιο, ενεργός στο τέλος του έτους (10 μήνες → πλαφόν)",
+      "scenario": "leave_allowance",
+      "source": "τρέχουσα υλοποίηση — ΟΧΙ επίσημο· η αναλογία μετριέται έως 31/12, ΟΧΙ έως τη λήψη της άδειας",
+      "input": {
+        "monthly_gross": 1200.0,
+        "children": 0,
+        "year": 2026,
+        "hire": "2026-03-01"
+      },
+      "expect": {
+        "gross": 600.0,
+        "efka_employee": 80.22,
+        "efka_employer": 130.74,
+        "taxable": 519.78,
+        "fmy": 38.74,
+        "net": 481.04
+      }
+    },
+    {
+      "name": "Επίδομα Αδείας 1ο έτος — πρόσληψη Σεπτέμβριο (4 μήνες, κάτω από το πλαφόν)",
+      "scenario": "leave_allowance",
+      "source": "τρέχουσα υλοποίηση — ΟΧΙ επίσημο· 4 μήνες × 2 ημερομίσθια × (1200/25)",
+      "input": {
+        "monthly_gross": 1200.0,
+        "children": 0,
+        "year": 2026,
+        "hire": "2026-09-01"
+      },
+      "expect": {
+        "gross": 384.0,
+        "efka_employee": 51.34,
+        "efka_employer": 83.67,
+        "taxable": 332.66,
+        "fmy": 2.19,
+        "net": 330.47
+      }
+    },
+    {
+      "name": "Επίδομα Αδείας 2ο έτος — αποχώρηση 30/6 (6 μήνες)",
+      "scenario": "leave_allowance",
+      "source": "τρέχουσα υλοποίηση — ΟΧΙ επίσημο· η αποχώρηση είναι ΤΟ ΜΟΝΟ που κόβει την αναλογία",
+      "input": {
+        "monthly_gross": 1200.0,
+        "children": 0,
+        "year": 2026,
+        "hire": "2025-04-08",
+        "term": "2026-06-30"
+      },
+      "expect": {
+        "gross": 576.0,
+        "efka_employee": 77.01,
+        "efka_employer": 125.51,
+        "taxable": 498.99,
+        "fmy": 34.17,
+        "net": 464.82
+      }
+    },
+    {
+      "name": "Αποζημίωση απόλυσης 5 ετών, ΧΩΡΙΣ προειδοποίηση",
+      "scenario": "severance",
+      "source": "τρέχουσα υλοποίηση — ΟΧΙ επίσημο",
+      "input": {
+        "service_years": 5.0,
+        "monthly_gross": 1200.0
+      },
+      "expect": {
+        "months": 3.0,
+        "gross": 4200.0,
+        "tax": 0.0,
+        "net": 4200.0
+      }
+    },
+    {
+      "name": "Αποζημίωση απόλυσης 5 ετών, ΜΕ προειδοποίηση (μισοί μήνες)",
+      "scenario": "severance",
+      "source": "τρέχουσα υλοποίηση — ΟΧΙ επίσημο",
+      "input": {
+        "service_years": 5.0,
+        "monthly_gross": 1200.0,
+        "with_notice": true
+      },
+      "expect": {
+        "months": 1.5,
+        "gross": 2100.0,
+        "tax": 0.0,
+        "net": 2100.0
+      }
+    },
+    {
+      "name": "Αποζημίωση απόλυσης <1 έτος = 0",
+      "scenario": "severance",
+      "source": "τρέχουσα υλοποίηση — ΟΧΙ επίσημο",
+      "input": {
+        "service_years": 0.8,
+        "monthly_gross": 1200.0
+      },
+      "expect": {
+        "months": 0.0,
+        "gross": 0.0,
+        "tax": 0.0,
+        "net": 0.0
+      }
+    },
+    {
+      "name": "10ωρο Δευτέρας ΕΡΓΑΣΙΜΗΣ: 9η ώρα υπερεργασία, 10η υπερωρία",
+      "scenario": "hours",
+      "source": "τρέχουσα υλοποίηση — ΟΧΙ επίσημο",
+      "input": {
+        "monthly_gross": 1200.0,
+        "weekly_hours": 40.0,
+        "weekly_system": 5,
+        "on": "2026-06-08",
+        "shifts": {
+          "2026-06-08": [
+            "08:00-18:00"
+          ]
+        }
+      },
+      "expect": {
+        "normal": 8.0,
+        "overtime": 1.0,
+        "overwork": 1.0,
+        "hourly_rate": 7.2,
+        "supplement_total": 18.72
+      }
+    },
+    {
+      "name": "10ωρο σε ΑΡΓΙΑ (Αγίου Πνεύματος 1/6/2026): κλάση x αργία",
+      "scenario": "hours",
+      "source": "τρέχουσα υλοποίηση — ΟΧΙ επίσημο",
+      "input": {
+        "monthly_gross": 1200.0,
+        "weekly_hours": 40.0,
+        "weekly_system": 5,
+        "on": "2026-06-01",
+        "shifts": {
+          "2026-06-01": [
+            "08:00-18:00"
+          ]
+        }
+      },
+      "expect": {
+        "normal_h": 8.0,
+        "overtime_h": 1.0,
+        "overwork_h": 1.0,
+        "hourly_rate": 7.2,
+        "supplement_total": 75.96
+      }
+    },
+    {
+      "name": "Νυχτερινή βάρδια 22:00-06:00 (προσαύξηση νύχτας)",
+      "scenario": "hours",
+      "source": "τρέχουσα υλοποίηση — ΟΧΙ επίσημο",
+      "input": {
+        "monthly_gross": 1200.0,
+        "weekly_hours": 40.0,
+        "weekly_system": 5,
+        "on": "2026-06-01",
+        "shifts": {
+          "2026-06-02": [
+            "22:00-06:00"
+          ]
+        }
+      },
+      "expect": {
+        "normal_n": 8.0,
+        "hourly_rate": 7.2,
+        "supplement_total": 14.4
+      }
+    },
+    {
+      "name": "Κυριακή 8ωρο (προσαύξηση αργίας 75%)",
+      "scenario": "hours",
+      "source": "τρέχουσα υλοποίηση — ΟΧΙ επίσημο",
+      "input": {
+        "monthly_gross": 1200.0,
+        "weekly_hours": 40.0,
+        "weekly_system": 5,
+        "on": "2026-06-01",
+        "shifts": {
+          "2026-06-07": [
+            "09:00-17:00"
+          ]
+        }
+      },
+      "expect": {
+        "normal_h": 8.0,
+        "hourly_rate": 7.2,
+        "supplement_total": 43.2
+      }
+    },
+    {
+      "name": "Κατώτατος χωρίς προσαυξήσεις, Ιούνιος 2026",
+      "scenario": "minimum_floor",
+      "source": "τρέχουσα υλοποίηση — ΟΧΙ επίσημο",
+      "input": {
+        "pay_type": "monthly",
+        "on": "2026-06-30",
+        "service_years": 0.0
+      },
+      "expect": {
+        "floor": 920.0
+      }
+    },
+    {
+      "name": "Κατώτατος με 2 τριετίες + γάμο, Ιούνιος 2026",
+      "scenario": "minimum_floor",
+      "source": "τρέχουσα υλοποίηση — ΟΧΙ επίσημο",
+      "input": {
+        "pay_type": "monthly",
+        "on": "2026-06-30",
+        "service_years": 7.0,
+        "married": true
+      },
+      "expect": {
+        "floor": 1196.0
+      }
+    },
+    {
+      "name": "Κατώτατος μερικής 20ω, Ιούνιος 2026 (αναλογία ωρών)",
+      "scenario": "minimum_floor",
+      "source": "τρέχουσα υλοποίηση — ΟΧΙ επίσημο",
+      "input": {
+        "pay_type": "monthly",
+        "on": "2026-06-30",
+        "service_years": 0.0,
+        "weekly_hours": 20.0
+      },
+      "expect": {
+        "floor": 460.0
+      }
+    },
+    {
+      "name": "Κατώτατο ημερομίσθιο με 3 τριετίες, Ιούνιος 2026",
+      "scenario": "minimum_floor",
+      "source": "τρέχουσα υλοποίηση — ΟΧΙ επίσημο",
+      "input": {
+        "pay_type": "daily",
+        "on": "2026-06-30",
+        "service_years": 10.0
+      },
+      "expect": {
+        "floor": 47.25
+      }
+    }
+  ]
+}

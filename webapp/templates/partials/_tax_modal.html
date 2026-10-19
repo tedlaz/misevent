@@ -1,0 +1,89 @@
+{# Modal φορολογικής κλίμακας. `p` = προσυμπληρωμένες τιμές (strings, από το
+   view — _tax_prefill), `edit` = διόρθωση υπάρχουσας. Το ΚΑΘΕΣΤΩΣ επιλέγει
+   την κλάση υπολογισμού (config.TAX_MODELS): η λογική είναι κώδικας, εδώ
+   δίνονται μόνο οι ΤΙΜΕΣ του. #}
+{% set f = form or {} %}
+<div class="modal-backdrop">
+  <div class="modal" style="max-width:640px">
+    <form hx-post="{{ url_for('settings.tax_save') }}"
+          hx-target="#set-panel" hx-swap="outerHTML">
+      <div class="mhead">
+        <h3>{{ '✏️' if edit else '➕' }} Φορολογική κλίμακα (ΦΜΥ)</h3>
+        <span class="muted" style="font-size:12.5px">
+          καταγράφεται ως TaxScaleDefined — ίδια «ισχύς από» = αντικατάσταση.
+          ⚠️ Επιβεβαιώστε τις τιμές από την ΑΑΔΕ πριν από παραγωγική χρήση.</span>
+      </div>
+      <div class="mbody">
+        <div class="frm cols">
+          <label>Ισχύς από<input type="date" name="valid_from" required
+            value="{{ f.get('valid_from', p.valid_from) }}"></label>
+          <label>Καθεστώς υπολογισμού
+            <select name="model">
+              {% set sel = f.get('model', p.model) %}
+              {% for key, cls in models.items() %}
+                <option value="{{ key }}" {{ 'selected' if sel == key }}>
+                  {{ cls.model_label }}</option>
+              {% endfor %}
+            </select></label>
+        </div>
+        <label style="display:block;margin-top:10px">Κλιμάκια — μία γραμμή ανά
+          κλιμάκιο: <span class="mono">άνω όριο;συντελεστής %</span>
+          (τελευταία γραμμή με κενό όριο = ανοιχτό κλιμάκιο)
+          <textarea name="brackets" rows="5" required class="mono"
+            style="width:100%">{{ f.get('brackets', p.brackets) }}</textarea>
+        </label>
+        <div class="frm cols" style="margin-top:10px">
+          <label>Μειώσεις φόρου ανά τέκνα (€ — 0;1;2;3;4 τέκνα)
+            <input name="reductions" class="mono"
+              value="{{ f.get('reductions', p.reductions) }}"></label>
+          <label>Επιπλέον μείωση ανά τέκνο 5+ (€)
+            <input type="number" name="extra_child_reduction" step="1" min="0"
+              value="{{ f.get('extra_child_reduction', p.extra_child_reduction) }}"></label>
+          <label>Όριο απομείωσης (€)
+            <input type="number" name="phaseout_threshold" step="1" min="0"
+              value="{{ f.get('phaseout_threshold', p.phaseout_threshold) }}"></label>
+          <label>Απομείωση ανά 1000 € (€)
+            <input type="number" name="phaseout_per_1000" step="1" min="0"
+              value="{{ f.get('phaseout_per_1000', p.phaseout_per_1000) }}"></label>
+        </div>
+
+        <div style="margin-top:12px;padding:10px;border:1px dashed #ccd2dd;border-radius:8px">
+          <b style="font-size:13px">Παράμετροι καθεστώτος 2026</b>
+          <span class="muted" style="font-size:12px">— διαβάζονται ΜΟΝΟ όταν
+            το καθεστώς είναι «Κλίμακα 2026»: οι συντελεστές των τριών πρώτων
+            κλιμακίων εξαρτώνται από τα τέκνα, και των δύο πρώτων επιπλέον
+            από την ηλικία</span>
+          <div class="frm cols" style="margin-top:8px">
+            <label>Συντελεστές 0–10 χιλ. ανά τέκνα (% — 0;1;2;3;4+)
+              <input name="band1_child_rates" class="mono"
+                value="{{ f.get('band1_child_rates', p.band1_child_rates) }}"></label>
+            <label>Συντελεστές 10–20 χιλ. ανά τέκνα (% — 0;1;2;3;4+)
+              <input name="band2_child_rates" class="mono"
+                value="{{ f.get('band2_child_rates', p.band2_child_rates) }}"></label>
+            <label>Συντελεστές 20–30 χιλ. ανά τέκνα (% — 0;1;2;3;4)
+              <input name="band3_child_rates" class="mono"
+                value="{{ f.get('band3_child_rates', p.band3_child_rates) }}"></label>
+            <label>Μείωση 20–30 χιλ. ανά τέκνο 5+ (μονάδες %)
+              <input type="number" name="band3_extra_child_step" step="0.1" min="0"
+                value="{{ f.get('band3_extra_child_step', p.band3_extra_child_step) }}"></label>
+            <label>Μηδενικός συντελεστής έως ηλικία
+              <input type="number" name="youth_zero_max_age" step="1" min="15"
+                value="{{ f.get('youth_zero_max_age', p.youth_zero_max_age) }}"></label>
+            <label>Μειωμένος συντελεστής έως ηλικία
+              <input type="number" name="youth_low_max_age" step="1" min="15"
+                value="{{ f.get('youth_low_max_age', p.youth_low_max_age) }}"></label>
+            <label>Μειωμένος συντελεστής (%)
+              <input type="number" name="youth_low_rate" step="0.1" min="0"
+                value="{{ f.get('youth_low_rate', p.youth_low_rate) }}"></label>
+          </div>
+        </div>
+      </div>
+      <div class="mfoot">
+        <button type="button" class="ghost"
+                hx-get="{{ url_for('settings.modal_close') }}"
+                hx-target="#modal-host" hx-swap="innerHTML">Άκυρο</button>
+        <button class="run" type="submit">Αποθήκευση κλίμακας</button>
+      </div>
+    </form>
+  </div>
+</div>

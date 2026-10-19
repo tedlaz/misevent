@@ -1,0 +1,105 @@
+{# Περιεχόμενο του tab «Πρόγραμμα εργασίας» (κοινό σε πρόσληψη & επαναπρόσληψη).
+   Δέχεται `fv` = τιμές φόρμας (dict). Περιλαμβάνει το template εβδομάδας και
+   την επιλογή τύπου ΠΡΩΤΗΣ δήλωσης προγράμματος (σταθερό / ημερήσιο).
+
+   Η επιλογή τύπου είναι ΔΥΟ ΚΑΡΤΕΣ με χρωματικό κώδικα (πράσινο = σταθερό,
+   πορτοκαλί = μεταβλητό/ημερήσιο). ΚΑΘΑΡΟ CSS, χωρίς JS: η ενεργή κάρτα
+   προκύπτει από `:has(input:checked)` (app.css §Τύπος προγράμματος) και το
+   πεδίο κάθε κάρτας «ξεδιπλώνεται» μόνο όταν η κάρτα είναι επιλεγμένη. #}
+<div class="frm cols">
+  <div class="wide">
+    <b>Template εβδομάδας</b>
+    <span class="muted" style="font-size:12.5px">
+      — υποχρεωτικό· κενή ημέρα = ρεπό. Σπαστό: 09:00-13:00+16:00-20:00
+      (κενό ≥ 3 ώρες) · πρόθεμα Τ = τηλεεργασία</span>
+  </div>
+
+  <div class="wide wk-tpl">
+    {% for code, lbl, we in [('MON','Δευτέρα',0), ('TUE','Τρίτη',0),
+                             ('WED','Τετάρτη',0), ('THU','Πέμπτη',0),
+                             ('FRI','Παρασκευή',0), ('SAT','Σάββατο',1),
+                             ('SUN','Κυριακή',1)] %}
+      <label class="wk-day{{ ' we' if we }}">
+        <span class="wk-lbl">{{ lbl }}</span>
+        <input name="day_{{ code }}" placeholder="ρεπό"
+          value="{{ fv.get('day_' ~ code, '09:00-17:00' if code in ('MON','TUE','WED','THU','FRI') else '') }}">
+      </label>
+    {% endfor %}
+  </div>
+
+  <div class="wide" style="margin-top:4px">
+    <b>Τύπος πρώτης δήλωσης προγράμματος</b>
+    <span class="muted" style="font-size:12.5px">
+      — πώς θα υλοποιηθεί το πρόγραμμα από την ημερομηνία πρόσληψης</span>
+  </div>
+
+  <div class="wide schopts">
+    {# 1) ΣΤΑΘΕΡΟ εβδομαδιαίο (με προαιρετική λήξη) #}
+    <label class="schopt sc-fixed">
+      <input type="radio" name="schedule_mode" value="fixed"
+        {{ 'checked' if fv.get('schedule_mode', 'fixed') == 'fixed' }}>
+      <span class="sc-mark" aria-hidden="true"></span>
+      <span class="sc-head">
+        <span class="sc-ic" aria-hidden="true">📌</span>
+        <b>Σταθερό εβδομαδιαίο</b>
+        <span class="sc-tag">standing ΟΧΕ</span>
+      </span>
+      <span class="sc-txt">Αντιγράφει το template σε <b>σταθερό εβδομαδιαίο</b>
+        από την πρόσληψη έως τη δηλωμένη λήξη (κενή λήξη = δεν λήγει ποτέ).
+        Υποβάλλεται <b>standing</b> στο ΕΡΓΑΝΗ με το κουμπί «Υποβολή ΟΧΕ».</span>
+      <span class="sc-field"><span class="sc-in">
+        <span class="sc-fl">Λήξη σταθερού <i>(προαιρετικό)</i></span>
+        <input type="date" name="schedule_end_date"
+          value="{{ fv.get('schedule_end_date', '') }}"
+          title="Κενό = δεν λήγει ποτέ">
+      </span></span>
+    </label>
+
+    {# 2) ΗΜΕΡΗΣΙΟ για N πλήρεις εβδομάδες #}
+    <label class="schopt sc-var">
+      <input type="radio" name="schedule_mode" value="variable"
+        {{ 'checked' if fv.get('schedule_mode') == 'variable' }}>
+      <span class="sc-mark" aria-hidden="true"></span>
+      <span class="sc-head">
+        <span class="sc-ic" aria-hidden="true">🗓️</span>
+        <b>Ημερήσιο για πλήθος εβδομάδων</b>
+        <span class="sc-tag">ανά εβδομάδα</span>
+      </span>
+      <span class="sc-txt">Δημιουργεί <b>ημερήσιο πρόγραμμα</b> από το template,
+        από την πρόσληψη για τόσες <b>πλήρεις</b> εβδομάδες (Δε–Κυ). Πρόσληψη
+        μεσοβδόμαδα καλύπτει επιπλέον το υπόλοιπο της τρέχουσας εβδομάδας·
+        δηλώνεται ανά εβδομάδα στο ΕΡΓΑΝΗ.</span>
+      <span class="sc-field"><span class="sc-in">
+        <span class="sc-fl">Πλήθος εβδομάδων <i>(1–10)</i></span>
+        <input type="number" name="schedule_weeks" min="1" max="10" step="1"
+          value="{{ fv.get('schedule_weeks', '1') }}">
+      </span></span>
+    </label>
+  </div>
+</div>
+
+<div class="fsec fs-digital-card" style="margin-top:14px">
+  <div class="fs-h"><span class="fs-ic">💳</span>
+    <b>Ψηφιακή κάρτα</b>
+    <span class="fs-hint">κάρτα εργασίας, ευέλικτη προσέλευση και διάλειμμα WebE3N</span></div>
+  <div class="frm cols">
+    <label>Κάρτα εργασίας
+      {% set working_card = fv.get('f_working_card', '1')|string %}
+      <select name="f_working_card" required>
+        <option value="0" {{ 'selected' if working_card == '0' }}>0 — ΟΧΙ</option>
+        <option value="1" {{ 'selected' if working_card == '1' }}>1 — ΝΑΙ</option>
+      </select></label>
+    <label>Ευέλικτη προσέλευση (λεπτά)
+      <input type="number" name="f_euelikto_wrario_minutes" min="0" max="999"
+        step="1" required value="{{ fv.get('f_euelikto_wrario_minutes', '120') }}"></label>
+    <label>Διάλειμμα εντός ωραρίου
+      {% set break_within = fv.get('f_dialeimma_entos_wrariou', '0')|string %}
+      <select name="f_dialeimma_entos_wrariou" required>
+        <option value="0" {{ 'selected' if break_within == '0' }}>0 — ΟΧΙ</option>
+        <option value="1" {{ 'selected' if break_within == '1' }}>1 — ΝΑΙ</option>
+      </select></label>
+    <label>Διάλειμμα (λεπτά)
+      <input type="number" name="f_dialeimma_minutes" min="0" max="999"
+        step="1" required value="{{ fv.get('f_dialeimma_minutes', '15') }}"></label>
+  </div>
+</div>

@@ -1,0 +1,36 @@
+{# Modal αναζήτησης Τοπικής Δ/νσης e-ΕΦΚΑ (ΑΠΔ No 3/No 4). Ίδιο μοτίβο με τα
+   υπόλοιπα modals: κλείνει ΜΟΝΟ με «Άκυρο» ή με επιλογή γραμμής (το backdrop
+   δεν έχει handler). ΧΩΡΙΣ <form> — το modal ζει έξω από το #company-form
+   αλλά ο κανόνας «καθαρό htmx, χωρίς JS» παραμένει: η αναζήτηση είναι hx-get
+   του input, η επιλογή hx-get του κουμπιού. #}
+<div class="modal-backdrop">
+  <div class="modal wide">
+    <div class="mhead">
+      <h3>🔎 Τοπική Διεύθυνση e-ΕΦΚΑ</h3>
+      <span class="muted" style="font-size:12.5px">
+        μητρώο ΤΟΠΙΚ — το ίδιο που χρησιμοποιεί ο eΑΠΔ viewer για τα No 3/No 4·
+        η ονομασία συμπληρώνεται αυτόματα από τον κωδικό</span>
+    </div>
+
+    <div class="mbody">
+      <label class="ref" style="display:flex;margin-bottom:10px">🔎
+        <input name="q" autofocus style="flex:1"
+               placeholder="κωδικός ή ονομασία — οι τόνοι αγνοούνται"
+               hx-get="{{ url_for('company.topik_search') }}"
+               hx-target="#topik-results" hx-swap="outerHTML"
+               {# «input» (όχι keyup): πιάνει και την επικόλληση με ποντίκι #}
+               hx-trigger="input changed delay:300ms, search">
+      </label>
+
+      {% include "partials/_topik_results.html" %}
+    </div>
+
+    <div class="mfoot">
+      <button type="button" class="ghost"
+              hx-get="{{ url_for('company.topik_modal_close') }}"
+              hx-target="#employer-modal-host" hx-swap="innerHTML">Άκυρο</button>
+      <span class="muted" style="font-size:12px;margin-right:auto">
+        Διάλεξε γραμμή για να συμπληρωθούν και τα δύο πεδία.</span>
+    </div>
+  </div>
+</div>

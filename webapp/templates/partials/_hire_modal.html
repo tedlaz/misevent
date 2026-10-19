@@ -1,0 +1,38 @@
+{# Modal ΠΡΟΣΛΗΨΗΣ: πρώτα αναζήτηση στο μητρώο (μήπως το πρόσωπο υπάρχει ήδη
+   -> επαναπρόσληψη), αλλιώς νέο πρόσωπο. Κλείνει ΜΟΝΟ με «Πρόσληψη» (submit
+   στη φόρμα) ή «Άκυρο» — το backdrop δεν έχει handler. Επιτυχής πρόσληψη
+   αντικαθιστά όλο το #employments-panel (μαζί με το κενό modal-host). #}
+<div class="modal-backdrop">
+  <div class="modal">
+    <div class="mhead">
+      <h3>Πρόσληψη</h3>
+      <span class="muted" style="font-size:12.5px">
+        πρώτα αναζήτηση στο μητρώο — μήπως το πρόσωπο υπάρχει ήδη;</span>
+    </div>
+
+    <div class="mbody">
+      <form class="btnrow" style="margin-bottom:12px"
+            hx-get="{{ url_for('employments.search') }}"
+            hx-target="#hire-search" hx-swap="outerHTML">
+        <label class="ref" style="flex:1">🔎
+          <input name="q" style="flex:1" autofocus
+                 placeholder="ΑΦΜ, ΑΜΚΑ, ΑΜΑ ή όνομα / επώνυμο / πατρώνυμο"
+                 hx-get="{{ url_for('employments.search') }}"
+                 hx-target="#hire-search" hx-swap="outerHTML"
+                 hx-trigger="keyup changed delay:300ms, search">
+        </label>
+        <button class="ghost" type="submit">Αναζήτηση</button>
+      </form>
+
+      {% include "partials/_hire_search.html" %}
+    </div>
+
+    <div class="mfoot">
+      <button type="button" class="ghost"
+              hx-get="{{ url_for('employments.hire_modal_close') }}"
+              hx-target="#modal-host" hx-swap="innerHTML">Άκυρο</button>
+      <span class="muted" style="font-size:12px;margin-right:auto">
+        Επίλεξε πρόσωπο ή «Νέος εργαζόμενος» για να εμφανιστεί η φόρμα.</span>
+    </div>
+  </div>
+</div>

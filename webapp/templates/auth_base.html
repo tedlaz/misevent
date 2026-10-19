@@ -1,0 +1,26 @@
+{# Φλοιός των σελίδων ΕΚΤΟΣ εφαρμογής (σύνδεση/πρόσκληση/επαναφορά):
+   χωρίς nav, χωρίς ενεργή εταιρεία, χωρίς htmx — μόνο μια φόρμα. #}
+<!doctype html>
+<html lang="el">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>{% block title %}misevent{% endblock %}</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="icon" href="{{ url_for('static', filename='app.ico') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='app.css') }}">
+</head>
+<body class="authpage">
+  <main class="authbox">
+    <div class="card">
+      <div class="authbrand">misevent</div>
+      <h2>{% block heading %}{% endblock %}
+        <span class="norm">— {% block subheading %}{% endblock %}</span></h2>
+
+      {% if error %}<div class="warnbox">{{ error }}</div>{% endif %}
+      {% block content %}{% endblock %}
+    </div>
+  </main>
+</body>
+</html>

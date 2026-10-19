@@ -1,0 +1,13 @@
+{% extends "base.html" %}
+{% block title %}{{ e.full_name }} — Απασχόληση{% endblock %}
+{% block heading %}{{ e.full_name }}{% endblock %}
+{% block subheading %}
+  απασχόληση {{ e.employment_id }} · πρόσληψη {{ e.hire_date|date_gr }}
+{% endblock %}
+{% block headeractions %}
+  <a class="ghost" href="{{ url_for('persons.index') }}">← Εργαζόμενοι</a>
+{% endblock %}
+
+{% block content %}
+  {% include "partials/_employment_card.html" %}
+{% endblock %}

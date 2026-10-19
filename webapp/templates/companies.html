@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% block title %}Εταιρείες{% endblock %}
+{% block heading %}Εταιρείες{% endblock %}
+{% block subheading %}{% endblock %}
+
+{% block content %}
+{% if error %}<div class="warnbox">{{ error }}</div>{% endif %}
+
+<div class="card">
+  <h2>Οι εταιρείες μου <span class="norm">— η ενεργή ορίζει τι βλέπεις σε
+    ΟΛΕΣ τις σελίδες</span></h2>
+  <table class="tbl">
+    <thead><tr><th>Εταιρεία</th><th>Χώρος</th><th></th></tr></thead>
+    <tbody>
+      {% for r in rows %}
+        <tr>
+          <td><b>{{ r.name }}</b></td>
+          <td class="muted">{{ r.space_name }}</td>
+          <td class="rt">
+            {% if r.active %}
+              <span class="tag ok">ενεργή</span>
+            {% else %}
+              <form method="post" action="{{ url_for('companies.select', company_id=r.company_id) }}">
+                <button class="ghost sm" type="submit">Ενεργοποίηση</button>
+              </form>
+            {% endif %}
+          </td>
+        </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+{% if may_create %}
+  <div class="card">
+    <h2>Νέα εταιρεία <span class="norm">— δημιουργείται κενός χώρος· τα
+      στοιχεία του εργοδότη καταχωρούνται μετά, στη σελίδα «Εταιρεία»</span></h2>
+    <form class="frm" method="post" action="{{ url_for('companies.create') }}">
+      <label>Ονομασία
+        <input name="name" required placeholder="π.χ. ΑΛΦΑ ΕΜΠΟΡΙΚΗ ΑΕ"></label>
+      <div class="btnrow"><button class="run" type="submit">Δημιουργία</button></div>
+    </form>
+  </div>
+{% endif %}
+{% endblock %}

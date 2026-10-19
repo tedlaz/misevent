@@ -1,0 +1,37 @@
+{# ΜΙΑ στήλη του χρονολογίου. Δέχεται:
+     track  = (κωδικός, τίτλος, εικονίδιο) από `labels.TRACKS`
+     items  = οι υποχρεώσεις ΑΥΤΗΣ της στήλης (ήδη ταξινομημένες κατά προθεσμία)
+   Το κλικ σε γραμμή ανοίγει το MODAL λεπτομερειών (καθαρό htmx, χωρίς JS). #}
+<div class="obcol obcol-{{ track[0] }}">
+  <div class="obcol-h"><span class="ic">{{ track[2] }}</span>
+    <b>{{ track[1] }}</b><span class="n">{{ items|length }}</span></div>
+
+  <div class="obcol-body">
+    {% set ns = namespace(month='') %}
+    {% for o in items %}
+      {% set mk = o.due.strftime('%m/%Y') %}
+      {% if mk != ns.month %}
+        {% set ns.month = mk %}
+        <div class="month-h">{{ mk }}</div>
+      {% endif %}
+      <div class="ob {{ 'done' if o.status == 'done' else '' }}"
+           hx-get="{{ url_for('obligations.detail_modal', id=o.id) }}"
+           hx-target="#modal-host" hx-swap="innerHTML"
+           title="Λεπτομέρειες ενέργειας">
+        <span class="rail"><span class="dot d-{{ o.status }}"></span>
+          <span class="ln"></span></span>
+        <span class="body">
+          <span class="t"><span class="ic">{{ o.icon }}</span>{{ o.label }}</span>
+          <span class="m">{{ o.due|date_gr }} · περίοδος {{ o.period }}</span>
+          {% if o.reason %}<span class="reason">{{ o.reason }}</span>
+          {% elif o.late %}
+            <span class="reason">Εκπρόθεσμη κατά {{ o.late }} ημέρες</span>
+          {% endif %}
+        </span>
+        <span class="pill p-{{ o.status }}">{{ o.period }}</span>
+      </div>
+    {% else %}
+      <div class="empty sm">—</div>
+    {% endfor %}
+  </div>
+</div>

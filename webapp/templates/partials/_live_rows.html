@@ -1,0 +1,141 @@
+{# Το ΠΑΡΑΘΥΡΟ του «Ζωντανά»: χάρακας + μία γραμμή ανά ενεργή απασχόληση.
+   Το ξαναζητά το htmx κάθε λεπτό και το live-board.js όταν η μετακίνηση
+   φτάσει στην άκρη (νέο `base`).
+
+   Οι θέσεις είναι ΑΠΟΛΥΤΑ ΛΕΠΤΑ από τα μεσάνυχτα της `base` (--s αρχή,
+   --d διάρκεια) — γι' αυτό μια νυχτερινή βάρδια είναι ΜΙΑ μπάρα που περνά
+   τα μεσάνυχτα. Η μετατροπή σε pixel γίνεται με το --ppm (px ανά λεπτό)
+   και την κύλιση --shift, που ορίζει το live-board.js. #}
+<div class="lb-win" style="--mins:{{ span }}"
+     data-base="{{ base.isoformat() }}" data-days="{{ days }}"
+     data-span="{{ span }}" data-agg="{{ 1 if agg else 0 }}">
+
+  {# ---------------------------------------------------------- χάρακας #}
+  <div class="lb-row lb-rulerrow">
+    <div class="lb-name lb-head">Εργαζόμενος</div>
+    <div class="lb-lane">
+      {# Σταθερή ένδειξη ημέρας στην αριστερή άκρη — τη γράφει το JS καθώς
+         μετακινείσαι, ώστε να ξέρεις ΠΑΝΤΑ ποια ημέρα βλέπεις #}
+      <span class="lb-daynow" id="lb-daynow"></span>
+      <div class="lb-track">
+        {# Ετικέτα ημέρας σε τρεις εκδοχές — το CSS δείχνει μία, ανάλογα με
+           το εύρος (ημέρα / εβδομάδα / μήνας): αλλιώς στον μήνα οι 30
+           ημερομηνίες θα πατούσαν η μία πάνω στην άλλη #}
+        {% for m in marks %}
+          <span class="lb-dayspan {{ 'today' if m.today }} {{ 'we' if m.alt }}"
+                style="--s:{{ m.off }};--d:{{ m.span }}" title="{{ m.full }}">
+            <b><i class="d-f">{{ m.full }}</i><i class="d-m">{{ m.mid }}</i><i
+               class="d-s">{{ m.short }}</i></b>
+          </span>
+        {% endfor %}
+        {# Ωριαίος χάρακας ΜΟΝΟ σε στενό παράθυρο (βλ. queries.DETAIL_MAX_DAYS):
+           σε προβολή μήνα οι ώρες είναι 0,02px η μία — μόνο κόστος #}
+        {% if detail %}
+          {% for h in range(hours + 1) %}
+            {% set hh = h % 24 %}
+            <span class="lb-tick {{ 'd0' if hh == 0 }} {{ 'h3' if hh % 3 == 0 }}
+                         {{ 'h6' if hh % 6 == 0 }}" style="--s:{{ h * 60 }}">
+              <i>{{ '%02d:00'|format(hh) }}</i>
+            </span>
+          {% endfor %}
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  {# ---------------------------------------------------------- γραμμές #}
+  {% if not rows %}
+    <div class="empty">Καμία ενεργή απασχόληση σε αυτές τις ημέρες.</div>
+  {% endif %}
+  {% for r in rows %}
+  <div class="lb-row {{ 'onleave' if r.leave }}" data-eid="{{ r.eid }}"
+       data-segs="{{ r.segs|map(attribute='s')|join(',') }}"
+       data-ends="{{ r.segs|map(attribute='e')|join(',') }}"
+       data-leave="{{ 1 if r.leave else 0 }}"
+       {# Πρόγραμμα/παρουσία της ΗΜΕΡΑΣ ΑΝΑΦΟΡΑΣ σε λεπτά της ημέρας — από
+          αυτά (και ΜΟΝΟ) βγαίνει η κατάσταση «τώρα»: οι μπάρες του
+          παραθύρου μπορεί να είναι εβδομαδιαία σύνολα ή άλλης ημερομηνίας #}
+       data-ref-segs="{{ r.ref.segs|join(',') }}"
+       data-ref-ends="{{ r.ref.ends|join(',') }}"
+       data-ref-tele="{{ r.ref.tele|join(',') }}"
+       data-ref-acts="{{ r.ref.acts|join(',') }}"
+       data-ref-acte="{{ r.ref.acte|join(',') }}"
+       data-ref-punches="{{ r.ref.punches }}">
+
+    {# ΜΙΑ γραμμή ανά εργαζόμενο (σε πραγματική χρήση είναι πολλοί): η
+       κατάσταση της ώρας είναι ΚΟΥΚΙΔΑ με tooltip — τη χρωματίζει το
+       live-board.js — και οι ώρες προγράμματος γράφονται ΠΑΝΩ στη μπάρα. #}
+    <div class="lb-name">
+      <span class="lb-dot {{ 'st-leave' if r.leave else ('st-rest' if r.start is none) }}"
+            title="{% if r.leave %}σε άδεια{% elif r.start is none %}ρεπό{% endif %}"></span>
+      <a class="lnk" href="{{ url_for('employments.detail', employment_id=r.eid) }}"
+         title="{{ r.name }}{% if r.specialty %} · {{ r.specialty }}{% endif %}
+{{ day|date_gr }}: {% if r.leave %}{{ r.leave }}{% elif r.start is none %}ρεπό{% else %}πρόγραμμα {{ '%g'|format(r.hours) }}ω{% if r.worked %} · παρουσία {{ '%g'|format(r.worked) }}ω{% endif %}{% endif %}">{{ r.name }}</a>
+      {% if r.declared == 'pending' %}
+        <i class="lb-flag pend" title="Αδήλωτο πρόγραμμα στο ΕΡΓΑΝΗ">!</i>
+      {% elif r.declared == 'modified' %}
+        <i class="lb-flag mod" title="Το πρόγραμμα άλλαξε μετά τη δήλωση στο ΕΡΓΑΝΗ">~</i>
+      {% endif %}
+    </div>
+
+    <div class="lb-lane">
+      <div class="lb-track">
+        {# Τα όρια ημερών (μεσάνυχτα) και οι ώρες είναι ΥΠΟΒΑΘΡΟ (gradient του
+           .lb-track), όχι στοιχεία: σε προβολή μήνα θα ήταν χιλιάδες spans #}
+
+        {# Ημέρες άδειας — σε προβολή έτους ΔΙΑΣΤΗΜΑ συνεχόμενων ημερών #}
+        {% for b in r.bands %}
+          <span class="lb-leaveband lv-{{ b.type }}"
+                style="--s:{{ b.s }};--d:{{ b.e - b.s }}"
+                title="{{ b.label }}"></span>
+        {% endfor %}
+
+        {# ΠΡΟΒΟΛΗ ΕΤΟΥΣ: κάθετη γραμμή ανά ημέρα εργασίας — ΕΝΑ στοιχείο ανά
+           ΣΕΡΙ ημερών με ρίγα περιόδου μιας ημέρας (βλ. queries._year_marks:
+           ένα στοιχείο ανά ημέρα στρογγυλοποιούνταν άνισα σε pixel). Οι
+           ημέρες με άδεια δεν παίρνουν γραμμή — μιλάει η μπάρα. #}
+        {% for c in r.combs %}
+          <span class="lb-comb" style="--s:{{ c.s }};--d:{{ c.e - c.s }}"></span>
+        {% endfor %}
+
+        {# Πρόγραμμα #}
+        {% for s in r.segs %}
+          <span class="lb-bar {{ 'tele' if s.tele }} {{ 'cont' if s.cont }}"
+                style="--s:{{ s.s }};--d:{{ s.e - s.s }}"
+                title="Πρόγραμμα {{ s.text }} ({{ '%g'|format(s.h) }}ω){{ ' · τηλεεργασία' if s.tele }}{{ ' · συνέχεια από την προηγούμενη ημέρα' if s.cont }}">
+            <em>{{ s.text }} <b>({{ '%g'|format(s.h) }}ω)</b></em>
+          </span>
+        {% endfor %}
+
+        {# Πραγματική παρουσία από την Κάρτα Εργασίας — στην προβολή έτους
+           είναι σερί ΗΜΕΡΩΝ με παρουσία, με την ίδια ρίγα (πάνω από το
+           πρόγραμμα), αλλιώς τα πραγματικά διαστήματα ωρών #}
+        {% for a in r.actual %}
+          {% if agg %}
+            <span class="lb-comb att" style="--s:{{ a.s }};--d:{{ a.e - a.s }}"
+                  title="Ημέρες με πραγματική παρουσία"></span>
+          {% else %}
+            {# ΑΝΟΙΧΤΗ ΒΑΡΔΙΑ (είσοδος χωρίς έξοδο): φεύγει με μηδενικό πλάτος
+               και ΜΕΓΑΛΩΝΕΙ στον client μέχρι την τρέχουσα ώρα, με φράγμα τα
+               μεσάνυχτα της ημέρας της (--emax) — μια ξεχασμένη έξοδος του
+               περασμένου μήνα δεν επιτρέπεται να τραβήξει μπάρα ως το «τώρα» #}
+            <span class="lb-act {{ 'open' if a.open }}"
+                  style="--s:{{ a.s }};--d:{{ a.e - a.s }};--emax:{{ a.emax }}"
+                  title="{{ 'Σε εξέλιξη — χωρίς έξοδο ακόμη' if a.open
+                            else 'Παρουσία ' ~ a.text ~ ' (' ~ ('%g'|format(a.h)) ~ 'ω)' }}"></span>
+          {% endif %}
+        {% endfor %}
+
+        {# ΧΤΥΠΗΜΑΤΑ ΚΑΡΤΑΣ: κάθετη γραμμή στο χρονικό σημείο της διέλευσης,
+           με το «πτερύγιο» προς τη φορά της (είσοδος = δεξιά/πάνω, έξοδος =
+           αριστερά/κάτω) — η κατεύθυνση διαβάζεται με μια ματιά #}
+        {% for p in r.punches %}
+          <span class="lb-punch {{ p.kind }} tone-{{ p.tone }}"
+                style="--s:{{ p.m }}" title="{{ p.label }}"
+                data-t="{{ p.m }}"></span>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+  {% endfor %}
+</div>

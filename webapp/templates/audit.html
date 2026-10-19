@@ -1,0 +1,110 @@
+{% extends "base.html" %}
+{% block title %}Audit log{% endblock %}
+{% block heading %}Audit log{% endblock %}
+{% block subheading %}
+  {{ total }} events — επίλεξε σημείο για πλήρη επαναφορά
+{% endblock %}
+
+{% block content %}
+<div class="card">
+  <h2>Event log
+    <span class="norm">— η ΜΟΝΑΔΙΚΗ πηγή αλήθειας· όλα τα υπόλοιπα είναι
+      παράγωγα (replay)</span></h2>
+
+  {% if restored is not none %}
+    <div class="audit-result ok">
+      Έγινε restore <b>{{ restored }} events</b> και πλήρες replay.
+      Safety backup πριν την αντικατάσταση: <span class="mono">{{ safety }}</span>.
+    </div>
+  {% elif rolled %}
+    <div class="audit-result ok">
+      Η εφαρμογή επανήλθε στο event <b>#{{ rolled }}</b>.
+      Διαγράφηκαν {{ removed }} μεταγενέστερα events και ξαναχτίστηκαν όλες οι προβολές.
+    </div>
+  {% elif request.args.get('error') %}
+    <div class="audit-result err">{{ request.args.get('error') }}</div>
+  {% endif %}
+
+  <div class="backup-actions">
+    <div>
+      <b>Backup / restore μέσω events</b>
+      <div class="muted">Το JSON περιέχει όλο το event log, metadata και SHA-256 checksum.</div>
+    </div>
+    <a class="ghost" href="{{ url_for('audit.backup') }}">⬇ Backup events</a>
+    <form method="post" enctype="multipart/form-data"
+          action="{{ url_for('audit.restore') }}"
+          onsubmit="return confirm('Να αντικατασταθεί ΟΛΗ η κατάσταση της εφαρμογής από αυτό το backup; Θα κρατηθεί αυτόματα safety backup στον server.');">
+      <label class="restore-file">
+        <span>Αρχείο backup</span>
+        <input type="file" name="backup" accept="application/json,.json" required>
+      </label>
+      <button class="run danger" type="submit">⬆ Restore events</button>
+    </form>
+  </div>
+  <div class="muted backup-note">
+    Το restore δεν ανακαλεί εξωτερικές υποβολές ή πληρωμές και δεν επαναφέρει
+    παραγόμενα αρχεία που έχουν διαγραφεί από τον δίσκο.
+  </div>
+
+  <form class="btnrow" style="margin-bottom:14px" method="get">
+    <label class="ref">Τύπος event
+      <select name="type" onchange="this.form.submit()">
+        <option value="">— όλοι —</option>
+        {% for t in types %}
+          <option value="{{ t }}" {{ 'selected' if t == etype }}>{{ t }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    {% if etype %}<a class="ghost" href="{{ url_for('audit.index') }}">Καθαρισμός</a>{% endif %}
+  </form>
+
+  {% if rows %}
+    <div class="muted" style="font-size:12.5px;margin-bottom:8px">
+      Εμφανίζονται τα {{ rows|length }} νεότερα (από {{ total }}).
+    </div>
+    <form id="rollback-form" method="post" action="{{ url_for('audit.rollback') }}"
+          onsubmit="return confirm('Να διαγραφούν ΟΡΙΣΤΙΚΑ όλα τα events μετά το επιλεγμένο σημείο; Η ενέργεια δεν αναιρείται και δεν ακυρώνει εξωτερικές υποβολές ή πληρωμές.');">
+      <div class="audit-actions">
+        <span>Επίλεξε τη γραμμή που θα παραμείνει ως τελευταίο event.<br>
+          <b>Δεν αναιρούνται ενέργειες που έγιναν ήδη σε ΕΡΓΑΝΗ, ΕΦΚΑ, ΑΑΔΕ ή τράπεζα.</b>
+        </span>
+        <button id="rollback-button" class="run danger" type="submit" disabled>
+          ↶ Επαναφορά στο επιλεγμένο σημείο
+        </button>
+      </div>
+    </form>
+    <table class="tbl audit-log">
+      <thead><tr>
+        <th></th><th>#</th><th>Χρόνος</th><th>Event</th><th>Αφορά</th><th>Aggregate</th><th>Δεδομένα</th>
+      </tr></thead>
+      <tbody>
+        {% for r in rows %}
+          <tr onclick="document.getElementById('event-{{ r.seq }}').click()">
+            <td onclick="event.stopPropagation()">
+              <input id="event-{{ r.seq }}" type="radio" name="seq" value="{{ r.seq }}"
+                     form="rollback-form" aria-label="Επιλογή event {{ r.seq }}"
+                     onchange="document.getElementById('rollback-button').disabled=false">
+            </td>
+            <td class="mono">{{ r.seq }}</td>
+            <td class="mono muted" style="font-size:11.5px;white-space:nowrap">
+              {{ r.occurred_at.strftime('%d/%m/%Y %H:%M:%S') }}
+            </td>
+            <td><b>{{ r.event }}</b></td>
+            <td>{{ r.who }}</td>
+            <td class="mono muted" style="font-size:11.5px">{{ r.aggregate }}</td>
+            <td class="mono" style="font-size:11.5px">
+              {% for k, v in r.payload.items() %}
+                {# ΩΜΟ payload event: οι ημερομηνίες σε ΗΗ/ΜΜ/ΕΕΕΕ (val_gr —
+                   αναδρομικά, ώστε να πιάνει και τα ISO κλειδιά των dict) #}
+                <span class="tag">{{ k }}={{ v|val_gr }}</span>
+              {% endfor %}
+            </td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  {% else %}
+    <div class="empty">Κανένα event.</div>
+  {% endif %}
+</div>
+{% endblock %}

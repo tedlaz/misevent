@@ -1,0 +1,26 @@
+# Python-generated files
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+
+# Virtual environments
+.venv
+apd_out/
+fmy_out/
+apodeijeis/
+payroll.db
+payroll.db.bak
+test_*.db
+data/backups/
+# ΖΩΝΤΑΝΕΣ ΒΑΣΕΙΣ (CLAUDE.md §1α): χρήστες & μητρώο εταιρειών, κοινές
+# νομοθετικές παράμετροι, ένα payroll.db ανά εταιρεία, κλειδί session.
+# ΧΩΡΙΣΤΑ από το data/, που είναι δεδομένα αναφοράς του repo.
+instance/
+# Πραγματικά αρχεία ΑΑΔΕ/ΕΦΚΑ με προσωπικά δεδομένα — ποτέ στο repo
+data/jl10.txt
+
+# Desktop build (build-windows.ps1)
+installer-output/

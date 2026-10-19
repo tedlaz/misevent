@@ -1,0 +1,15 @@
+<div id="hire-json-preview"
+     {% if not readonly %}
+       hx-post="{{ url_for('employments.hire_json_preview', employment_id=e.employment_id) }}"
+       hx-trigger="input from:closest form delay:500ms, change from:closest form delay:150ms"
+       hx-include="closest form" hx-target="this" hx-swap="outerHTML"
+     {% endif %}>
+  {% if json_error %}
+    <div class="warnbox">{{ json_error }}</div>
+  {% else %}
+    <label style="display:block;font-weight:700">WebE3N JSON
+      <textarea class="mono" readonly spellcheck="false"
+        style="display:block;width:100%;min-height:55vh;margin-top:8px;resize:vertical">{{ payload_json }}</textarea>
+    </label>
+  {% endif %}
+</div>

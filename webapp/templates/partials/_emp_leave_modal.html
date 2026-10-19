@@ -1,0 +1,63 @@
+{# Modal καταχώρησης άδειας (κανονική / ασθένεια / άνευ αποδοχών). #}
+{% set f = form or {} %}
+<div class="modal-backdrop">
+  <div class="modal">
+    <form hx-post="{{ url_for('employments.leave', employment_id=e.employment_id) }}"
+          hx-target="#employment-card" hx-swap="outerHTML">
+      <div class="mhead">
+        <h3>🏖️ Καταχώρηση άδειας — {{ e.full_name }}</h3>
+        <span class="muted" style="font-size:12.5px">
+          κανονική άδεια {{ year }}: {{ taken }}/{{ entitlement }} ημέρες,
+          υπόλοιπο {{ entitlement - taken }}</span>
+      </div>
+      <div class="mbody">
+        <div class="frm cols">
+          {% set sel = f.get('leave_type', 'ANNUAL') %}
+          <label>Τύπος
+            <select name="leave_type">
+              <option value="ANNUAL" {{ 'selected' if sel == 'ANNUAL' }}>Κανονική άδεια</option>
+              <option value="SICK" {{ 'selected' if sel == 'SICK' }}>Ασθένεια</option>
+              <option value="UNPAID" {{ 'selected' if sel == 'UNPAID' }}>Άδεια άνευ αποδοχών</option>
+            </select></label>
+          <label>Σημειώσεις<input name="notes" value="{{ f.get('notes', '') }}"></label>
+          <div class="leave-range wide" data-leave-range>
+            <span class="leave-range-label">Περίοδος άδειας</span>
+            <input type="hidden" name="date_from"
+                   value="{{ f.get('date_from', '') }}">
+            <input type="hidden" name="date_to"
+                   value="{{ f.get('date_to', '') }}">
+            <button type="button" class="leave-range-trigger"
+                    aria-haspopup="dialog" aria-expanded="false">
+              <span class="leave-range-value">Επιλέξτε ημερομηνίες</span>
+              <span class="leave-range-icon" aria-hidden="true">📅</span>
+            </button>
+            <div class="leave-range-popover" role="dialog"
+                 aria-label="Επιλογή περιόδου άδειας" hidden>
+              <div class="leave-range-head">
+                <button type="button" data-range-prev
+                        aria-label="Προηγούμενος μήνας">‹</button>
+                <strong data-range-month></strong>
+                <button type="button" data-range-next
+                        aria-label="Επόμενος μήνας">›</button>
+              </div>
+              <div class="leave-range-weekdays" aria-hidden="true">
+                <span>Δε</span><span>Τρ</span><span>Τε</span><span>Πέ</span>
+                <span>Πα</span><span>Σά</span><span>Κυ</span>
+              </div>
+              <div class="leave-range-days" data-range-days></div>
+              <div class="leave-range-hint" data-range-hint>
+                Επιλέξτε την πρώτη ημέρα της άδειας
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="mfoot">
+        <button type="button" class="ghost"
+                hx-get="{{ url_for('employments.modal_close') }}"
+                hx-target="#modal-host" hx-swap="innerHTML">Άκυρο</button>
+        <button class="run" type="submit">Καταχώρηση</button>
+      </div>
+    </form>
+  </div>
+</div>

@@ -1,0 +1,48 @@
+{# Γενικό modal παραμέτρων: μία φόρμα ανά οικογένεια (fields από το view).
+   `entry` = υπάρχουσα εγγραφή (διόρθωση — ίδιο valid_from = αντικατάσταση)
+   ή None (νέα ισχύς). Σφάλμα: ξαναγυρνά με form=τα δεδομένα του χρήστη. #}
+{% set f = form or {} %}
+<div class="modal-backdrop">
+  <div class="modal">
+    <form hx-post="{{ url_for('settings.param_save', family=family) }}"
+          hx-target="#set-panel" hx-swap="outerHTML">
+      <div class="mhead">
+        <h3>{{ '✏️' if entry else '➕' }} {{ label }}</h3>
+        <span class="muted" style="font-size:12.5px">
+          καταγράφεται ως event — οι υπολογισμοί κάθε περιόδου χρησιμοποιούν
+          τις τιμές που ίσχυαν τότε· ίδια «ισχύς από» = αντικατάσταση</span>
+      </div>
+      <div class="mbody">
+        <div class="frm cols">
+          <label>Ισχύς από<input type="date" name="valid_from" required
+            value="{{ f.get('valid_from',
+                     entry.valid_from.isoformat() if entry else '') }}"></label>
+          {% for name, flabel, typ in fields %}
+            <label>{{ flabel }}
+              {% if entry %}
+                {% set cur = entry|attr(name) %}
+              {% endif %}
+              {% if typ == 'int' %}
+                <input type="number" name="{{ name }}" step="1" min="0" required
+                  value="{{ f.get(name, cur if entry else '') }}">
+              {% elif typ == 'pct' %}
+                <input type="number" name="{{ name }}" step="0.01" min="0"
+                  max="499" required
+                  value="{{ f.get(name, '%.2f'|format(cur * 100) if entry else '') }}">
+              {% else %}
+                <input type="number" name="{{ name }}" step="0.01" min="0" required
+                  value="{{ f.get(name, '%.2f'|format(cur) if entry else '') }}">
+              {% endif %}
+            </label>
+          {% endfor %}
+        </div>
+      </div>
+      <div class="mfoot">
+        <button type="button" class="ghost"
+                hx-get="{{ url_for('settings.modal_close') }}"
+                hx-target="#modal-host" hx-swap="innerHTML">Άκυρο</button>
+        <button class="run" type="submit">Αποθήκευση</button>
+      </div>
+    </form>
+  </div>
+</div>

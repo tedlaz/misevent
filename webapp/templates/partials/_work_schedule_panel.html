@@ -1,0 +1,170 @@
+{% from "_macros.html" import emp_state_short %}
+<div id="work-schedule-panel" class="work-schedule-planner"
+     data-work-schedule-planner data-year="{{ year }}" data-days="{{ day_count }}"
+     data-day-url="{{ url_for('work_schedules.day_overview') }}"
+     data-bulk-url="{{ url_for('work_schedules.bulk_update') }}"
+     data-week-paste-url="{{ url_for('work_schedules.paste_week') }}"
+     data-erg-weeks-url="{{ url_for('work_schedules.submit_ergani_weeks') }}"
+     data-erg-revert-url="{{ url_for('work_schedules.revert_changes') }}"
+     data-closed-end="{{ closed_end.isoformat() if closed_end else '' }}"
+     data-closed-label="{{ closed_label }}"
+     style="--work-days:{{ day_count }};--work-timeline-width:850px">
+  <div class="work-toolbar card">
+    <div>
+      <h2>Ετήσιο πρόγραμμα {{ year }}</h2>
+      <p>Κλικ σε μήνα/εβδομάδα για εστίαση · Ctrl ή Shift για μαζική επιλογή ημερών.</p>
+    </div>
+    <div class="work-toolbar-actions">
+      <div class="work-zoom" role="group" aria-label="Μεγέθυνση προγράμματος">
+        <button class="ghost" type="button" data-work-zoom-out
+                aria-label="Σμίκρυνση">−</button>
+        <button class="ghost work-zoom-level" type="button" data-work-zoom-reset
+                title="Επαναφορά στην προβολή έτους">
+          <span data-work-zoom-label>1×</span>
+        </button>
+        <button class="ghost" type="button" data-work-zoom-in
+                aria-label="Μεγέθυνση">+</button>
+      </div>
+      <div class="leave-year-nav">
+        <a class="ghost" href="{{ url_for('work_schedules.index', year=year-1) }}"
+           aria-label="Προηγούμενο έτος">‹</a>
+        <form action="{{ url_for('work_schedules.index') }}" method="get">
+          <label>Έτος <input type="number" name="year" min="1900" max="2100"
+                             value="{{ year }}"></label>
+          <button class="ghost" type="submit">Προβολή</button>
+        </form>
+        <a class="ghost" href="{{ url_for('work_schedules.index', year=year+1) }}"
+           aria-label="Επόμενο έτος">›</a>
+      </div>
+    </div>
+  </div>
+
+  <div class="work-legend" aria-label="Υπόμνημα προγράμματος">
+    <span><i class="work-key work"></i>Εργασία</span>
+    <span><i class="work-key off"></i>Ρεπό</span>
+    <span><i class="work-key telework"></i>Τηλεργασία</span>
+    <span><i class="work-key override"></i>Ημερήσια μεταβολή</span>
+    <span><i class="work-key holiday"></i>Αργία</span>
+    <span><i class="work-key leave"></i>Άδεια</span>
+    <span><i class="work-key submitted"></i>Υποβεβλημένο</span>
+    <span><i class="work-key modified"></i>Τροποποιημένο</span>
+    <span><i class="work-key pending"></i>Αδήλωτο</span>
+    <span><i class="work-key closed"></i>Κλεισμένη μισθοδοσία</span>
+    <span><i class="work-key contract-end"></i>Λήξη σύμβασης ορισμένου χρόνου</span>
+    <small>Κλικ σε εβδομάδα = zoom · Ctrl/Shift + κλικ σε εβδομάδα = επιλογή για υποβολή</small>
+  </div>
+
+  {% if next_week %}
+    <div class="work-next-alert" role="alert">
+      ⚠️ Η <b>επόμενη εβδομάδα</b> ({{ next_week.label }}) δεν έχει δηλωμένο
+      πρόγραμμα στο ΕΡΓΑΝΗ για: <b>{{ next_week.names|join(', ') }}</b>.
+      Δήλωσέ το έγκαιρα από το κουμπί «ΕΡΓΑΝΗ» της κάθε γραμμής.
+    </div>
+  {% endif %}
+
+  <div class="work-board card">
+    <div class="work-board-scroll" data-work-scroll>
+      <div class="work-head">
+        <div class="work-name-head">Εργαζόμενος / σύνοψη έτους</div>
+        <div class="work-time-head">
+          <div class="work-months">
+            {% for month in months %}
+              <div style="flex:{{ month.count }} 0 0"
+                   data-work-range data-start-index="{{ month.start_index }}"
+                   data-end-index="{{ month.end_index }}"
+                   title="Κλικ: προβολή {{ month.label }}"><span
+                   class="work-month-label">{{ month.label }}</span></div>
+            {% endfor %}
+          </div>
+          <div class="work-weeks">
+            {% for week in weeks %}
+              <div style="flex:{{ week.count }} 0 0"
+                   data-work-range data-work-week
+                   data-week-start="{{ week.week_start.isoformat() }}"
+                   data-start-index="{{ week.start_index }}"
+                   data-end-index="{{ week.end_index }}"
+                   title="Κλικ: {{ week.title }} · Δεξί κλικ: αντιγραφή/επικόλληση">
+                {{ week.label }}
+              </div>
+            {% endfor %}
+          </div>
+          <div class="work-day-heads">
+            {% for item in days %}
+              <div class="{{ 'weekend' if item.weekend }} {{ 'holiday' if item.holiday }} {{ 'today' if item.today }} {{ 'month-start' if item.month_start }} {{ 'closed' if item.closed }}"
+                   data-work-date="{{ item.date.isoformat() }}"
+                   data-day-index="{{ item.index }}"
+                   data-closed="{{ 1 if item.closed else 0 }}"
+                   title="{{ 'Κλεισμένη μισθοδοσία — κλειδωμένη ημέρα' if item.closed else 'Κλικ: προβολή ' ~ (item.date|date_gr) }}">
+                <span>{{ item.dow }}</span><b>{{ item.day }}</b>
+              </div>
+            {% endfor %}
+          </div>
+        </div>
+      </div>
+
+      {% for row in rows %}
+        <div class="work-row" style="--row-index:{{ loop.index0 }}">
+          <div class="work-employee">
+            <a class="work-employee-link"
+               href="{{ url_for('employments.detail', employment_id=row.employment.employment_id) }}">
+              <b>{{ row.employment.full_name }}</b>
+              <small>{{ emp_state_short(row.employment) }}
+                · {{ 'Μεταβλητό' if row.mode == 'variable' else 'Σταθερό' }}
+                {%- if row.employment.employment_relationship == '1' and row.employment.fixed_term_to %}
+                  · Σύμβαση έως {{ row.employment.fixed_term_to|date_gr }}
+                {%- endif %}
+                {%- if row.telework_days %} · {{ row.telework_days }} τηλ.{% endif %}</small>
+            </a>
+            {% if row.pending_count or row.modified_count %}
+              <button class="work-erg-btn" type="button"
+                      title="{{ row.pending_count }} αδήλωτες, {{ row.modified_count }} τροποποιημένες ημέρες — υποβολή στο ΕΡΓΑΝΗ"
+                      hx-get="{{ url_for('work_schedules.ergani_modal', employment_id=row.employment.employment_id, year=year) }}"
+                      hx-target="#modal-host" hx-swap="innerHTML">
+                ⇧ ΕΡΓΑΝΗ
+                {% if row.pending_count %}<b>{{ row.pending_count }}</b>{% endif %}
+                {% if row.modified_count %}<b class="mod">{{ row.modified_count }}</b>{% endif %}
+              </button>
+            {% elif row.employment.active %}
+              <span class="work-erg-ok" title="Το πρόγραμμα είναι δηλωμένο στο ΕΡΓΑΝΗ">✓ ΕΡΓΑΝΗ</span>
+            {% endif %}
+          </div>
+          <div class="work-track"
+               data-work-track
+               data-employment-id="{{ row.employment.employment_id }}"
+               data-modal-url="{{ url_for('work_schedules.day_modal', employment_id=row.employment.employment_id) }}"
+               data-active-from="{{ row.employment.hire_date.isoformat() if row.employment.hire_date else '' }}"
+               data-active-to="{{ row.employment.termination_date.isoformat() if row.employment.termination_date else '' }}">
+            {% for cell in row.cells %}
+              <div class="work-day-cell state-{{ cell.state }}
+                          cov-{{ cell.coverage }} {{ 'upcoming' if cell.upcoming }}
+                          {{ 'weekend' if cell.weekend }}
+                          {{ 'holiday' if cell.holiday }}
+                          {{ 'override' if cell.override }}
+                          {{ 'mixed' if cell.mixed }}
+                          {{ 'has-leave leave-' ~ cell.leave.leave_type.value if cell.leave }}
+                          {{ 'today' if cell.today }}
+                          {{ 'closed' if cell.closed }}
+                          {{ 'contract-end' if cell.contract_end }}
+                          {{ 'month-start' if cell.month_start }}"
+                   data-work-day data-date="{{ cell.date.isoformat() }}"
+                   data-day-index="{{ cell.index }}"
+                   data-active="{{ 1 if cell.active else 0 }}"
+                   data-closed="{{ 1 if cell.closed else 0 }}"
+                   aria-label="{{ cell.title }}" title="Κλικ: {{ cell.title }}">
+                {% if cell.active %}
+                  <span class="work-day-mark" aria-hidden="true"></span>
+                  <b class="work-day-code">{{ cell.short if cell.short else 'Ρ' }}</b>
+                  {% if cell.leave %}<i class="work-leave-mark"
+                    title="{{ cell.leave_label }}" aria-hidden="true"></i>{% endif %}
+                {% endif %}
+              </div>
+            {% endfor %}
+          </div>
+        </div>
+      {% else %}
+        <div class="empty">Δεν υπάρχουν απασχολήσεις για το {{ year }}.</div>
+      {% endfor %}
+    </div>
+  </div>
+  <div id="modal-host"></div>
+</div>

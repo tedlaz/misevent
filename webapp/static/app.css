@@ -1,0 +1,2293 @@
+/* Μισθοδοσία — φύλλο στυλ.
+   Τα design tokens και τα status χρώματα (done/ready/warn/prob) είναι
+   ΑΥΤΟΥΣΙΑ από το προηγούμενο single-file webapp. */
+:root{
+  --paper:#F6F8FB; --card:#FFFFFF; --ink:#17242F; --muted:#5D6B78;
+  --line:#E2E8EF;
+  --done:#9AA6B1; --done-bg:#EEF1F4;
+  --ready:#1F9D55; --ready-bg:#E7F6EE;
+  --warn:#E8890C; --warn-bg:#FDF1E0;
+  --prob:#D64545; --prob-bg:#FBE9E9;
+  --mono:'IBM Plex Mono',ui-monospace,monospace;
+  --nav:248px;
+}
+*{box-sizing:border-box;margin:0}
+body{background:var(--paper);color:var(--ink);
+  font-family:'IBM Plex Sans',system-ui,sans-serif;font-size:15px}
+a{color:inherit;text-decoration:none}
+
+/* ------------------------------------------------ Σκελετός: nav + main */
+.shell{display:grid;grid-template-columns:var(--nav) 1fr;min-height:100vh}
+@media(max-width:900px){.shell{grid-template-columns:1fr}
+  nav.side{position:static;height:auto}}
+
+nav.side{background:var(--card);border-right:1px solid var(--line);
+  padding:18px 14px;position:sticky;top:0;height:100vh;overflow:auto}
+nav.side .brand{font-size:16px;font-weight:700;letter-spacing:.2px;
+  padding:0 10px 4px}
+nav.side .co{font-size:12px;color:var(--muted);padding:0 10px 16px;
+  display:block;line-height:1.4}
+
+/* ΠΤΥΣΣΟΜΕΝΕΣ ΟΜΑΔΕΣ: native <details>/<summary> — το άνοιγμα/κλείσιμο δεν
+   χρειάζεται καθόλου JS (ίδιο μοτίβο με τα CSS-only tabs). Το `nav-fold.js`
+   προσθέτει ΜΟΝΟ τη μνήμη μεταξύ σελίδων. */
+nav.side details.navgrp{margin-top:2px}
+nav.side summary.navgrp-h{display:flex;gap:10px;align-items:center;
+  padding:9px 10px;border-radius:9px;cursor:pointer;
+  font-size:10.5px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;
+  color:var(--muted);user-select:none;list-style:none}
+nav.side summary.navgrp-h::-webkit-details-marker{display:none}
+nav.side summary.navgrp-h:hover{background:var(--paper);color:var(--ink)}
+nav.side summary.navgrp-h .ic{font-size:14px;width:20px;text-align:center;
+  filter:grayscale(1);opacity:.75}
+nav.side details[open] summary.navgrp-h{color:var(--ink)}
+nav.side details[open] summary.navgrp-h .ic{filter:none;opacity:1}
+/* Το βελάκι δείχνει δεξιά όταν είναι κλειστό, κάτω όταν ανοίγει */
+nav.side summary.navgrp-h .chev{margin-left:auto;font-size:15px;line-height:1;
+  color:var(--muted);transition:transform .2s var(--ease)}
+nav.side details[open] summary.navgrp-h .chev{transform:rotate(90deg)}
+/* Οι σελίδες μιας ομάδας: με εσοχή και λεπτή κάθετη γραμμή, ώστε να
+   διαβάζεται η ιεραρχία χωρίς πλαίσιο */
+nav.side a.nl.sub{margin-left:19px;padding-left:12px;
+  border-left:1px solid var(--line);border-radius:0 9px 9px 0}
+nav.side details[open] > a.nl.sub{animation:navin .18s var(--ease) both}
+@keyframes navin{from{opacity:0;transform:translateY(-3px)}
+  to{opacity:1;transform:none}}
+nav.side a.nl{display:flex;gap:10px;align-items:center;padding:9px 10px;
+  border-radius:9px;font-size:14px;font-weight:500;color:var(--ink)}
+nav.side a.nl:hover{background:var(--paper)}
+nav.side a.nl.on{background:var(--paper);font-weight:700;
+  box-shadow:inset 3px 0 0 var(--ink)}
+nav.side a.nl .ic{font-size:16px;width:20px;text-align:center}
+nav.side a.nl .n{margin-left:auto;font-family:var(--mono);font-size:11.5px;
+  color:var(--muted)}
+
+header{background:var(--card);border-bottom:1px solid var(--line);
+  padding:14px 24px;display:flex;flex-wrap:wrap;gap:16px;align-items:center;
+  position:sticky;top:0;z-index:5}
+header h1{font-size:17px;font-weight:700;letter-spacing:.2px}
+header .sub{color:var(--muted);font-size:13px}
+header .grow{flex:1}
+label.ref{font-size:13px;color:var(--muted);display:flex;gap:8px;
+  align-items:center}
+
+/* Ημερομηνία αναφοράς ("σήμερα" του UI) — τονίζεται όταν είναι εικονική */
+header form.clock{display:flex;gap:8px;align-items:center;padding:4px 6px;
+  border-radius:10px}
+header form.clock.sim{background:var(--warn-bg);
+  box-shadow:inset 0 0 0 1px var(--warn)}
+header form.clock.sim label.ref{color:var(--warn);font-weight:600}
+input[type=date]{font:inherit;border:1px solid var(--line);border-radius:8px;
+  padding:6px 8px;background:var(--card);color:var(--ink)}
+
+main{max-width:1240px;margin:0 auto;padding:20px 24px;display:flex;
+  flex-direction:column;gap:20px;width:100%}
+.grid-2{display:grid;grid-template-columns:minmax(430px,1.15fr) 1fr;gap:20px;
+  align-items:start}
+@media(max-width:960px){.grid-2{grid-template-columns:1fr}}
+
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;
+  padding:18px}
+.card h2{font-size:12px;font-weight:600;letter-spacing:.12em;
+  text-transform:uppercase;color:var(--muted);margin-bottom:14px}
+.card h2 .norm{text-transform:none;letter-spacing:0;font-weight:500}
+
+/* ------------------------------------------------------ κάρτες κατάστασης */
+.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}
+@media(max-width:760px){.stats{grid-template-columns:repeat(2,1fr)}}
+.stat{border-radius:14px;padding:14px 16px;border:1px solid var(--line);
+  background:var(--card)}
+.stat b{display:block;font-size:30px;font-family:var(--mono);line-height:1.1}
+.stat span{font-size:12.5px;color:var(--muted)}
+.stat.s-done{border-color:var(--done)} .stat.s-done b{color:var(--done)}
+.stat.s-ready{border-color:var(--ready)} .stat.s-ready b{color:var(--ready)}
+.stat.s-warn{border-color:var(--warn)} .stat.s-warn b{color:var(--warn)}
+.stat.s-prob{border-color:var(--prob)} .stat.s-prob b{color:var(--prob)}
+
+/* ------------------------------------------------------------ χρονολόγιο */
+#timeline{max-height:640px;overflow:auto;padding-right:4px}
+.month-h{font-family:var(--mono);font-size:12px;color:var(--muted);
+  letter-spacing:.08em;margin:14px 0 6px;padding-left:34px}
+.ob{display:flex;gap:12px;align-items:flex-start;padding:9px 10px 9px 6px;
+  border-radius:10px;cursor:pointer;position:relative}
+.ob:hover{background:var(--paper)}
+.ob.sel{outline:2px solid var(--ink);background:var(--paper)}
+.rail{width:22px;display:flex;flex-direction:column;align-items:center;
+  align-self:stretch}
+.dot{width:14px;height:14px;border-radius:50%;border:3px solid;flex:none;
+  margin-top:3px;background:var(--card)}
+.rail .ln{flex:1;width:2px;background:var(--line);margin-top:2px}
+.ob:last-child .ln{background:transparent}
+.d-done{border-color:var(--done);background:var(--done)}
+.d-ready{border-color:var(--ready)}
+.d-warning{border-color:var(--warn)}
+.d-problem{border-color:var(--prob);background:var(--prob)}
+.ob .body{flex:1;min-width:0}
+.ob .t{font-weight:600;font-size:14.5px;display:flex;gap:8px;
+  align-items:baseline;flex-wrap:wrap}
+.ob .t .ic{font-size:15px}
+.ob.done .t{color:var(--done);text-decoration:line-through
+  rgba(154,166,177,.7)}
+.ob .m{font-size:12.5px;color:var(--muted);font-family:var(--mono)}
+.ob .reason{font-size:12.5px;color:var(--prob);margin-top:2px}
+.pill{font-size:11px;font-weight:600;border-radius:99px;padding:2px 9px;
+  white-space:nowrap;align-self:center}
+.p-done{background:var(--done-bg);color:var(--done)}
+.p-ready{background:var(--ready-bg);color:var(--ready)}
+.p-warning{background:var(--warn-bg);color:var(--warn)}
+.p-problem{background:var(--prob-bg);color:var(--prob)}
+
+/* --------------------------------------------------------------- κουμπιά */
+button.run,a.run{font:inherit;font-weight:600;border:0;border-radius:9px;
+  padding:7px 14px;cursor:pointer;background:var(--ready);color:#fff;
+  display:inline-block;text-align:center}
+button.run:disabled{background:var(--done-bg);color:var(--done);
+  cursor:not-allowed}
+button.run.danger{background:var(--prob)}
+/* Προειδοποίηση εκπρόθεσμης — επιτρέπεται η υποβολή, με ρίσκο προστίμου */
+.warnbox{background:var(--prob-bg);border:1px solid var(--prob);color:var(--prob);
+  border-radius:10px;padding:10px 12px;font-size:13px;line-height:1.5;
+  margin:8px 0}
+/* Κλεισμένη περίοδος: ίδιο μωβ με τις κλειδωμένες ζώνες των grid */
+.warnbox.closedbox{background:#F1EAFA;border-color:#9771C9;color:#5F4788}
+button.ghost,a.ghost{font:inherit;border:1px solid var(--line);
+  background:var(--card);border-radius:9px;padding:7px 14px;cursor:pointer;
+  display:inline-block}
+button.ghost.on{background:var(--ink);color:var(--card);border-color:var(--ink);
+  font-weight:600}
+.btnrow{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+
+/* ------------------------------------------------------------- λίστες/emp */
+.col{display:flex;flex-direction:column;gap:20px}
+.emp{display:flex;gap:10px;align-items:center;padding:9px 0;
+  border-bottom:1px dashed var(--line)}
+.emp:last-child{border-bottom:0}
+.avatar{width:36px;height:36px;border-radius:50%;background:var(--paper);
+  border:1px solid var(--line);display:grid;place-items:center;font-size:17px}
+.emp .n{font-weight:600;font-size:14px}
+.emp .d{font-size:12px;color:var(--muted);font-family:var(--mono)}
+.tag{font-size:10.5px;font-weight:700;border-radius:5px;padding:1.5px 6px;
+  background:var(--paper);border:1px solid var(--line);color:var(--muted)}
+.tag.teka{color:#7A4DB8;border-color:#D9C9F2;background:#F4EEFB}
+.tag.ok{color:var(--ready);border-color:#BFE6CF;background:var(--ready-bg)}
+.tag.off{color:var(--done);border-color:var(--line);background:var(--done-bg)}
+.tag.warn{color:var(--warn);border-color:#F3D9AE;background:var(--warn-bg)}
+.tag.lnk-tag{text-decoration:none;cursor:pointer}
+button.tag.lnk-tag{font-family:inherit;font-size:10.5px;font-weight:700}
+.tag.lnk-tag:hover{border-color:#2D7DD2;color:#2D7DD2}
+.tag.warn.lnk-tag:hover{border-color:var(--warn);color:var(--warn)}
+
+/* CSS-only tabs (χωρίς JS): το checked radio «οδηγεί» το ενεργό pane.
+   Δύο μορφές, ίδια ονοματολογία:
+   (α) ΑΔΕΛΦΙΚΑ panes (~)  — φόρμα πρόσληψης,
+   (β) panes σε ΟΠΟΙΟΔΗΠΟΤΕ βάθος μέσα σε .tabs (:has) — σελίδα Εταιρεία,
+       όπου ένα htmx fragment (#spec-panel) περιέχει δύο panes.
+   Νέα ομάδα tabs = νέα ζευγάρια επιλογέων στα δύο group παρακάτω. */
+.tabradio{display:none}
+.tabbar{display:flex;gap:2px;border-bottom:1px solid var(--line);margin:2px 0 16px}
+.tabbar label{padding:8px 16px;cursor:pointer;font-weight:600;color:var(--muted);
+  border:1px solid transparent;border-bottom:none;border-radius:8px 8px 0 0;
+  margin-bottom:-1px}
+.tabbar label:hover{color:var(--ink)}
+.tabbar label.is-disabled{opacity:.42;cursor:not-allowed;color:var(--muted)}
+.tabbar label.is-disabled:hover{color:var(--muted)}
+.tabpane{display:none}
+/* ενεργό pane */
+#tab-general:checked ~ .tabpane.tp-general,
+#tab-foreign:checked ~ .tabpane.tp-foreign,
+#tab-oaed:checked ~ .tabpane.tp-oaed,
+#tab-schedule:checked ~ .tabpane.tp-schedule,
+#tab-json:checked ~ .tabpane.tp-json,
+.tabs:has(#tab-employer:checked) .tp-employer,
+.tabs:has(#tab-branches:checked) .tp-branches,
+.tabs:has(#tab-specialties:checked) .tp-specialties,
+.tabs:has(#tab-kpk:checked) .tp-kpk{display:block}
+/* ενεργή ετικέτα */
+#tab-general:checked ~ .tabbar label[for=tab-general],
+#tab-foreign:checked ~ .tabbar label[for=tab-foreign],
+#tab-oaed:checked ~ .tabbar label[for=tab-oaed],
+#tab-schedule:checked ~ .tabbar label[for=tab-schedule],
+#tab-json:checked ~ .tabbar label[for=tab-json],
+.tabs:has(#tab-employer:checked) .tabbar label[for=tab-employer],
+.tabs:has(#tab-branches:checked) .tabbar label[for=tab-branches],
+.tabs:has(#tab-specialties:checked) .tabbar label[for=tab-specialties],
+.tabs:has(#tab-kpk:checked) .tabbar label[for=tab-kpk]{
+  color:var(--ink);background:var(--card);border-color:var(--line);
+  border-bottom:1px solid var(--card)}
+.legend{display:flex;gap:14px;flex-wrap:wrap;font-size:12.5px;
+  color:var(--muted);margin-bottom:10px}
+.legend i{width:10px;height:10px;border-radius:50%;display:inline-block;
+  margin-right:5px}
+
+/* --------------------------------------------------------------- πίνακες */
+table.tbl{width:100%;border-collapse:collapse;font-size:13px}
+table.tbl th{font-weight:600;color:var(--muted);text-align:left;
+  border-bottom:1px solid var(--line);padding:7px 8px;font-size:11.5px;
+  letter-spacing:.04em;text-transform:uppercase;white-space:nowrap}
+table.tbl td{padding:8px;border-bottom:1px dashed var(--line);
+  vertical-align:middle}
+table.tbl tbody tr:hover{background:var(--paper)}
+table.tbl td.num{font-family:var(--mono);text-align:right;white-space:nowrap}
+/* Η κεφαλίδα αριθμητικής στήλης ΑΚΟΛΟΥΘΕΙ τα κελιά της (δεξιά στοίχιση) —
+   αλλιώς ο τίτλος «κρέμεται» αριστερά πάνω από δεξιά στοιχισμένους αριθμούς. */
+table.tbl th.num{text-align:right}
+table.tbl tr.tot td{font-weight:700;border-top:2px solid var(--line);
+  border-bottom:0;background:var(--paper)}
+/* Γραμμή ΑΦΑΙΡΕΣΗΣ κάτω από ένα σύνολο (π.χ. «μείον υπόλοιπο αδείας»):
+   ανήκει στο σύνολο, δεν είναι δικό της νούμερο — γι' αυτό μπαίνει με τη
+   γραμματοσειρά του σώματος και χωρίς πάνω περίγραμμα. */
+table.tbl tr.sub td{border-bottom:0;background:var(--paper);
+  color:var(--muted);font-size:12.5px}
+table.tbl a.lnk{font-weight:600;border-bottom:1px solid var(--line)}
+table.tbl a.lnk:hover{border-color:var(--ink)}
+
+/* ---------------------------------------------- πίνακας λεπτομερειών */
+.detail table{width:100%;border-collapse:collapse;font-size:12.5px;
+  margin-top:10px}
+.detail th{font-weight:600;color:var(--muted);text-align:left;
+  border-bottom:1px solid var(--line);padding:5px 6px;font-size:11.5px}
+.detail td{padding:5px 6px;border-bottom:1px dashed var(--line);
+  font-family:var(--mono)}
+.detail td:first-child{font-family:'IBM Plex Sans',sans-serif}
+.detail tr.tot td{font-weight:600;border-top:2px solid var(--line);
+  border-bottom:0}
+.detail .step{display:flex;gap:8px;font-size:13.5px;margin:6px 0;
+  line-height:1.45}
+.detail .step::before{content:'▸';color:var(--muted)}
+.detail .fact{display:flex;justify-content:space-between;font-size:13px;
+  padding:4px 0;border-bottom:1px dashed var(--line)}
+.detail .fact b{font-family:var(--mono)}
+.detail .dhead{display:flex;gap:10px;align-items:center;margin-bottom:8px;
+  flex-wrap:wrap}
+.detail .dhead .t{font-weight:700;font-size:15px}
+.detail .mode{font-size:11px;font-weight:700;letter-spacing:.08em;
+  text-transform:uppercase;border-radius:5px;padding:2px 8px}
+.detail .mode.will{background:var(--ready-bg);color:var(--ready)}
+.detail .mode.did{background:var(--done-bg);color:var(--done)}
+.detail .chain{display:flex;flex-wrap:wrap;gap:6px;align-items:center;
+  margin:8px 0;padding:8px 10px;background:var(--paper);border-radius:9px}
+.detail .chain .ct{font-size:10.5px;font-weight:700;letter-spacing:.08em;
+  text-transform:uppercase;color:var(--muted);margin-right:2px}
+.detail .dep{font-size:12px;border-radius:6px;padding:2.5px 8px;
+  border:1px solid var(--line);background:var(--card)}
+.detail .dep.ok{color:var(--done);text-decoration:line-through}
+.detail .dep.no{color:var(--prob);border-color:var(--prob);font-weight:600}
+.detail .dep.next{color:var(--ink)}
+
+/* ---------------------------------------------------------------- φόρμες */
+.frm{display:flex;flex-direction:column;gap:9px}
+.frm.cols{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+@media(max-width:640px){.frm.cols{grid-template-columns:1fr}}
+.frm .wide{grid-column:1/-1}
+.frm label{font-size:12px;color:var(--muted);display:flex;min-width:0;
+  flex-direction:column;gap:3px}
+.frm label.chk{flex-direction:row;align-items:center;gap:8px;
+  font-size:13px;color:var(--ink)}
+.frm input,.frm select{font:inherit;font-size:13.5px;border:1px solid
+  var(--line);border-radius:8px;padding:7px 9px;background:var(--card);
+  color:var(--ink);width:100%;min-width:0;max-width:100%}
+/* Τα checkbox/radio ΔΕΝ παίρνουν το width:100% ούτε το «κουτί» των πεδίων
+   κειμένου — αλλιώς τεντώνονται και σπρώχνουν την ετικέτα μακριά. */
+.frm input[type=checkbox],.frm input[type=radio]{width:auto;flex:none;
+  padding:0;margin:0;border-radius:0}
+.frm small{color:var(--warn);font-size:11.5px}
+.frm .dayrow{display:flex;gap:8px;align-items:center;margin:3px 0}
+.frm .dayrow b{width:34px;font-size:12px;color:var(--muted)}
+.frm .row{display:flex;gap:6px}
+
+/* ------------------------------------ Κεντρικός ετήσιος προγραμματισμός */
+.leave-toolbar{display:flex;align-items:center;justify-content:space-between;gap:18px}
+.leave-toolbar h2{margin-bottom:4px}.leave-toolbar p{font-size:12.5px;color:var(--muted)}
+.leave-toolbar-actions,.leave-zoom{display:flex;align-items:center;gap:8px}
+.leave-zoom{padding-right:10px;border-right:1px solid var(--line)}
+.leave-zoom button{min-width:36px;padding-left:10px;padding-right:10px}
+.leave-zoom button:disabled{opacity:.35;cursor:not-allowed;transform:none}
+.leave-zoom .leave-zoom-level{min-width:48px;font-family:var(--mono);font-size:12px}
+.leave-year-nav,.leave-year-nav form{display:flex;align-items:center;gap:8px}
+.leave-year-nav label{font-size:12px;color:var(--muted);display:flex;align-items:center;gap:6px}
+.leave-year-nav input{width:84px;font:inherit;border:1px solid var(--line);
+  border-radius:8px;padding:7px 8px;color:var(--ink);background:var(--card)}
+.leave-legend{display:flex;gap:16px;flex-wrap:wrap;color:var(--muted);font-size:12px;
+  padding:0 4px}
+.leave-legend span{display:flex;align-items:center;gap:6px}
+.leave-color{width:12px;height:12px;border-radius:4px;display:inline-block}
+.leave-accrual-key{margin-left:auto}.leave-accrual-key>i{width:26px;height:8px;
+  border-radius:8px;background:linear-gradient(90deg,#CFEBDD,#F5D9A7,#F2B5B5)}
+.leave-board{padding:0;overflow:hidden}.leave-board-scroll{overflow:auto}
+.leave-head,.leave-row{display:grid;
+  grid-template-columns:235px minmax(var(--leave-timeline-width,850px),1fr);
+  min-width:calc(235px + var(--leave-timeline-width,850px))}
+.leave-head{position:sticky;top:0;z-index:5;background:var(--card);
+  border-bottom:1px solid var(--line)}
+.leave-name-head{padding:12px 14px;font-size:10.5px;font-weight:700;color:var(--muted);
+  letter-spacing:.06em;text-transform:uppercase;border-right:1px solid var(--line)}
+.leave-months,.leave-month-lines{display:flex;width:100%}
+.leave-months div{padding:12px 2px;text-align:center;font-size:10.5px;font-weight:700;
+  color:var(--muted);text-transform:uppercase;border-right:1px solid var(--line)}
+.leave-row{border-bottom:1px solid var(--line);animation:leave-row-in .32s ease-out both;
+  animation-delay:min(calc(var(--row-index) * 35ms),280ms)}
+.leave-row:last-child{border-bottom:0}
+.leave-employee{position:sticky;left:0;z-index:4;background:var(--card);padding:8px 12px;
+  border-right:1px solid var(--line);display:flex;flex-direction:column;justify-content:center}
+.leave-employee:hover b{text-decoration:underline}.leave-employee b{font-size:13px}
+.leave-employee small{font-size:10.5px;color:var(--muted);margin-top:2px}
+.leave-balance-summary{display:grid;grid-template-columns:repeat(3,1fr);gap:4px;margin-top:7px;
+  padding:5px;border:1px solid var(--line);border-radius:9px;background:var(--paper);
+  transition:border-color .2s ease,background .2s ease,transform .2s ease}
+.leave-balance-summary span{min-width:0;text-align:center}.leave-balance-summary em{
+  display:block;color:var(--muted);font-size:8px;font-style:normal;text-transform:uppercase;
+  letter-spacing:.035em}.leave-balance-summary strong{display:block;margin-top:1px;
+  font-family:var(--mono);font-size:11px;color:var(--ink)}
+.leave-balance-summary.tone-good{border-color:#B9DDC9;background:#F2FAF6}
+.leave-balance-summary.tone-warn{border-color:#E9C985;background:#FFF9EC}
+.leave-balance-summary.tone-danger{border-color:#E6AAAA;background:#FFF2F2}
+.leave-balance-summary.tone-danger strong:last-child{color:#B83838}
+.leave-balance-summary.bump{transform:scale(1.018)}
+.leave-future-planned{font-size:8.5px!important;color:#8A671E!important;line-height:1.2}
+.leave-track{position:relative;min-height:46px;background:var(--card);overflow:hidden;
+  cursor:crosshair}
+.leave-inactive{position:absolute;top:0;bottom:0;z-index:0;pointer-events:none;
+  display:flex;align-items:center;justify-content:center;overflow:hidden;
+  color:#7A8793;background:repeating-linear-gradient(135deg,#E2E7EC 0,#E2E7EC 7px,
+  #D7DDE3 7px,#D7DDE3 14px);box-shadow:inset 0 0 0 1px rgba(93,107,120,.12)}
+.leave-inactive span{font-size:9.5px;font-weight:700;letter-spacing:.04em;
+  text-transform:uppercase;white-space:nowrap;padding:2px 6px;background:rgba(255,255,255,.66);
+  border-radius:4px}
+/* ΚΛΕΙΣΜΕΝΗ ΜΙΣΘΟΔΟΣΙΑ: ανοιχτό μωβ πέπλο από την αρχή του έτους έως το
+   τέλος της κλεισμένης περιόδου. Πάνω από τις μπάρες (z-index 4) ώστε να
+   φαίνεται ότι είναι κλειδωμένες, χωρίς να τις κρύβει. */
+.leave-closed{position:absolute;top:0;bottom:0;left:0;z-index:4;pointer-events:none;
+  display:flex;align-items:flex-start;justify-content:flex-end;overflow:hidden;
+  background:rgba(151,113,201,.20);
+  box-shadow:inset -2px 0 0 rgba(122,86,171,.55)}
+.leave-closed span{font-size:9.5px;font-weight:700;letter-spacing:.04em;
+  text-transform:uppercase;white-space:nowrap;padding:2px 6px;margin:4px 6px 0 0;
+  color:#5F4788;background:rgba(255,255,255,.78);border-radius:4px}
+.leave-color.leave-closed-key{background:rgba(151,113,201,.45)}
+.leave-color.leave-contract-end-key{background:#FCE8E4;border:1px dashed #D55C4B}
+.leave-contract-summary{color:#B84C3E!important;font-weight:700}
+.leave-contract-end{position:absolute;top:0;bottom:0;z-index:3;width:0;
+  border-left:2px dashed #D55C4B;pointer-events:none}
+.leave-contract-end span{position:absolute;top:3px;left:4px;padding:1px 4px;border-radius:4px;
+  background:#FFF4F1;color:#A63F33;font-family:var(--mono);font-size:8.5px;
+  font-weight:700;white-space:nowrap}
+.leave-months .closed{background:#EDE6F7;color:#6E5A93;border-radius:4px}
+.leave-month-lines{position:absolute;inset:0;z-index:1;pointer-events:none}
+.leave-month-lines i{border-right:1px solid var(--line);background:linear-gradient(
+  180deg,rgba(246,248,251,.2),rgba(246,248,251,.65));}
+.leave-accrual-strip{position:absolute;left:0;right:0;bottom:0;height:30px;z-index:2;
+  display:flex;border-top:1px solid #DCE5EC;background:rgba(250,252,253,.92);
+  cursor:default}
+.leave-accrual-month{position:relative;display:flex;align-items:center;justify-content:center;
+  min-width:0;border-right:1px solid rgba(180,194,206,.45);color:#426050;
+  background:#F2FAF6;transition:background-color .25s ease,color .25s ease}
+.leave-accrual-month>i{position:absolute;top:0;left:0;right:0;height:3px;
+  background:#54A978;transition:background-color .25s ease,transform .25s ease;
+  transform-origin:left center}
+.leave-accrual-month span{font-family:var(--mono);font-size:9px;font-weight:700;
+  white-space:nowrap;pointer-events:none;transition:transform .18s ease}
+.leave-accrual-month.tone-warn{color:#8A671E;background:#FFF8E9}
+.leave-accrual-month.tone-warn>i{background:#DEA63F}
+.leave-accrual-month.tone-danger{color:#A73333;background:#FFF0F0}
+.leave-accrual-month.tone-danger>i{background:#D85A5A}
+.leave-accrual-month.tone-neutral{color:#94A0AA;background:#F1F3F5}
+.leave-accrual-month.tone-neutral>i{background:#C5CDD4}
+.leave-accrual-month.bump span{animation:leave-balance-bump .28s ease-out}
+.leave-bar{position:absolute;height:22px;min-width:5px;border-radius:6px;color:#fff;
+  display:flex;align-items:center;justify-content:center;box-shadow:0 2px 6px rgba(23,36,47,.18);
+  cursor:grab;touch-action:none;user-select:none;z-index:2;outline:none;
+  transition:box-shadow .16s ease,filter .16s ease}
+.leave-bar:hover,.leave-bar:focus-visible{box-shadow:0 0 0 2px #fff,0 0 0 4px var(--ink);
+  z-index:2}.leave-bar.dragging{cursor:grabbing;filter:brightness(1.08);z-index:4}
+.leave-bar.saving{opacity:.62;cursor:wait}
+.leave-bar.over-accrual{box-shadow:0 0 0 2px #fff,0 0 0 4px #D43D3D,
+  0 4px 12px rgba(180,44,44,.28);animation:leave-over-pulse 1.4s ease-in-out infinite}
+.leave-bar-text{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:0 5px;
+  font-family:var(--mono);font-size:10.5px;font-weight:700;pointer-events:none}
+.leave-handle{position:absolute;top:0;bottom:0;width:8px;cursor:ew-resize}
+.leave-handle.start{left:0;border-radius:6px 0 0 6px}.leave-handle.end{right:0;border-radius:0 6px 6px 0}
+.leave-handle::after{content:'';position:absolute;top:6px;bottom:6px;width:2px;
+  left:3px;border-radius:2px;background:rgba(255,255,255,.8)}
+.leave-date-badge{position:fixed;z-index:80;pointer-events:none;white-space:nowrap;
+  padding:7px 10px;border-radius:9px;background:var(--ink);color:#fff;
+  font-family:var(--mono);font-size:11px;font-weight:600;
+  box-shadow:var(--sh-2)}
+.leave-date-badge small{display:block;margin-top:3px;color:#DDE6ED;font-size:9.5px;
+  font-weight:500}.leave-date-badge.danger small{color:#FFD0D0}
+/* ΠΑΛΕΤΑ ΤΥΠΩΝ ΑΔΕΙΑΣ — ΜΙΑ πηγή: τη διαβάζουν και το grid «Άδειες» και οι
+   ζώνες άδειας του «Ζωντανά» (§/live). Το πορτοκαλί ΔΕΝ ανήκει εδώ: είναι
+   αποκλειστικά της ασυμφωνίας με την κάρτα. */
+:root{--lv-annual:#26845B;--lv-sick:#D14B4B;--lv-unpaid:#7A5AA6;
+  --lv-maternity:#D9679D;--lv-parental:#287CAB;--lv-any:#7A5AA6}
+.leave-kanoniki_adeia{background:var(--lv-annual)}
+.leave-astheneia{background:var(--lv-sick)}
+.leave-adeia_aneu_apodoxon{background:var(--lv-unpaid)}
+.leave-mitrotita{background:var(--lv-maternity)}
+.leave-goniki{background:var(--lv-parental)}
+@keyframes leave-row-in{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:none}}
+@keyframes leave-balance-bump{0%{transform:scale(.82)}70%{transform:scale(1.12)}100%{transform:none}}
+@keyframes leave-over-pulse{50%{filter:brightness(1.08)}}
+@media(prefers-reduced-motion:reduce){.leave-row,.leave-bar.over-accrual,
+  .leave-accrual-month.bump span{animation:none}.leave-bar,.leave-accrual-month,
+  .leave-balance-summary{transition:none}}
+@media(max-width:720px){.leave-toolbar{align-items:flex-start;flex-direction:column}
+  .leave-toolbar-actions{width:100%;flex-wrap:wrap}.leave-zoom{border-right:0}
+  .leave-year-nav{width:100%}.leave-year-nav form{flex:1}.leave-year-nav form label{flex:1}
+  .leave-year-nav input{width:100%}.leave-accrual-key{margin-left:0}}
+
+/* -------------------------------------------- Ετήσιο πρόγραμμα εργασίας */
+.work-schedule-planner{view-transition-name:work-schedule-panel}
+.work-schedule-planner.bulk-swap-smooth .work-row{animation:none}
+::view-transition-old(work-schedule-panel){animation:work-panel-out .16s ease-in both}
+::view-transition-new(work-schedule-panel){animation:work-panel-in .22s ease-out both}
+@keyframes work-panel-out{to{opacity:.2;filter:blur(1.5px)}}
+@keyframes work-panel-in{from{opacity:.2;filter:blur(1.5px)}to{opacity:1;filter:none}}
+@media(prefers-reduced-motion:reduce){::view-transition-old(work-schedule-panel),
+  ::view-transition-new(work-schedule-panel){animation:none}}
+.work-toolbar{display:flex;align-items:center;justify-content:space-between;gap:18px}
+.work-toolbar h2{margin-bottom:4px}.work-toolbar p{font-size:12.5px;color:var(--muted)}
+.work-toolbar-actions,.work-zoom{display:flex;align-items:center;gap:8px}
+.work-zoom{padding-right:10px;border-right:1px solid var(--line)}
+.work-zoom button{min-width:36px;padding-left:10px;padding-right:10px}
+.work-zoom button:disabled{opacity:.35;cursor:not-allowed;transform:none}
+.work-zoom-level{min-width:52px!important;font-family:var(--mono);font-size:12px}
+.work-legend{display:flex;align-items:center;gap:15px;flex-wrap:wrap;padding:0 4px;
+  color:var(--muted);font-size:11.5px}.work-legend span{display:flex;align-items:center;gap:6px}
+.work-legend small{margin-left:auto;color:var(--muted)}
+.work-key{width:17px;height:10px;border-radius:3px;border:1px solid rgba(42,58,70,.12)}
+.work-key.work{background:#DDF3E7;border-top:3px solid #33976A}
+.work-key.off{background:#F1F3F5}.work-key.telework{background:#EDE5FA;border-top:3px solid #805BB1}
+.work-key.override{background:#FFF7E5;border-top:3px solid #D49A2D}
+.work-key.holiday{background:#FBE8D2}.work-key.leave{background:repeating-linear-gradient(
+  135deg,#E4F1EB 0,#E4F1EB 3px,#55A77A 3px,#55A77A 5px)}
+.work-key.submitted{background:rgba(46,140,90,.16);border-top:3px solid #2E8C5A}
+.work-key.modified{background:rgba(74,108,214,.20);border-top:3px solid #4A6CD6}
+.work-key.pending{background:rgba(224,150,40,.22);border-top:3px solid #E0A93B}
+.work-key.closed{background:#E3D9F3;border-top:3px solid #9771C9}
+.work-key.contract-end{background:#FCE8E4;border-left:3px dashed #D55C4B}
+/* Επιλεγμένες εβδομάδες (κεφαλίδα) για μαζική υποβολή στο ΕΡΓΑΝΗ */
+.work-weeks div.week-selected{background:#DDF0FF;color:#1C5A8F;box-shadow:inset 0 0 0 2px #4A8FD6}
+.work-erg-weeks-toolbar{position:sticky;left:0;z-index:12;display:flex;flex-wrap:wrap;gap:9px;
+  align-items:center;margin:0 0 10px;padding:9px 13px;border:1px solid #4A8FD6;border-radius:9px;
+  background:#EAF3FC;color:#1C5A8F;font-size:12.5px}
+.work-erg-weeks-toolbar strong{font-family:var(--mono)}
+.work-erg-weeks-toolbar .spacer{flex:1}
+.work-erg-weeks-toolbar button{padding:5px 12px;border-radius:8px;border:1px solid #2F6FA8;
+  background:#2F6FA8;color:#fff;font-weight:700;font-size:12px;cursor:pointer}
+.work-erg-weeks-toolbar button.ghost{background:#fff;color:#2F6FA8}
+.work-erg-weeks-toolbar button:hover{filter:brightness(1.06)}
+.work-board{padding:0;overflow:hidden}.work-board-scroll{overflow:auto;overscroll-behavior:contain;
+  overflow-anchor:none}
+.work-head,.work-row{display:grid;
+  grid-template-columns:235px minmax(var(--work-timeline-width,850px),1fr);
+  min-width:calc(235px + var(--work-timeline-width,850px))}
+.work-head{position:sticky;top:0;z-index:8;height:78px;background:var(--card);
+  border-bottom:1px solid var(--line)}
+.work-name-head{position:sticky;left:0;z-index:10;padding:29px 13px;background:var(--card);
+  border-right:1px solid var(--line);color:var(--muted);font-size:10px;font-weight:700;
+  letter-spacing:.055em;text-transform:uppercase}
+.work-time-head{position:relative;min-width:0}.work-months{position:absolute;
+  left:0;right:0;top:0;height:26px;display:flex;border-bottom:1px solid var(--line)}
+.work-months div{padding:8px 2px;text-align:center;border-right:1px solid var(--line);
+  color:var(--muted);font-size:10px;font-weight:700;text-transform:uppercase;
+  cursor:zoom-in;user-select:none}.work-months div:hover{background:#EAF3FC;color:#286FA8}
+/* Το όνομα του μήνα «κολλάει» δίπλα στη σταθερή στήλη, ώστε να μένει ορατό
+   ακόμη κι όταν σε μεγάλο zoom το πλάτος του μήνα ξεπερνά το παράθυρο. */
+.work-month-label{position:sticky;left:235px;display:inline-block;max-width:100%}
+.work-weeks{position:absolute;left:0;right:0;top:26px;height:23px;display:flex;
+  border-bottom:1px solid var(--line);background:#F8FAFC}
+.work-weeks div{min-width:0;padding:6px 1px;text-align:center;overflow:hidden;
+  border-right:1px solid #DCE4EA;color:#82909B;font-family:var(--mono);font-size:7.5px;
+  font-weight:700;white-space:nowrap;cursor:zoom-in;user-select:none}
+.work-weeks div:hover{position:relative;z-index:2;background:#E6F3EC;color:#24704E}
+.work-day-heads,.work-track{display:grid;
+  grid-template-columns:repeat(var(--work-days),minmax(0,1fr));width:100%}
+.work-day-heads{position:absolute;left:0;right:0;bottom:0;height:29px}
+.work-day-heads>div{position:relative;min-width:0;text-align:center;color:#75828D;
+  overflow:hidden;cursor:zoom-in;user-select:none}.work-day-heads span{display:none}.work-day-heads b{display:none}
+.work-day-heads .month-start{box-shadow:inset 1px 0 #BCC8D1}
+.work-day-heads .weekend{background:#F1F3F5}.work-day-heads .holiday{background:#FCEAD7}
+.work-day-heads .today{box-shadow:inset 0 -3px #287CAB}
+.work-row{min-height:40px;border-bottom:1px solid var(--line);
+  animation:leave-row-in .28s ease-out both;
+  animation-delay:min(calc(var(--row-index) * 30ms),240ms)}
+.work-row:last-child{border-bottom:0}.work-employee{position:sticky;left:0;z-index:6;
+  display:flex;flex-direction:column;justify-content:center;padding:4px 12px;background:var(--card);
+  border-right:1px solid var(--line)}
+.work-employee-link{display:flex;flex-direction:column;text-decoration:none;color:inherit}
+.work-employee-link:hover>b{text-decoration:underline}.work-employee-link>b{font-size:12.5px}
+.work-employee-link>small{margin-top:2px;color:var(--muted);font-size:9.5px}
+.work-erg-btn{margin-top:3px;align-self:flex-start;display:inline-flex;align-items:center;gap:4px;
+  padding:2px 8px;border:1px solid #E0A93B;border-radius:7px;background:#FCF3E1;color:#8A5A12;
+  font-size:9.5px;font-weight:700;letter-spacing:.03em;cursor:pointer}
+.work-erg-btn:hover{background:#F7E7C4}.work-erg-btn b{font-family:var(--mono);font-size:10px}
+.work-erg-btn b.mod{color:#3A56B0}
+.work-erg-ok{margin-top:3px;align-self:flex-start;color:#2C8158;font-size:9px;font-weight:700;
+  letter-spacing:.03em}
+.work-tele-summary{color:#72509B!important}
+.work-track{position:relative;min-width:0;cursor:crosshair;background:#FBFCFD}
+.work-day-cell{position:relative;min-width:0;overflow:hidden;background:#F7F9FA;
+  cursor:zoom-in;transition:background-color .16s ease,filter .16s ease}
+.work-day-cell.bulk-selected{z-index:3;outline:2px solid #25E8D0;outline-offset:-2px;
+  filter:brightness(1.04);box-shadow:inset 0 0 12px rgba(37,232,208,.42)}
+.work-day-cell.bulk-selected::before{content:'';position:absolute;inset:0;z-index:4;
+  background:linear-gradient(135deg,rgba(37,232,208,.22),rgba(82,121,255,.22));
+  pointer-events:none;animation:work-cell-selected .22s ease-out}
+@keyframes work-cell-selected{from{opacity:0;transform:scale(.55)}to{opacity:1;transform:none}}
+.work-day-cell.month-start{box-shadow:inset 1px 0 #BCC8D1}.work-day-cell.weekend{background:#F0F2F4}
+.work-day-cell.state-work{background:#E9F7EF}.work-day-cell.state-telework{background:#F0EAF9}
+.work-day-cell.state-off.weekend{background:#E9EDF0}
+.work-day-cell.state-inactive{background:repeating-linear-gradient(135deg,#E7EAED 0,
+  #E7EAED 6px,#DDE2E6 6px,#DDE2E6 12px);cursor:not-allowed}
+.work-day-cell.holiday::after{content:'';position:absolute;inset:0;background:rgba(238,150,48,.16);
+  pointer-events:none}.work-day-mark{position:absolute;left:0;right:0;bottom:0;height:3px;
+  background:#3A9A6C}.state-telework .work-day-mark{background:#805BB1}
+.work-day-cell.override{box-shadow:inset 0 3px #D49A2D}.work-day-cell.override.month-start{
+  box-shadow:inset 1px 0 #BCC8D1,inset 0 3px #D49A2D}
+.work-day-cell.today{outline:1px solid #287CAB;outline-offset:-1px;z-index:2}
+.work-day-cell.contract-end{outline:2px dashed #D55C4B;outline-offset:-2px;z-index:2}
+/* ΚΛΕΙΣΜΕΝΗ ΜΙΣΘΟΔΟΣΙΑ: ανοιχτό μωβ πέπλο πάνω από κάθε άλλη κατάσταση —
+   η περίοδος είναι κλειδωμένη (καμία αλλαγή προγράμματος/παρουσιών/αδειών). */
+.work-day-cell.closed{cursor:not-allowed}
+.work-day-cell.closed::after{content:'';position:absolute;inset:0;z-index:5;
+  background:rgba(151,113,201,.26);pointer-events:none}
+.work-day-heads .closed{background:#EDE6F7;color:#6E5A93;cursor:not-allowed}
+.work-day-cell.cov-submitted::before,.work-day-cell.cov-modified::before,
+.work-day-cell.cov-pending::before{content:'';position:absolute;inset:0;z-index:0;
+  pointer-events:none}
+.work-day-cell.cov-submitted::before{background:rgba(46,140,90,.10)}
+.work-day-cell.cov-pending::before{background:rgba(224,150,40,.16)}
+.work-day-cell.cov-modified::before{background:rgba(74,108,214,.20)}
+.work-day-cell.cov-submitted.bulk-selected::before,
+.work-day-cell.cov-modified.bulk-selected::before,
+.work-day-cell.cov-pending.bulk-selected::before{background:linear-gradient(135deg,
+  rgba(37,232,208,.22),rgba(82,121,255,.22))}
+.work-day-cell.upcoming{outline:2px solid #E0912A;outline-offset:-2px;z-index:3}
+.work-day-cell.upcoming:not(.bulk-selected)::before{background:rgba(224,145,42,.32);z-index:2;
+  animation:work-upcoming-pulse 1.6s ease-in-out infinite}
+@keyframes work-upcoming-pulse{0%,100%{opacity:.4}50%{opacity:.85}}
+.work-next-alert{margin:0 0 10px;padding:9px 13px;border:1px solid #E0A93B;border-radius:9px;
+  background:#FCF3E1;color:#7A4E12;font-size:12.5px;line-height:1.45}
+.work-day-code{display:none;position:absolute;inset:5px 1px 6px;align-items:center;
+  justify-content:center;text-align:center;color:#294238;font-family:var(--mono);
+  font-size:8px;line-height:1.15;overflow:hidden}.state-telework .work-day-code{color:#624785}
+.state-off .work-day-code{color:#89949D}.work-leave-mark{position:absolute;top:5px;left:22%;right:22%;
+  height:4px;z-index:3;border-radius:5px;background:#26845B;box-shadow:0 0 0 1px #fff}
+.leave-astheneia .work-leave-mark{background:#D14B4B}.leave-adeia_aneu_apodoxon .work-leave-mark{
+  background:#7A5AA6}.leave-mitrotita .work-leave-mark{background:#D9679D}
+.leave-goniki .work-leave-mark{background:#287CAB}
+.work-day-cell.has-leave{background-image:repeating-linear-gradient(135deg,transparent 0,
+  transparent 5px,rgba(38,132,91,.13) 5px,rgba(38,132,91,.13) 8px)}
+.work-schedule-planner.day-detail .work-day-heads>div{border-right:1px solid #E4E9ED}
+.work-schedule-planner.day-detail .work-day-heads b{display:block;padding-top:8px;
+  font-family:var(--mono);font-size:8px}.work-schedule-planner.day-detail .work-day-cell{
+  border-right:1px solid rgba(199,209,217,.55)}
+.work-schedule-planner.hour-detail .work-day-heads span{display:block;padding-top:3px;
+  font-size:7px;font-weight:700}.work-schedule-planner.hour-detail .work-day-heads b{
+  padding-top:0;font-size:9px}.work-schedule-planner.hour-detail .work-day-code{display:flex}
+.work-schedule-planner.hour-detail .work-day-cell:hover{filter:brightness(.96);z-index:4;
+  box-shadow:0 0 0 2px #fff,0 0 0 4px var(--ink)}
+/* Στο zoom εβδομάδας υπάρχει αρκετός χώρος ανά ημέρα: αξιοποιείται για
+   πραγματικά ευανάγνωστες ημέρες και ωράρια, χωρίς να αλλάζει το year/month view. */
+.work-schedule-planner.week-detail .work-head{height:94px}
+.work-schedule-planner.week-detail .work-name-head{padding-top:36px;padding-bottom:36px}
+.work-schedule-planner.week-detail .work-months{height:27px}
+.work-schedule-planner.week-detail .work-months div{padding-top:7px;font-size:11px}
+.work-schedule-planner.week-detail .work-weeks{top:27px;height:25px}
+.work-schedule-planner.week-detail .work-weeks div{padding-top:6px;font-size:9px}
+.work-schedule-planner.week-detail .work-day-heads{height:42px}
+.work-schedule-planner.week-detail .work-day-heads span{padding-top:5px;font-size:10px;
+  line-height:1.1}.work-schedule-planner.week-detail .work-day-heads b{padding-top:2px;
+  font-size:13px;line-height:1.1}
+.work-schedule-planner.week-detail .work-row{min-height:88px}
+.work-schedule-planner.week-detail .work-day-code{inset:8px 4px 9px;font-size:12px;
+  line-height:1.3;font-weight:700;letter-spacing:.01em}
+.work-schedule-planner.week-detail .work-day-mark{height:4px}
+.work-bulk-toolbar{position:fixed;left:50%;bottom:22px;z-index:24;display:flex;
+  align-items:center;justify-content:center;flex-wrap:wrap;gap:8px;max-width:calc(100vw - 28px);
+  padding:9px 10px 9px 14px;
+  border:1px solid #345274;border-radius:14px;background:rgba(14,23,43,.96);color:#E8F3FF;
+  box-shadow:0 14px 40px rgba(3,9,24,.42),0 0 22px rgba(37,232,208,.2);
+  backdrop-filter:blur(14px);transform:translateX(-50%);animation:work-bulk-in .2s ease-out}
+.work-bulk-toolbar[hidden]{display:none}.work-bulk-toolbar strong{margin-right:3px;color:#83FFF0;
+  font-size:12px;white-space:nowrap;text-shadow:0 0 8px rgba(37,232,208,.55)}
+.work-bulk-toolbar label{display:flex;align-items:center;gap:6px;color:#AFC1D6;
+  font-size:10px;font-weight:700;white-space:nowrap}.work-bulk-toolbar input{width:235px;max-width:42vw;
+  padding:7px 8px;border:1px solid #3E5471;border-radius:8px;background:#101A30;color:#FFF;
+  font-family:var(--mono);font-size:11px}.work-bulk-toolbar button{padding:8px 10px;border:1px solid #3B5474;
+  border-radius:8px;background:#203250;color:#EAF4FF;font:inherit;font-size:11px;font-weight:700;
+  white-space:nowrap;cursor:pointer}.work-bulk-toolbar button:hover{border-color:#43E8CF;
+  background:#254463;box-shadow:0 0 10px rgba(37,232,208,.22)}
+.work-bulk-toolbar button.save{border-color:#238E7E;background:#176552;color:#BFFFF2;
+  box-shadow:0 0 10px rgba(37,232,208,.16)}
+.work-bulk-toolbar button.danger{border-color:#713B58;color:#FFAAC1;background:#3C2034}
+.work-bulk-toolbar button.danger:hover{border-color:#FF5B8D;background:#55233D}
+.work-bulk-toolbar button.revert{border-color:#3A56B0;color:#C7D4FF;background:#1E2A54}
+.work-bulk-toolbar button.revert:hover{border-color:#6E8BFF;background:#28356A}
+.work-bulk-toolbar button.close{padding:4px 7px;border:0;background:transparent;color:#9CB0C7;font-size:18px}
+.work-bulk-toolbar.saving{opacity:.65;pointer-events:none}
+@keyframes work-bulk-in{from{opacity:0;transform:translate(-50%,12px) scale(.96)}
+  to{opacity:1;transform:translateX(-50%)}}
+.work-schedule-planner.week-detail .work-leave-mark{top:8px;height:5px}
+.work-zoom-toast{position:fixed;z-index:90;padding:6px 9px;border-radius:8px;
+  background:var(--ink);color:#fff;font-family:var(--mono);font-size:10.5px;
+  opacity:0;transform:translateY(4px) scale(.96);pointer-events:none;
+  box-shadow:var(--sh-2);transition:opacity .15s ease,transform .15s ease}
+.work-zoom-toast.show{opacity:1;transform:none}
+
+/* Αναλυτικό ημερήσιο πρόγραμμα */
+.work-day-backdrop{padding:24px 14px}.modal.work-day-modal{width:min(1380px,100%);
+  max-height:calc(100vh - 48px)}.work-day-title{display:flex;align-items:center;
+  justify-content:space-between;gap:16px}.work-day-title h3{margin-bottom:3px}
+.work-day-nav{display:flex;gap:7px}.work-day-nav button{min-width:43px;font-size:17px}
+.work-day-legend{display:flex;align-items:center;gap:18px;padding:10px 20px;
+  border-bottom:1px solid var(--line);background:#F7F9FB;color:var(--muted);font-size:12px}
+.work-day-legend span{display:flex;align-items:center;gap:7px}.work-day-legend small{margin-left:auto}
+.work-shift-key{width:20px;height:10px;border-radius:3px;background:#3E9B50}
+.work-shift-key.overwork{background:#FFB21C;box-shadow:0 0 8px rgba(255,178,28,.75)}
+.work-shift-key.overtime{background:#FF3D91;box-shadow:0 0 8px rgba(255,61,145,.75)}
+.work-shift-key.telework{background:#805BB1}.work-time-key{width:20px;height:10px;
+  border:1px solid rgba(255,255,255,.5);border-radius:3px}.work-time-key.night{
+  background:#36175D;box-shadow:0 0 8px #B94DFF}.work-time-key.next-day{
+  background:#075460;box-shadow:0 0 8px #22E6D4}.work-time-key.rest{
+  border-color:#8396B2;background:repeating-linear-gradient(135deg,#DCE5F1 0,
+  #DCE5F1 3px,#7184A2 3px,#7184A2 5px)}.modal .work-day-body{padding:0;overflow:auto}
+.work-day-grid{display:grid;grid-template-columns:210px minmax(0,1fr);width:100%;min-width:0}
+.work-day-corner,.work-day-count-label{position:sticky;left:0;z-index:5;padding:12px;
+  border-right:1px solid #263A63;background:#11182F;color:#DCE8FF;font-size:12px;font-weight:700}
+.work-hour-head,.work-staff-count,.work-hour-grid{display:grid;
+  grid-template-columns:repeat(var(--work-slots),minmax(0,1fr))}
+.work-hour-head{background:#11182F;color:#DCE8FF}.work-hour-head div{padding:12px 2px;
+  border-right:1px solid rgba(81,208,255,.18);font-family:var(--mono);font-size:10px;
+  font-weight:700;text-align:center}.work-day-person{position:sticky;left:0;z-index:4;
+  display:flex;flex-direction:column;justify-content:center;min-height:54px;padding:8px 12px;
+  border-right:1px solid #D6E0E7;border-bottom:1px solid var(--line);background:var(--card)}
+.work-day-person b{font-size:12px}.work-day-person small{margin-top:3px;color:var(--muted);
+  font-family:var(--mono);font-size:9.5px}.work-day-person.focused{background:#EEF5FC}
+.work-day-person .work-absence-label{color:#A34B4B;font-family:inherit;font-weight:700}
+.work-shift-track{position:relative;min-height:54px;overflow:hidden;
+  border-bottom:1px solid var(--line);background:#F8FBF8;cursor:crosshair}
+.work-shift-track.focused{box-shadow:inset 0 0 0 2px rgba(45,125,210,.35)}
+.work-shift-track.has-split-gap::after{content:'Ελάχιστο κενό 3ω';position:absolute;
+  left:var(--split-gap-left);top:15px;width:var(--split-gap-width);height:24px;z-index:1;
+  display:flex;align-items:center;justify-content:center;overflow:hidden;border:1px solid transparent;
+  border-radius:999px;color:transparent;font-size:9px;font-weight:800;white-space:nowrap;
+  pointer-events:none;opacity:0;transform:scale(.72)}
+.work-shift-track.has-split-gap.gap-warning::after{border-color:#FF5BA8;color:#FFF;
+  background:linear-gradient(90deg,rgba(255,49,95,.88),rgba(211,55,255,.9));
+  box-shadow:0 0 8px #FF3D91,0 0 20px rgba(211,55,255,.75);
+  animation:work-gap-warning .68s cubic-bezier(.2,.9,.25,1)}
+@keyframes work-gap-warning{0%{opacity:0;transform:scale(.65);filter:brightness(1)}
+  30%{opacity:1;transform:scale(1.04);filter:brightness(1.45)}
+  70%{opacity:1;transform:scale(1);filter:brightness(1.1)}
+  100%{opacity:0;transform:scale(.92);filter:brightness(1)}}
+.work-rest-limit{position:absolute;top:0;bottom:0;z-index:5;display:flex;
+  align-items:center;justify-content:center;overflow:hidden;border:0;color:transparent;
+  font-style:normal;pointer-events:none;opacity:.52;
+  background:repeating-linear-gradient(135deg,rgba(75,94,126,.13) 0,
+    rgba(75,94,126,.13) 5px,rgba(225,233,243,.18) 5px,
+    rgba(225,233,243,.18) 10px)}
+.work-rest-limit.previous{left:0;width:var(--rest-previous-width)}
+.work-rest-limit.following{left:var(--rest-following-left);right:0}
+.work-rest-limit.previous{border-right:1px dashed rgba(79,101,137,.38)}
+.work-rest-limit.following{border-left:1px dashed rgba(79,101,137,.38)}
+.work-rest-limit span{font-size:9px;font-weight:900;letter-spacing:.02em;white-space:nowrap}
+.work-shift-track.rest-warning-previous .work-rest-limit.previous,
+.work-shift-track.rest-warning-following .work-rest-limit.following{
+  border:1px solid #FF496C;color:#FFF;
+  background:repeating-linear-gradient(135deg,rgba(255,32,82,.9) 0,
+    rgba(255,32,82,.9) 9px,rgba(168,31,255,.92) 9px,rgba(168,31,255,.92) 18px);
+  box-shadow:inset 0 0 14px rgba(255,255,255,.25),0 0 14px #FF315F;
+  animation:work-rest-warning .68s cubic-bezier(.2,.9,.25,1)}
+@keyframes work-rest-warning{0%{opacity:0;transform:scaleX(.75);filter:brightness(1)}
+  28%{opacity:1;transform:scaleX(1.03);filter:brightness(1.55)}
+  68%{opacity:1;transform:scaleX(1);filter:brightness(1.12)}
+  100%{opacity:0;transform:scaleX(.96);filter:brightness(1)}}
+.work-absence-track{position:relative;display:flex;align-items:center;justify-content:center;
+  min-height:54px;overflow:hidden;border-bottom:1px solid var(--line);color:#A34B4B;
+  background:repeating-linear-gradient(135deg,#FAEEEE 0,#FAEEEE 8px,#F5E5E5 8px,#F5E5E5 16px)}
+.work-absence-track span{position:relative;padding:5px 12px;border:1px solid #E7C8C8;
+  border-radius:999px;background:rgba(255,255,255,.88);font-size:11px;font-weight:700}
+.work-absence-track.focused{box-shadow:inset 0 0 0 2px rgba(45,125,210,.35)}
+.work-hour-head .is-night{color:#F1C6FF;background:#2A144B;text-shadow:0 0 7px #D967FF}
+.work-hour-head .is-next-day{color:#9CFFF3;background:#073E47;text-shadow:0 0 7px #20EAD5}
+.work-hour-head .is-next-day.is-night{background:linear-gradient(135deg,#2A144B,#07434B)}
+.work-hour-grid{position:absolute;inset:0}.work-hour-grid i{border-right:1px solid rgba(31,133,154,.14);
+  background:linear-gradient(90deg,rgba(47,238,190,.025),transparent)}
+.work-hour-grid .is-night{background:linear-gradient(90deg,rgba(185,77,255,.12),rgba(92,35,136,.07))}
+.work-hour-grid .is-next-day{background:linear-gradient(90deg,rgba(34,230,212,.11),rgba(9,117,125,.06))}
+.work-hour-grid .is-next-day{cursor:not-allowed}
+.work-hour-grid .is-next-day.is-night{background:linear-gradient(135deg,rgba(185,77,255,.13),rgba(34,230,212,.12))}
+.work-shift-bar{position:absolute;top:10px;height:34px;z-index:2;display:flex;
+  align-items:center;justify-content:center;min-width:4px;border:1px solid #70FFD0;
+  border-radius:7px;--normal-color:#19C993;--normal-end:100%;--overwork-end:100%;
+  background:linear-gradient(90deg,
+    var(--normal-color) 0 var(--normal-end),#FFB21C var(--normal-end) var(--overwork-end),
+    #FF3D91 var(--overwork-end) 100%);
+  color:#fff;box-shadow:0 0 12px rgba(36,221,164,.48);cursor:grab;user-select:none;
+  transition:box-shadow .14s ease,filter .14s ease}
+.work-shift-bar.telework{--normal-color:#A044D0;border-color:#F09BFF;
+  box-shadow:0 0 12px rgba(216,77,235,.46)}
+.work-shift-bar.has-overwork{box-shadow:0 0 13px rgba(255,178,28,.65)}
+.work-shift-bar.has-overtime{border-color:#FF8DC0;animation:work-overtime-pulse 1.6s ease-in-out infinite}
+.work-shift-track.over-maximum{box-shadow:inset 0 0 0 2px #FF315F;
+  background:repeating-linear-gradient(135deg,#FFF0F5 0,#FFF0F5 8px,#FFE3EC 8px,#FFE3EC 16px)}
+@keyframes work-overtime-pulse{0%,100%{box-shadow:0 0 10px rgba(255,61,145,.42)}
+  50%{box-shadow:0 0 20px rgba(255,61,145,.88)}}
+.work-shift-bar:hover,.work-shift-bar.dragging{filter:brightness(.96);
+  box-shadow:0 4px 12px rgba(28,60,45,.28)}.work-shift-bar.dragging{cursor:grabbing;z-index:8}
+.work-shift-bar span{padding:0 12px;overflow:hidden;font-family:var(--mono);
+  font-size:11px;font-weight:700;white-space:nowrap;pointer-events:none}
+.work-shift-handle{position:absolute;top:0;bottom:0;width:12px;cursor:ew-resize}
+.work-shift-handle::after{content:'';position:absolute;top:8px;bottom:8px;width:2px;
+  border-radius:2px;background:rgba(255,255,255,.75)}
+.work-shift-handle.left{left:0}.work-shift-handle.left::after{left:4px}
+.work-shift-handle.right{right:0}.work-shift-handle.right::after{right:4px}
+.work-shift-menu{position:fixed;z-index:90;min-width:178px;padding:7px;border:1px solid #334568;
+  border-radius:12px;background:rgba(15,22,43,.97);box-shadow:0 14px 36px rgba(3,8,24,.42),
+  0 0 18px rgba(47,209,255,.18);backdrop-filter:blur(12px);
+  animation:work-shift-menu-in .16s ease-out}
+.work-shift-menu[hidden]{display:none}.work-shift-menu button{position:relative;width:100%;display:flex;
+  align-items:center;gap:10px;padding:9px 28px 9px 10px;border:0;border-radius:8px;background:transparent;
+  color:#DCE8FF;font:inherit;font-size:12px;font-weight:700;text-align:left;cursor:pointer}
+.work-shift-menu button:hover,.work-shift-menu button:focus-visible{outline:0;color:#FFF;
+  background:#243455;box-shadow:inset 0 0 0 1px rgba(91,216,255,.24)}
+.work-shift-menu button.active::after{content:'✓';position:absolute;right:10px;color:#54F5D0;
+  text-shadow:0 0 8px #22E6D4}.work-shift-menu button.danger{color:#FF9BB8}
+.work-shift-menu button.danger:hover,.work-shift-menu button.danger:focus-visible{background:#4A1D37;
+  box-shadow:inset 0 0 0 1px rgba(255,73,108,.35)}
+.work-shift-menu i{width:13px;height:13px;flex:0 0 13px;border-radius:50%;font-style:normal}
+.work-shift-menu i.regular{background:#19C993;box-shadow:0 0 8px rgba(25,201,147,.8)}
+.work-shift-menu i.telework{background:#C352E5;box-shadow:0 0 8px rgba(195,82,229,.8)}
+.work-shift-menu i.delete{position:relative;border:1px solid #FF496C;background:transparent}
+.work-shift-menu i.delete::before,.work-shift-menu i.delete::after{content:'';position:absolute;
+  left:2px;right:2px;top:5px;height:1px;background:#FF7390}
+.work-shift-menu i.delete::before{transform:rotate(45deg)}
+.work-shift-menu i.delete::after{transform:rotate(-45deg)}
+@keyframes work-shift-menu-in{from{opacity:0;transform:translateY(-5px) scale(.96)}
+  to{opacity:1;transform:none}}
+.work-week-menu small{display:block;max-width:240px;padding:5px 9px 8px;color:#8EA4BC;
+  overflow:hidden;border-bottom:1px solid #2B3D5C;margin-bottom:5px;font-size:9px;
+  text-overflow:ellipsis;white-space:nowrap}.work-week-menu button span{width:17px;color:#69F2DF;
+  font-size:15px;text-align:center;text-shadow:0 0 8px rgba(37,232,208,.65)}
+.work-week-menu button:disabled{opacity:.38;cursor:not-allowed;background:transparent;box-shadow:none}
+.work-day-count-label{background:#11182F}.work-staff-count{background:#F5FAFF}
+.work-staff-count div{padding:10px 2px;border-right:1px solid #E5DDC1;color:#B96815;
+  font-family:var(--mono);font-size:12px;font-weight:700;text-align:center}
+.work-staff-count .is-night{color:#8D32BD;background:#F7E9FF}
+.work-staff-count .is-next-day{color:#087B78;background:#E4FFFB}
+.work-staff-count .is-next-day.is-night{background:linear-gradient(135deg,#F7E9FF,#E4FFFB)}
+@media(prefers-reduced-motion:reduce){.work-row{animation:none}.work-zoom-toast,
+  .work-day-cell,.work-shift-bar{transition:none}.work-shift-bar.has-overtime{animation:none}
+  .work-day-cell.upcoming:not(.bulk-selected)::before{animation:none;opacity:.7}
+  .work-shift-track.has-split-gap.gap-warning::after{animation:none;opacity:1}
+  .work-shift-track.rest-warning-previous .work-rest-limit.previous,
+  .work-shift-track.rest-warning-following .work-rest-limit.following{animation:none;opacity:1}
+  .work-shift-menu{animation:none}}
+@media(max-width:720px){.work-toolbar{align-items:flex-start;flex-direction:column}
+  .work-toolbar-actions{width:100%;flex-wrap:wrap}.work-zoom{border-right:0}
+  .work-legend small,.work-day-legend small{margin-left:0;width:100%}
+  .work-day-legend{flex-wrap:wrap}.work-day-grid{grid-template-columns:170px minmax(0,1fr)}}
+
+/* Ενιαία επιλογή περιόδου άδειας. Τα date_from/date_to παραμένουν κρυφά,
+   ώστε το endpoint και το domain model να μη χρειάζονται καμία αλλαγή. */
+.leave-range{position:relative;display:flex;flex-direction:column;gap:4px}
+.leave-range-label{font-size:12px;color:var(--muted)}
+.leave-range-trigger{width:100%;min-height:40px;display:flex;align-items:center;
+  justify-content:space-between;gap:12px;padding:8px 11px;background:var(--card);
+  color:var(--ink);font:inherit;font-size:13.5px;text-align:left;
+  border:1px solid var(--line);border-radius:8px;cursor:pointer}
+.leave-range-trigger:hover{border-color:#C9D4E0}
+.leave-range-trigger:focus-visible,.leave-range.open .leave-range-trigger{
+  outline:none;border-color:var(--ready);box-shadow:0 0 0 3px rgba(31,157,85,.13)}
+.leave-range-icon{font-size:16px}
+.leave-range-popover{position:fixed;z-index:60;width:330px;
+  max-width:calc(100vw - 24px);padding:12px;background:var(--card);
+  border:1px solid var(--line);border-radius:12px;box-shadow:var(--sh-3)}
+.leave-range-popover[hidden]{display:none}
+.leave-range-head{display:grid;grid-template-columns:34px 1fr 34px;
+  align-items:center;margin-bottom:9px}
+.leave-range-head strong{text-align:center;font-size:13.5px;text-transform:capitalize}
+.leave-range-head button{height:32px;padding:0;border:0;border-radius:8px;
+  background:var(--paper);color:var(--ink);font-size:24px;line-height:1;cursor:pointer}
+.leave-range-head button:hover{background:#E9F1FA}
+.leave-range-weekdays,.leave-range-days{display:grid;grid-template-columns:repeat(7,1fr)}
+.leave-range-weekdays span{text-align:center;padding:3px 0 6px;color:var(--muted);
+  font-size:10px;font-weight:700;text-transform:uppercase}
+.leave-range-day{position:relative;height:34px;padding:0;border:0;background:transparent;
+  color:var(--ink);font:inherit;font-size:12.5px;cursor:pointer;z-index:0}
+.leave-range-day::before{content:'';position:absolute;inset:2px;z-index:-1;
+  border-radius:8px}
+.leave-range-day:hover::before{background:#E9F1FA}
+.leave-range-day.outside{color:#AAB3BC}
+.leave-range-day.today{font-weight:700;color:#2D7DD2}
+.leave-range-day.in-range::before{inset:2px 0;border-radius:0;background:#E6F5EC}
+.leave-range-day.range-start::before,.leave-range-day.range-end::before{
+  inset:2px;border-radius:8px;background:var(--ready)}
+.leave-range-day.range-start,.leave-range-day.range-end{color:#fff;font-weight:700}
+.leave-range-hint{min-height:18px;margin-top:8px;padding-top:8px;
+  border-top:1px solid var(--line);color:var(--muted);font-size:11.5px;text-align:center}
+.leave-range-hint.complete{color:var(--ready-d);font-weight:600}
+details.box{border:1px solid var(--line);border-radius:11px;
+  background:var(--paper);margin-top:4px}
+details.box summary{cursor:pointer;font-weight:600;font-size:14px;
+  padding:11px 14px;list-style:none}
+details.box summary::-webkit-details-marker{display:none}
+details.box[open] summary{border-bottom:1px solid var(--line)}
+details.box .frm{padding:12px 14px}
+
+/* ----------------------------------------------------------------- λοιπά */
+#toast{position:fixed;bottom:22px;left:50%;transform:translateX(-50%);
+  background:var(--ink);color:#fff;padding:11px 18px;border-radius:11px;
+  font-size:14px;opacity:0;transition:opacity .25s;pointer-events:none;
+  max-width:80vw;z-index:60}  /* πάνω από το modal (z-index:30) */
+#toast.show{opacity:1}
+#toast.err{background:var(--prob)}
+.empty{padding:26px;text-align:center;color:var(--muted)}
+canvas{max-height:230px}
+/* --- Κάρτα γραφήματος «Μηνιαία εξέλιξη» (μία σειρά: κόστος εργοδότη) ---
+   Ο αριθμός-επικεφαλίδα κουβαλά το «πόσο» και τη μεταβολή, ώστε ο καμβάς να
+   δείχνει ΜΟΝΟ τη μορφή της εξέλιξης. Καμία χρωματική κωδικοποίηση στο
+   κείμενο: η ταυτότητα της σειράς είναι οι ίδιες οι στήλες. */
+.chart-card .chart-lede{display:flex;align-items:baseline;flex-wrap:wrap;
+  gap:8px;margin:2px 0 10px}
+.chart-card .chart-lede b{font-size:26px;font-weight:700;letter-spacing:-.4px;
+  font-variant-numeric:tabular-nums}
+.chart-card .chart-lede .muted{font-size:12.5px;color:var(--muted)}
+.chart-card .chart-lede .delta{margin-left:auto;font-size:11.5px;
+  font-weight:600;color:var(--muted);white-space:nowrap}
+.chart-card .chart-lede .delta.up{color:var(--warn)}
+.chart-card .chart-lede .delta.down{color:var(--ready)}
+/* Σταθερό ύψος καμβά: το γράφημα δεν «πηδάει» όταν αλλάζει το πλήθος μηνών */
+.chart-card .chart-box{position:relative;height:236px}
+.chart-card .chart-box canvas{max-height:none}
+
+/* ---- Μηνιαία εξέλιξη: ετήσια αναφορά κόστους (επισκόπηση) -------------
+   Τέσσερα στρώματα σε μία κάρτα: αριθμοί-κλειδιά -> legend -> δύο γραφήματα
+   -> πίνακας. Ο πίνακας ΔΕΝ είναι διακοσμητικός: είναι η αναγνώσιμη εκδοχή
+   των γραφημάτων (τα χρώματα δεν κουβαλούν μόνα τους την πληροφορία). */
+/* Επιλογέας οπτικής (κόστος / μικτά / καθαρά): segmented control — τρεις
+   αμοιβαία αποκλειόμενες αναγνώσεις των ΙΔΙΩΝ ποσών, όχι τρία φίλτρα. */
+/* «PDF»: η ίδια αναφορά σε χαρτί. Μικρό ghost κουμπί δίπλα στον επιλογέα
+   οπτικής (μηνιαία εξέλιξη) και στα νούμερα-κλειδιά (κόστος εργατοώρας). */
+.rep-pdf{padding:5px 11px;font-size:12px;border-radius:8px;
+  color:var(--muted);text-decoration:none;white-space:nowrap}
+.rep-pdf:hover{color:var(--ink)}
+.cost-report .rep-pdf{margin-left:10px;vertical-align:top}
+.hour-cost .chart-lede .rep-pdf{align-self:center}
+
+.cost-report .rep-modes{display:inline-flex;gap:2px;margin-bottom:14px;
+  padding:3px;border:1px solid var(--line);border-radius:10px;
+  background:var(--paper)}
+.cost-report .rep-modes .mode{border:0;background:none;cursor:pointer;
+  font:600 12.5px 'IBM Plex Sans',system-ui,sans-serif;color:var(--muted);
+  padding:6px 14px;border-radius:8px;transition:background-color .18s var(--ease),
+  color .18s var(--ease)}
+.cost-report .rep-modes .mode:hover{color:var(--ink)}
+.cost-report .rep-modes .mode.on{background:var(--card);color:var(--ink);
+  box-shadow:0 1px 2px rgba(23,36,47,.10)}
+
+.cost-report .rep-kpis{display:grid;gap:12px;margin-bottom:14px;
+  grid-template-columns:repeat(3,1fr)}
+@media(max-width:820px){.cost-report .rep-kpis{grid-template-columns:1fr}}
+.cost-report .kpi{border:1px solid var(--line);border-radius:12px;
+  padding:12px 14px;background:var(--paper);display:flex;
+  flex-direction:column;gap:2px}
+.cost-report .kpi .k{font-size:11.5px;letter-spacing:.04em;
+  text-transform:uppercase;color:var(--muted);font-weight:600}
+.cost-report .kpi b{font-size:24px;letter-spacing:-.4px;
+  font-variant-numeric:tabular-nums}
+.cost-report .kpi .m{font-size:12px;color:var(--muted);line-height:1.45}
+/* Η πρόβλεψη είναι εκτίμηση: διακεκομμένο πλαίσιο, ίδια «γλώσσα» με το
+   διακεκομμένο τμήμα της σωρευτικής γραμμής. */
+.cost-report .kpi.fore{border-style:dashed}
+.cost-report .kpi.tot{background:var(--card);border-color:var(--ink)}
+
+/* Προειδοποιήσεις ΠΡΙΝ από ομαδικό υπολογισμό (π.χ. η παραδοχή 1ου/2ου
+   έτους στο Επίδομα Αδείας): πλαίσιο πάνω από το κουμπί, όχι toast — ο
+   χρήστης πρέπει να τις διαβάσει πριν πατήσει, όχι αφού πατήσει. */
+.warn-list{margin:0 0 10px;padding:10px 12px 10px 28px;border-radius:9px;
+  background:var(--warn-bg);border:1px solid #F3D9AE;color:#8A5206;
+  font-size:12.5px;line-height:1.5}
+.warn-list li+li{margin-top:6px}
+
+.rep-legend{display:flex;flex-wrap:wrap;gap:8px 18px;
+  margin-bottom:14px;font-size:12.5px;color:var(--muted)}
+.rep-legend .lg{display:inline-flex;align-items:center;gap:7px}
+.rep-legend .lg i{width:11px;height:11px;border-radius:3px;flex:none}
+.rep-legend .lg b{color:var(--ink);font-variant-numeric:tabular-nums}
+/* Το δείγμα της πρόβλεψης: ο ΙΔΙΟΣ τόνος που παίρνουν οι στήλες (35% alpha) */
+.rep-legend .hatch i{background:#2A78D659;border:1px dashed var(--muted)}
+
+.cost-report .rep-charts{display:grid;gap:20px;
+  grid-template-columns:1.35fr 1fr}
+@media(max-width:960px){.cost-report .rep-charts{grid-template-columns:1fr}}
+.cost-report .rep-chart h3{font-size:11.5px;font-weight:600;
+  letter-spacing:.04em;text-transform:uppercase;color:var(--muted);
+  margin-bottom:8px}
+.chart-card .chart-box.tall{height:300px}
+
+.rep-table{margin-top:20px;overflow-x:auto}
+.rep-table td:first-child{white-space:nowrap}
+.rep-note{font-size:12px;line-height:1.55;margin-top:14px;
+  border-top:1px solid var(--line);padding-top:12px}
+
+/* ---- Πραγματικό κόστος εργατοώρας ------------------------------------
+   Ίδια δομή με την ετήσια αναφορά (legend -> γράφημα -> πίνακας -> σημείωση),
+   γι' αυτό δανείζεται τις ΙΔΙΕΣ κλάσεις· εδώ μόνο οι διαφορές. */
+.hour-cost .chart-lede b .u{font-size:14px;font-weight:600;color:var(--muted);
+  letter-spacing:0}
+/* Η επιβάρυνση ΔΕΝ είναι «κακό νέο»: είναι το μέγεθος που μετράμε — ουδέτερο
+   πλαίσιο, όχι το πορτοκαλί της ανοδικής μεταβολής. */
+.hour-cost .chart-lede .delta.up{color:var(--ink);background:var(--paper);
+  border:1px solid var(--line);border-radius:999px;padding:3px 10px}
+.hour-cost .chart-box{height:auto}   /* το ύψος το ορίζει το πλήθος γραμμών */
+.mono{font-family:var(--mono)}
+.muted{color:var(--muted)}
+.htmx-request{opacity:.55;transition:opacity .15s}
+@media(prefers-reduced-motion:reduce){*{transition:none!important}}
+
+/* --------------------------------------- Παρουσίες: read-only λίστα (grid) */
+/* Divs (όχι <table>) ώστε το OOB swap ανά εργαζόμενο να είναι ασφαλές. */
+.atbl-head,.atbl-row{display:grid;gap:8px;align-items:center;padding:9px 12px;
+  grid-template-columns:minmax(150px,2fr) repeat(6,minmax(52px,1fr)) auto}
+.atbl-head{font-size:10.5px;font-weight:700;letter-spacing:.05em;
+  text-transform:uppercase;color:var(--muted);border-bottom:1px solid var(--line)}
+.atbl-row{border-bottom:1px solid var(--line)}
+.atbl-row:hover{background:var(--paper)}
+.atbl .rt{text-align:right}
+.atbl-row .rt{font-family:var(--mono);font-size:14px}
+.atbl-row .nm{font-weight:600}
+.atbl-row .sub{font-size:11.5px;color:var(--muted);margin-top:1px}
+.atbl-row .zero{color:var(--muted)}
+.lnkbtn{font:inherit;background:none;border:0;padding:0;cursor:pointer;
+  color:var(--ready);font-weight:600;border-bottom:1px dashed var(--ready)}
+.lnkbtn:hover{opacity:.75}
+@media(max-width:820px){.atbl-head{display:none}
+  .atbl-row{grid-template-columns:1fr auto;row-gap:2px}
+  .atbl-row .rt{text-align:left}}
+
+/* ----------------------------------------------- Modal (htmx overlay, no JS) */
+/* Κλείνει ΜΟΝΟ με Αποθήκευση/Ακύρωση — το backdrop δεν έχει handler. */
+.modal-backdrop{position:fixed;inset:0;background:rgba(23,36,47,.45);
+  z-index:30;display:flex;align-items:flex-start;justify-content:center;
+  padding:38px 16px;overflow:auto}
+.modal{background:var(--card);border:1px solid var(--line);border-radius:14px;
+  width:min(700px,100%);box-shadow:0 18px 50px rgba(23,36,47,.30);
+  display:flex;flex-direction:column;max-height:calc(100vh - 76px)}
+.modal>form{display:flex;flex-direction:column;min-width:0;min-height:0;
+  max-height:inherit}
+.modal .mhead{padding:15px 20px;border-bottom:1px solid var(--line)}
+.modal .mhead h3{font-size:15px;font-weight:700}
+/* min-height:0 -> επιτρέπει στο flex child να σμικρυνθεί και να ΚΥΛΗΣΕΙ αντί
+   να ξεπερνά το max-height του modal (αλλιώς κόβεται το κάτω μέρος). */
+.modal .mbody{padding:16px 20px;overflow:auto;min-height:0;flex:1 1 auto}
+.modal .mbody b.sec{display:block;font-size:11px;font-weight:700;
+  letter-spacing:.08em;text-transform:uppercase;color:var(--muted);
+  margin:16px 0 8px}
+.modal .mbody b.sec:first-child{margin-top:0}
+.modal .mfoot{padding:13px 20px;border-top:1px solid var(--line);
+  display:flex;gap:8px;justify-content:flex-end;background:var(--paper);
+  border-radius:0 0 14px 14px}
+.modal .grid input{width:70px}
+.modal.wide{width:min(760px,100%)}
+
+/* ΑΣΦΑΛΙΣΤΙΚΟΙ ΣΥΝΔΥΑΣΜΟΙ — ρύθμιση ειδικότητας σε τρεις βαθμίδες.
+   Το modal δουλεύει με τις ΙΔΙΕΣ ενότητες `.fsec` της φόρμας πρόσληψης
+   (χρωματικός κώδικας), οπότε δεν χρειάζεται δικό του πλέγμα πινάκων. */
+.modal.specialty-modal{width:min(1000px,100%)}
+/* Επιτρεπτός φορέας επικουρικής: «κάρτα» με checkbox + τα πακέτα του. */
+.opt{border:1px solid var(--line);border-radius:10px;padding:10px 12px;
+  margin-top:8px;background:var(--card);opacity:.62;transition:.12s}
+.opt.sel{opacity:1;border-color:#9FC2EE;background:var(--paper)}
+.opt .chk{margin-bottom:2px}
+.opt .tag{margin-left:6px}
+/* Υπότιτλος πακέτου μέσα σε ενότητα (π.χ. «Επικουρική ΤΕΚΑ»). */
+.sublbl{font-size:11.5px;font-weight:700;letter-spacing:.02em;
+  text-transform:uppercase;color:var(--mut);margin:10px 0 2px}
+.pkg-row{margin-bottom:2px}
+/* Προνοιακή ασφάλιση: το checkbox «Διαφοροποίηση νέων/παλαιών» ορίζει ΠΟΙΑ
+   πακέτα έχουν νόημα, άρα ΠΟΙΑ φαίνονται — διαφοροποιημένη: ΝΕΟΙ+ΠΑΛΑΙΟΙ,
+   ενιαία: ΕΝΙΑΙΑ. CSS-only με :has(), ίδιο μοτίβο με τα tabs — μηδέν JS.
+   Ο κανόνας επαναλαμβάνεται στο `company._form_packages`, ώστε το κρυμμένο
+   πακέτο να μη στέλνεται καν (ένα κρυφό select εξακολουθεί να υποβάλλεται). */
+.pron-sec:not(:has(input[name="pron_differentiated"]:checked)) .pron-diff,
+.pron-sec:has(input[name="pron_differentiated"]:checked) .pron-uniform{display:none}
+/* «Παλαιά πρόσληψη» (μεταφορά από άλλο πρόγραμμα μισθοδοσίας): τα πεδία
+   ανάληψης εμφανίζονται ΜΟΝΟ όταν ζητηθεί — ίδιο CSS-only μοτίβο. Ο κανόνας
+   επαναλαμβάνεται στο `employments.form_migration` (ό,τι δεν βλέπει ο χρήστης
+   δεν μετράει). */
+.migr-sec:not(:has(input[name="migrated"]:checked)) .migr-fields{display:none}
+/* Ξεχωριστό πλαίσιο/χρώμα ΜΕΣΑ στη «Σχέση απασχόλησης»: τα τρία πεδία της
+   παλαιάς πρόσληψης διαβάζονται ως δική τους ενότητα. Ορίζει --fc/--fc-bg,
+   οπότε τα focus states του `.fsec .frm` παίρνουν αυτόματα το χρώμα του. */
+.migr-sec{--fc:#B25E00;--fc-bg:#FBEEDF}
+.migr-sec .migr-fields{margin-top:8px;padding:11px 12px 12px;
+  border:1px solid var(--fc);border-left:4px solid var(--fc);
+  border-radius:10px;background:var(--fc-bg);
+  animation:rise .25s var(--ease) backwards}
+.migr-sec:has(input[name="migrated"]:checked) > .chk{color:var(--fc);
+  font-weight:600}
+/* Κλειδωμένη πληροφορία (ό,τι δεν είναι επιλογή του χρήστη): η βαθμίδα ενός
+   ΤΕΚΑ ΚΠΚ, ο μοναδικός φορέας μιας ειδικότητας, η υποχρεωτική πρόνοια. */
+.lockbox{border:1px dashed var(--line);border-radius:8px;padding:8px 10px;
+  background:var(--done-bg);color:var(--mut);font-size:12.5px}
+/* Χρονοσειρά ποσοστών ΚΠΚ: στενά κελιά, πλήρους πλάτους inputs. */
+table.kpk-rates th,table.kpk-rates td{padding:5px 6px}
+table.kpk-rates input{width:100%;min-width:0;font:inherit;font-size:12.5px;
+  border:1px solid var(--line);border-radius:7px;padding:5px 7px;
+  background:var(--card);color:var(--ink)}
+/* Προεπισκόπηση γραμμών ΑΠΔ στην πρόσληψη. */
+table.ins-preview{margin-top:10px}
+table.ins-preview tr.bad td{background:var(--warn-bg);color:var(--warn)}
+table.ins-preview tr.tot td{font-weight:700;border-top:2px solid var(--line)}
+.ergani-specialty-lookup{position:relative}
+.ergani-specialty-results{position:absolute;z-index:4;top:100%;left:0;right:0;
+  max-height:260px;overflow:auto;background:var(--card);border:1px solid var(--line);
+  border-radius:9px;box-shadow:0 9px 25px rgba(23,36,47,.18)}
+.ergani-specialty-results:empty{display:none}
+.ergani-specialty-results button{display:grid;grid-template-columns:70px 1fr;
+  gap:8px;width:100%;padding:8px 10px;text-align:left;border:0;
+  border-bottom:1px solid var(--line);background:var(--card);color:var(--ink);
+  cursor:pointer;font:inherit;font-size:12.5px}
+.ergani-specialty-results button:hover{background:var(--paper)}
+.ergani-specialty-results .empty{padding:12px}
+
+/* Ιστορικό συμβάσεων: οριζόντια κύλιση μόνο μέσα στο modal. */
+.modal.contract-history-modal{width:min(1050px,100%)}
+.contract-history-wrap{width:100%;overflow-x:auto;border:1px solid var(--line);
+  border-radius:9px}
+.contract-history-table{min-width:900px}
+.contract-history-table tr.current{background:var(--ready-bg)}
+.contract-history-table td .tag{margin-left:6px}
+
+/* Μικρό κουμπί (π.χ. «Ανάλυση» στα σύνολα ανά περίοδο) */
+button.ghost.sm{padding:4px 10px;font-size:12px;border-radius:7px}
+/* Δεξιά στοίχιση κελιών σε .tbl (χρησιμοποιείται στα modal ανάλυσης) */
+.tbl th.rt,.tbl td.rt{text-align:right}
+
+/* ---------------------------------------- Απόδειξη αποδοχών (payslip) */
+/* Χρώμα ανά concept: βάση=μπλε, ημέρες=γαλάζιο, προσαυξήσεις=μοβ,
+   ασθένεια=κόκκινο, ΕΦΚΑ=τιρκουάζ, ΦΜΥ=πορτοκαλί, καθαρά=πράσινο. */
+/* ΠΡΟΣΟΧΗ: το .payslip είναι ΤΟ scroll container (mbody) — μένει BLOCK, όχι
+   flex. Flex container + overflow:auto δεν κυλάει (τα children συμπιέζονται
+   αντί να υπερχειλίζουν)· το spacing γίνεται με margin στα .pslip. */
+.payslip{--c-base:#2D7DD2; --c-days:#0E9AA7; --c-prem:#7A5AF8;
+  --c-sick:var(--prob); --c-efka:#12958A; --c-fmy:var(--warn);
+  --c-net:var(--ready); --c-empr:#6B7A8D}
+.payslip>.pslip+.pslip{margin-top:18px}
+
+.pslip{border:1px solid var(--line);border-radius:13px;overflow:hidden;
+  background:var(--card);box-shadow:0 1px 3px rgba(23,36,47,.05)}
+/* Κεφαλίδα = <summary> (foldable ανά εργαζόμενο) */
+.pslip-h{display:flex;align-items:center;gap:10px;flex-wrap:wrap;
+  padding:13px 16px;cursor:pointer;list-style:none;
+  background:linear-gradient(120deg,#F3F7FC,#EFF3F9)}
+.pslip-h::-webkit-details-marker{display:none}
+.pslip[open] .pslip-h{border-bottom:1px solid var(--line)}
+.pslip-h .chev{color:var(--muted);font-size:13px;transition:transform .15s;
+  flex:none}
+.pslip[open] .pslip-h .chev{transform:rotate(90deg)}
+.pslip-h .who{display:flex;align-items:center;gap:9px;flex-wrap:wrap;
+  margin-right:auto}
+.pslip-body{padding-bottom:8px}
+.pslip-h .nm{font-size:15.5px;font-weight:700}
+.pslip-h .badge{font-size:11px;font-weight:700;letter-spacing:.04em;
+  border-radius:6px;padding:2px 9px}
+.pslip-h .badge.monthly{background:#E6F0FB;color:var(--c-base)}
+.pslip-h .badge.daily{background:#E4F5F1;color:var(--c-efka)}
+/* «PNG» μέσα στο summary: <span role=button> (ένα <button> εκεί θα δίπλωνε
+   την κάρτα με το κλικ). Το JS κάνει stopPropagation. */
+.pslip-h .png-save{cursor:pointer;user-select:none;font-size:11.5px;
+  padding:3px 9px;line-height:1.5}
+.pslip-h .net-chip{text-align:right;line-height:1.2}
+.pslip-h .net-chip span{display:block;font-size:10.5px;font-weight:700;
+  letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.pslip-h .net-chip b{font-family:var(--mono);font-size:19px;color:var(--c-net)}
+
+.payslip .chips{display:flex;flex-wrap:wrap;gap:8px;padding:12px 16px 2px}
+.payslip .chip{display:inline-flex;flex-direction:column;gap:1px;
+  font-family:var(--mono);font-size:13.5px;font-weight:600;
+  border:1px solid var(--line);border-left-width:3px;border-radius:8px;
+  padding:5px 11px;background:var(--paper)}
+.payslip .chip i{font-family:'IBM Plex Sans',sans-serif;font-style:normal;
+  font-size:10px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;
+  color:var(--muted)}
+.payslip .chip.c-base{border-left-color:var(--c-base)}
+.payslip .chip.c-days{border-left-color:var(--c-days)}
+.payslip .chip.c-unpaid{border-left-color:var(--c-sick)}
+.payslip .chip.c-fmy{border-left-color:var(--c-fmy)}
+
+.payslip .grp-label{font-size:10.5px;font-weight:700;letter-spacing:.1em;
+  text-transform:uppercase;color:var(--muted);padding:14px 16px 3px}
+
+.payslip .ledger{width:100%;border-collapse:collapse;font-size:13.5px}
+.payslip .ledger td{padding:8px 16px;vertical-align:middle}
+.payslip .ledger tr{border-bottom:1px solid var(--paper)}
+.payslip .ledger .lt{display:flex;flex-direction:column;gap:1px}
+.payslip .ledger .lt small{color:var(--muted);font-size:11px}
+.payslip .ledger .lt .dot{display:inline-block;width:8px;height:8px;
+  border-radius:50%;margin-right:8px;vertical-align:middle;flex:none}
+.payslip .ledger .lv{font-family:var(--mono);text-align:right;
+  white-space:nowrap;font-size:14px;font-weight:600}
+.payslip .ledger .lv.add{color:var(--c-net)}
+.payslip .ledger .lv.sub{color:var(--c-sick)}
+
+/* Χρώμα γραμμής ανά concept (dot + πλαϊνή γραμμή) */
+.payslip .ledger tr.l-base   .dot{background:var(--c-base)}
+.payslip .ledger tr.l-prem   .dot{background:var(--c-prem)}
+.payslip .ledger tr.l-sick   .dot{background:var(--c-sick)}
+.payslip .ledger tr.l-efka   .dot{background:var(--c-efka)}
+.payslip .ledger tr.l-taxable .dot{background:var(--c-days)}
+.payslip .ledger tr.l-fmy    .dot{background:var(--c-fmy)}
+.payslip .ledger tr.l-empr   .dot{background:var(--c-empr)}
+
+/* Γραμμές-σύνολα: έντονο φόντο ανά concept */
+.payslip .ledger tr.l-gross td{border-top:2px solid var(--line);
+  font-weight:700;background:#EEF3F8}
+.payslip .ledger tr.l-gross .lv{color:var(--c-base)}
+.payslip .ledger tr.l-net td{border-top:2px solid var(--c-net);
+  font-weight:700;background:var(--ready-bg)}
+.payslip .ledger tr.l-net .lv{color:var(--c-net);font-size:16px}
+.payslip .ledger tr.l-cost td{border-top:2px solid var(--line);
+  font-weight:700;background:var(--paper)}
+.payslip .ledger tr.l-cost .lv{color:var(--c-empr)}
+
+.payslip .prem-det{margin:8px 16px 4px;border:1px solid var(--line);
+  border-radius:10px;background:#FAF9FF;border-left:3px solid var(--c-prem)}
+.payslip .prem-det :is(summary,.sumdiv){cursor:pointer;font-size:12.5px;font-weight:700;
+  color:var(--c-prem);padding:9px 13px;list-style:none}
+.payslip .prem-det summary::-webkit-details-marker{display:none}
+.payslip .prem-det :is(summary,.sumdiv)::before{content:'▸ ';color:var(--c-prem)}
+.payslip .prem-det[open] :is(summary,.sumdiv)::before{content:'▾ '}
+.payslip .prem-det .pd-intro{font-size:11.5px;color:var(--muted);
+  line-height:1.5;padding:0 13px 8px}
+.payslip .prem-det .pd-intro b{color:var(--ink);font-weight:600}
+
+/* Περιοχή που ΚΥΛΑΕΙ όταν οι ομάδες προσαυξήσεων είναι πολλές */
+.payslip .pd-scroll{max-height:300px;overflow:auto;padding:0 9px}
+
+/* Κοινά tags (ωράριο / κλάση) */
+.payslip .pd-tag{font-size:10.5px;font-weight:700;border-radius:5px;
+  padding:1.5px 7px;letter-spacing:.02em;white-space:nowrap}
+.payslip .pd-tag.covered{background:#EEF1F4;color:var(--done)}
+.payslip .pd-tag.day{background:#EEF1F4;color:var(--muted)}
+.payslip .pd-tag.night{background:#E7ECFB;color:#3A56C4}
+.payslip .pd-tag.holiday{background:#FDF1E0;color:var(--warn)}
+.payslip .pd-tag.illegal{background:var(--prob);color:#fff}
+
+/* ΟΜΑΔΑ ανά κλάση: κεφαλίδα (κλάση + ωρομίσθιο + σύνολο) + αναλυτικός πίνακας */
+.payslip .pd-grp{background:var(--card);border:1px solid var(--line);
+  border-radius:9px;border-left:3px solid var(--c-prem);overflow:hidden;
+  margin:8px 2px}
+.payslip .pd-grp.illegal{border-left-color:var(--prob)}
+.payslip .pd-grp-h{display:flex;justify-content:space-between;align-items:center;
+  gap:10px;flex-wrap:wrap;padding:7px 11px;background:#F6F3FF}
+.payslip .pd-grp.illegal .pd-grp-h{background:var(--prob-bg)}
+.payslip .pd-grp-name{display:flex;align-items:center;gap:7px;flex-wrap:wrap}
+.payslip .pd-cls{font-weight:700;font-size:13px}
+.payslip .pd-rate{font-family:var(--mono);font-size:11px;color:var(--c-prem);
+  background:#EDE7FE;border-radius:5px;padding:1.5px 7px;font-weight:600}
+.payslip .pd-grp-tot{font-family:var(--mono);font-weight:700;font-size:13.5px;
+  color:var(--c-prem);white-space:nowrap}
+.payslip .pd-grp.illegal .pd-grp-tot{color:var(--prob)}
+
+/* Αναλυτικός πίνακας γραμμών μιας κλάσης */
+.payslip .pd-tbl{width:100%;border-collapse:collapse;font-size:12px}
+.payslip .pd-tbl th{font-weight:600;color:var(--muted);font-size:10px;
+  letter-spacing:.04em;text-transform:uppercase;text-align:left;
+  padding:5px 11px;border-bottom:1px solid var(--line)}
+.payslip .pd-tbl td{padding:6px 11px;border-bottom:1px dashed var(--line)}
+.payslip .pd-tbl tr:last-child td{border-bottom:0}
+.payslip .pd-tbl .rt{text-align:right}
+.payslip .pd-tbl .mono{font-family:var(--mono);white-space:nowrap}
+.payslip .pd-tbl .oraro{display:flex;gap:4px;flex-wrap:wrap}
+.payslip .pd-tbl td.amt{font-weight:700;color:var(--c-prem)}
+
+.payslip .pd-total{display:flex;justify-content:space-between;align-items:center;
+  padding:9px 13px;margin-top:2px;border-top:2px solid #E6E0FA;
+  font-size:12.5px;font-weight:700;color:var(--c-prem)}
+.payslip .pd-total b{font-family:var(--mono);font-size:14.5px}
+
+/* Ίδιο μοτίβο «λεπτομέρειας» με τις προσαυξήσεις, σε άλλο concept-χρώμα:
+   εισφορές ανά ταμείο (τιρκουάζ) & ανάλυση ΦΜΥ (πορτοκαλί). Αλλάζουν ΜΟΝΟ
+   τα χρώματα — η δομή (summary/pd-intro/pd-grp/pd-tbl/pd-total) είναι κοινή. */
+.payslip .prem-det.det-efka{background:#F5FBFA;border-left-color:var(--c-efka)}
+.payslip .prem-det.det-efka :is(summary,.sumdiv),
+.payslip .prem-det.det-efka :is(summary,.sumdiv)::before,
+.payslip .det-efka .pd-grp-tot,.payslip .det-efka .pd-tbl td.amt,
+.payslip .det-efka .pd-rate,.payslip .det-efka .pd-total{color:var(--c-efka)}
+.payslip .det-efka .pd-grp{border-left-color:var(--c-efka)}
+.payslip .det-efka .pd-grp-h{background:#E9F6F4}
+.payslip .det-efka .pd-rate{background:#DFF1EE}
+.payslip .det-efka .pd-total{border-top-color:#D6ECE8}
+
+.payslip .prem-det.det-tax{background:#FFFBF4;border-left-color:var(--c-fmy)}
+.payslip .prem-det.det-tax :is(summary,.sumdiv),
+.payslip .prem-det.det-tax :is(summary,.sumdiv)::before,
+.payslip .det-tax .pd-grp-tot,.payslip .det-tax .pd-tbl td.amt,
+.payslip .det-tax .pd-rate,.payslip .det-tax .pd-total{color:var(--c-fmy)}
+.payslip .det-tax .pd-grp{border-left-color:var(--c-fmy)}
+.payslip .det-tax .pd-grp-h{background:#FDF3E4}
+.payslip .det-tax .pd-rate{background:#FBEAD2}
+.payslip .det-tax .pd-total{border-top-color:#F6E2C6}
+/* Στα δύο αυτά blocks η λίστα μπορεί να είναι μακριά — λίγο ψηλότερο scroll */
+.payslip .det-efka .pd-scroll,.payslip .det-tax .pd-scroll{max-height:360px}
+.payslip .pd-tbl td small{color:var(--muted);font-size:10.5px}
+
+/* ------------------------------------ Καρτέλα απασχόλησης (fact tiles κ.ά.) */
+/* Κεφαλίδα κάρτας/ενότητας με κουμπιά ενεργειών δεξιά (ανοίγουν modals) */
+.card h2.bar,.card h3.bar{display:flex;align-items:center;gap:10px;
+  flex-wrap:wrap}
+.card .bar .acts{margin-left:auto;display:flex;gap:8px;flex-wrap:wrap}
+.card h3.sec{font-size:11px;font-weight:600;letter-spacing:.12em;
+  text-transform:uppercase;color:var(--muted);margin:20px 0 10px;
+  padding-top:14px;border-top:1px dashed var(--line)}
+.card h3.sec .norm{text-transform:none;letter-spacing:0;font-weight:500}
+button.ghost.danger{color:var(--prob);border-color:#EFC3C3}
+button.ghost.danger:hover{background:var(--prob-bg)}
+
+/* Πλακίδια δεδομένων: ετικέτα πάνω, τιμή κάτω */
+.facts{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));
+  gap:10px}
+.facts .f{background:var(--paper);border:1px solid var(--line);
+  border-radius:10px;padding:9px 12px;min-width:0}
+/* Μόνο η ετικέτα (1ο span) γίνεται block — τα tags/badges που ακολουθούν
+   μένουν inline ώστε το πλάτος τους να χωράει μόνο το κείμενό τους. */
+.facts .f>span:first-child{display:block;font-size:10px;font-weight:700;
+  letter-spacing:.08em;text-transform:uppercase;color:var(--muted);
+  margin-bottom:3px}
+.facts .f .tag{display:inline-block;vertical-align:middle}
+.facts .f>b{font-size:14px;font-weight:600;overflow-wrap:anywhere}
+.facts .f>b.soft{font-weight:500;font-size:13px}
+.facts .f>small{display:block;font-size:11.5px;color:var(--muted);
+  margin-top:2px}
+.facts .f.wide{grid-column:1/-1}
+.facts .f.hi{background:#F0F6FD;border-color:#BFD8F2}
+.facts .f.hi>span{color:#2D7DD2}
+.facts .f.hi>b{font-family:var(--mono);font-size:17px;color:#2D7DD2}
+
+/* Καθεστώς απασχόλησης δίπλα στις συμβατικές ώρες/εβδομάδα. */
+.contract-status-badge{display:inline-flex;align-items:center;margin-left:6px;
+  border:1px solid transparent;border-radius:999px;padding:2px 8px;
+  font-size:10px;font-weight:800;letter-spacing:.035em;line-height:1.3;
+  white-space:nowrap;vertical-align:middle}
+.contract-status-full{color:#14734D;background:#E4F5EC;border-color:#A9D9C2}
+.contract-status-part{color:#A86108;background:#FFF1DC;border-color:#F0C98E}
+.contract-status-rotation{color:#7040A7;background:#F2EAFB;border-color:#D5BDEC}
+
+/* Badges σύνοψης ασφαλιστικού προφίλ. Διακριτό χρώμα ανά καθεστώς/φορέα,
+   με ουδέτερο γκρι για ΟΧΙ. */
+.ins-badges{display:flex!important;flex-wrap:wrap;gap:5px;margin:0!important}
+.ins-badge{display:inline-flex;align-items:center;width:max-content;
+  border:1px solid transparent;border-radius:999px;padding:3px 9px;
+  font-size:10.5px;font-weight:800;letter-spacing:.045em;line-height:1.2;
+  white-space:nowrap}
+.ins-no{color:#6F7B85;background:#EEF1F4;border-color:#D8DEE4}
+.ins-team{color:#087A72;background:#E5F6F3;border-color:#A9DED8}
+.ins-teka{color:#7040A7;background:#F2EAFB;border-color:#D5BDEC}
+.ins-welfare{color:#A43F78;background:#FAEAF3;border-color:#EDBAD5}
+.ins-other{color:#A86108;background:#FFF1DC;border-color:#F0C98E}
+
+/* Καλύψεις ειδικότητας/απασχόλησης: chip ανά ταμείο (χρώμα στην αριστερή
+   γραμμή: κύρια ΕΦΚΑ=μπλε, επικουρική=τιρκουάζ, ΤΕΚΑ=μοβ, άλλο=πορτοκαλί) */
+.covs{display:flex;flex-wrap:wrap;gap:6px}
+.cov{display:inline-flex;flex-direction:column;gap:1px;border:1px solid
+  var(--line);border-left-width:3px;border-radius:8px;padding:4px 10px;
+  background:var(--card);font-size:12.5px}
+.cov i{font-style:normal;font-size:10px;font-weight:700;letter-spacing:.05em;
+  text-transform:uppercase;color:var(--muted)}
+.cov.efka_main{border-left-color:#2D7DD2}
+.cov.efka_aux{border-left-color:#12958A}
+.cov.teka{border-left-color:#7A4DB8}
+.cov.efka_welfare{border-left-color:#C7699E}
+.cov.other{border-left-color:var(--warn)}
+
+/* Εβδομαδιαία λωρίδα προγράμματος: 7 πλακίδια Δε–Κυ */
+.wk{display:grid;grid-template-columns:repeat(7,1fr);gap:6px}
+.wk .d{border:1px solid var(--line);border-radius:9px;padding:7px 4px;
+  text-align:center;background:var(--paper);min-width:0}
+.wk .d i{display:block;font-style:normal;font-size:10px;font-weight:700;
+  letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+/* Κάθε <b> = ένα τμήμα ωραρίου (έναρξη/λήξη σε δύο γραμμές). Στο σπαστό
+   ωράριο τα τμήματα χωρίζονται με διακεκομμένη γραμμή. */
+.wk .d b{display:block;font-family:var(--mono);font-size:10.5px;
+  font-weight:600;line-height:1.35;margin-top:2px;white-space:nowrap;
+  overflow:hidden;text-overflow:ellipsis}
+.wk .d b ~ b{border-top:1px dashed #BFD8F2;margin-top:4px;padding-top:3px}
+.wk .d.on{border-color:#BFD8F2;background:#F0F6FD}
+.wk .d.on b{color:#2D7DD2}
+.wk .d.off{opacity:.75}
+.wk .d.off b.rep{font-family:'IBM Plex Sans',sans-serif;color:var(--done);
+  font-weight:500}
+/* Τμήμα ΤΗΛΕΕΡΓΑΣΙΑΣ (πρόθεμα Τ στο ωράριο) — μοβ, όπως το tag ΤΕΚΑ */
+.wk .d b.tele{color:#7A4DB8}
+.tele-key{color:#7A4DB8}
+@media(max-width:640px){.wk{grid-template-columns:repeat(4,1fr)}}
+
+/* Υπόλοιπο κανονικής άδειας: κείμενο + μπάρα προόδου */
+.leave-sum{display:flex;flex-direction:column;gap:7px;margin-bottom:14px;
+  font-size:13px;color:var(--muted)}
+.leave-sum b{color:var(--ink);font-family:var(--mono)}
+.meter{height:8px;border-radius:99px;background:var(--paper);
+  border:1px solid var(--line);overflow:hidden}
+.meter i{display:block;height:100%;max-width:100%;background:var(--ready);
+  border-radius:99px}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   ΣΤΡΩΣΗ ΕΜΦΑΝΙΣΗΣ — κινήσεις & βάθος.
+   Μπαίνει ΤΕΛΕΥΤΑΙΑ ώστε να υπερισχύει χωρίς να αλλάζει καμία δομή.
+   Καθαρό CSS: καμία γραμμή JS, κανένα νέο asset.
+   Όλες οι κινήσεις ακυρώνονται στο prefers-reduced-motion (τέλος αρχείου).
+   ═══════════════════════════════════════════════════════════════════════ */
+:root{
+  /* Καμπύλες: --ease = γενική, --spring = ελαφρύ «αναπήδημα» στα κουμπιά */
+  --ease:cubic-bezier(.4,0,.2,1);
+  --spring:cubic-bezier(.34,1.56,.64,1);
+  /* Κλίμακα σκιών — αντί για μονόχρωμα borders παντού */
+  --sh-1:0 1px 2px rgba(23,36,47,.06);
+  --sh-2:0 4px 14px rgba(23,36,47,.08);
+  --sh-3:0 12px 30px rgba(23,36,47,.13);
+  --ready-d:#17864A;  /* σκούρα απόχρωση για τις διαβαθμίσεις */
+  --prob-d:#B62F2F;
+}
+
+/* Απαλή διαβάθμιση φόντου αντί για επίπεδο χρώμα */
+body{background:
+  radial-gradient(1200px 600px at 78% -8%,#EAF1FA 0%,transparent 60%),
+  var(--paper);
+  background-attachment:fixed}
+
+/* ----------------------------------------------- Κινήσεις (keyframes) */
+@keyframes rise{from{opacity:0;transform:translateY(9px)}
+  to{opacity:1;transform:none}}
+@keyframes pop{from{opacity:0;transform:translateY(12px) scale(.97)}
+  to{opacity:1;transform:none}}
+@keyframes fade{from{opacity:0}to{opacity:1}}
+@keyframes halo{0%{box-shadow:0 0 0 0 currentColor;opacity:.5}
+  70%{box-shadow:0 0 0 7px currentColor;opacity:0}
+  100%{box-shadow:0 0 0 0 currentColor;opacity:0}}
+@keyframes sweep{to{background-position:200% 0}}
+
+/* Οι κάρτες εμφανίζονται με μικρό κλιμακωτό delay κατά τη φόρτωση.
+   ΠΡΟΣΟΧΗ (τα panels περιέχουν το #modal-host με το position:fixed modal):
+   - ΜΟΝΟ opacity (fade), ΟΧΙ transform — transform σε πρόγονο αγκυρώνει το
+     fixed backdrop στην κάρτα αντί για το viewport (κομμένο modal).
+   - fill-mode BACKWARDS, ΟΧΙ both/forwards — animation opacity που μένει
+     «εφαρμοσμένο» (fill) κρατά ΜΟΝΙΜΑ stacking context στο panel, οπότε το
+     z-index:30 του backdrop εγκλωβίζεται και το sticky header (z-index:5)
+     ζωγραφίζεται ΠΑΝΩ από το modal. Το backwards καλύπτει μόνο το delay. */
+main>*{animation:fade .42s var(--ease) backwards}
+main>*:nth-child(2){animation-delay:.05s}
+main>*:nth-child(3){animation-delay:.1s}
+main>*:nth-child(4){animation-delay:.15s}
+
+.card{box-shadow:var(--sh-1);
+  transition:box-shadow .28s var(--ease),transform .28s var(--ease)}
+.card:hover{box-shadow:var(--sh-2)}
+
+/* --------------------------------------------------------- ΚΟΥΜΠΙΑ */
+/* Κοινή βάση: ανασήκωμα στο hover, «πάτημα» στο active, ορατό focus ring. */
+button.run,a.run,button.ghost,a.ghost,.lnkbtn{
+  position:relative;overflow:hidden;isolation:isolate;
+  transition:transform .18s var(--spring),box-shadow .22s var(--ease),
+    background-color .22s var(--ease),border-color .22s var(--ease),
+    color .22s var(--ease)}
+button.run:focus-visible,a.run:focus-visible,button.ghost:focus-visible,
+a.ghost:focus-visible{outline:none;box-shadow:0 0 0 3px var(--card),
+  0 0 0 5px var(--ready)}
+
+button.run,a.run{
+  background:linear-gradient(180deg,var(--ready),var(--ready-d));
+  box-shadow:var(--sh-1),inset 0 1px 0 rgba(255,255,255,.22)}
+button.run:hover:not(:disabled),a.run:hover{transform:translateY(-2px);
+  box-shadow:0 7px 18px rgba(31,157,85,.32),
+    inset 0 1px 0 rgba(255,255,255,.28)}
+button.run:active:not(:disabled),a.run:active{transform:translateY(0) scale(.97);
+  box-shadow:var(--sh-1)}
+button.run.danger{background:linear-gradient(180deg,var(--prob),var(--prob-d))}
+button.run.danger:hover:not(:disabled){
+  box-shadow:0 7px 18px rgba(214,69,69,.32)}
+button.run:disabled{background:var(--done-bg);box-shadow:none;transform:none}
+
+/* Λάμψη που διατρέχει το κουμπί στο hover (ψευδοστοιχείο, όχι JS) */
+button.run::after,a.run::after{content:'';position:absolute;inset:0;z-index:-1;
+  background:linear-gradient(105deg,transparent 38%,rgba(255,255,255,.4) 50%,
+    transparent 62%);
+  background-size:220% 100%;background-position:-120% 0}
+button.run:hover:not(:disabled)::after,a.run:hover::after{
+  animation:sweep .75s var(--ease)}
+
+button.ghost,a.ghost{box-shadow:var(--sh-1)}
+button.ghost:hover,a.ghost:hover{transform:translateY(-2px);
+  border-color:var(--ink);box-shadow:var(--sh-2)}
+button.ghost:active,a.ghost:active{transform:translateY(0) scale(.97)}
+button.ghost.on{box-shadow:var(--sh-2)}
+button.ghost.danger:hover{border-color:var(--prob);
+  box-shadow:0 5px 14px rgba(214,69,69,.18)}
+
+/* --------------------------------------------------------- ΠΛΟΗΓΗΣΗ */
+nav.side a.nl{position:relative;transition:background-color .2s var(--ease),
+  transform .2s var(--ease),color .2s var(--ease)}
+nav.side a.nl:hover{transform:translateX(3px)}
+nav.side a.nl .ic{transition:transform .25s var(--spring)}
+nav.side a.nl:hover .ic{transform:scale(1.22)}
+/* Η ενεργή γραμμή: δείκτης που «μεγαλώνει» αντί για στατικό inset shadow */
+nav.side a.nl.on{box-shadow:none;
+  background:linear-gradient(90deg,#E9F1FA,var(--paper))}
+nav.side a.nl.on::before{content:'';position:absolute;left:0;top:14%;bottom:14%;
+  width:3px;border-radius:0 3px 3px 0;background:var(--ink);
+  animation:rise .3s var(--ease) both}
+/* Στις σελίδες ομάδας ο δείκτης αντικαθιστά τη γραμμή της εσοχής */
+nav.side a.nl.sub.on{border-left-color:transparent}
+nav.side a.nl.sub.on::before{left:-1px}
+nav.side .brand{background:linear-gradient(92deg,var(--ink),#2D7DD2);
+  -webkit-background-clip:text;background-clip:text;color:transparent;
+  width:max-content}
+
+header{backdrop-filter:saturate(1.6) blur(8px);
+  background:rgba(255,255,255,.86);box-shadow:var(--sh-1)}
+
+/* ------------------------------------------------- ΚΑΡΤΕΣ ΚΑΤΑΣΤΑΣΗΣ */
+.stat{position:relative;overflow:hidden;box-shadow:var(--sh-1);
+  transition:transform .26s var(--spring),box-shadow .26s var(--ease)}
+.stat:hover{transform:translateY(-3px);box-shadow:var(--sh-2)}
+/* Λεπτή έγχρωμη λωρίδα κορυφής, ανά κατάσταση */
+.stat::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;
+  background:currentColor;opacity:.9;transform:scaleX(0);transform-origin:left;
+  transition:transform .4s var(--ease)}
+.stat:hover::before{transform:scaleX(1)}
+.stat.s-done{color:var(--done)} .stat.s-ready{color:var(--ready)}
+.stat.s-warn{color:var(--warn)} .stat.s-prob{color:var(--prob)}
+.stat b{transition:transform .26s var(--spring)}
+.stat:hover b{transform:scale(1.06)}
+
+/* ----------------------------------------------------- ΧΡΟΝΟΛΟΓΙΟ */
+.ob{transition:background-color .2s var(--ease),transform .2s var(--ease)}
+.ob:hover{transform:translateX(3px)}
+.ob.sel{animation:rise .25s var(--ease)}
+.dot{transition:transform .25s var(--spring)}
+.ob:hover .dot{transform:scale(1.18)}
+/* Παλμός στα «έτοιμα» και στα «προβληματικά» — τραβούν το μάτι */
+.d-ready,.d-problem{position:relative}
+.d-ready::after,.d-problem::after{content:'';position:absolute;inset:-3px;
+  border-radius:50%;animation:halo 2.4s var(--ease) infinite}
+.d-ready::after{color:var(--ready)} .d-problem::after{color:var(--prob)}
+.pill{transition:transform .2s var(--spring)}
+.ob:hover .pill{transform:scale(1.06)}
+
+/* --------------------------------------------------------- ΠΙΝΑΚΕΣ */
+table.tbl tbody tr{transition:background-color .18s var(--ease)}
+.audit-log tbody tr{cursor:pointer}
+.audit-log tbody tr:hover{background:var(--ready-bg)}
+.audit-log tbody tr:has(input:checked){background:#E6F1FF;box-shadow:inset 3px 0 var(--ready)}
+.audit-actions{display:flex;align-items:center;justify-content:space-between;gap:16px;
+  margin:10px 0;padding:11px 13px;border:1px solid #EFC3C3;border-radius:9px;
+  background:var(--prob-bg);font-size:12.5px}
+.audit-result{padding:10px 13px;margin:12px 0;border-radius:8px;font-size:13px}
+.audit-result.ok{background:var(--ready-bg);color:var(--ready-d)}
+.audit-result.err{background:var(--prob-bg);color:var(--prob)}
+.backup-actions{display:flex;align-items:center;gap:12px;flex-wrap:wrap;
+  margin:14px 0 6px;padding:13px;border:1px solid var(--line);border-radius:10px;
+  background:var(--paper)}
+.backup-actions>div:first-child{margin-right:auto}
+.backup-actions form{display:flex;align-items:end;gap:8px;flex-wrap:wrap}
+.restore-file{display:flex;flex-direction:column;gap:3px;font-size:11.5px;color:var(--muted)}
+.restore-file input{max-width:230px;font-size:12px;color:var(--ink)}
+.backup-note{font-size:11.5px;margin:0 0 14px}
+.atbl-row{transition:background-color .18s var(--ease),
+  transform .18s var(--ease)}
+.atbl-row:hover{transform:translateX(2px)}
+.emp .avatar{transition:transform .25s var(--spring),box-shadow .25s var(--ease)}
+.emp:hover .avatar{transform:scale(1.08);box-shadow:var(--sh-1)}
+.tag,.cov,.payslip .chip{transition:transform .2s var(--spring)}
+.tag:hover,.cov:hover,.payslip .chip:hover{transform:translateY(-1px)}
+
+/* ---------------------------------------------------------- ΦΟΡΜΕΣ */
+.frm input,.frm select,input[type=date]{
+  transition:border-color .2s var(--ease),box-shadow .2s var(--ease),
+    background-color .2s var(--ease)}
+.frm input:focus,.frm select:focus,input[type=date]:focus{outline:none;
+  border-color:var(--ready);box-shadow:0 0 0 3px var(--ready-bg)}
+.frm input:hover,.frm select:hover{border-color:#C9D4E0}
+details.box{transition:box-shadow .25s var(--ease),
+  border-color .25s var(--ease)}
+details.box[open]{box-shadow:var(--sh-1)}
+details.box summary{transition:background-color .2s var(--ease)}
+details.box summary:hover{background:#EDF2F8;border-radius:11px}
+details.box[open] summary{border-radius:11px 11px 0 0}
+details.box[open] .frm{animation:rise .3s var(--ease) both}
+
+/* ----------------------------------------------------------- MODAL */
+.modal-backdrop{background:rgba(23,36,47,.42);
+  backdrop-filter:blur(3px) saturate(.9);
+  animation:fade .22s var(--ease) both}
+.modal{box-shadow:var(--sh-3);animation:pop .3s var(--spring) both}
+.modal .mhead{background:linear-gradient(120deg,#F4F8FD,var(--card))}
+.modal .mbody b.sec{position:relative;padding-left:11px}
+.modal .mbody b.sec::before{content:'';position:absolute;left:0;top:1px;
+  bottom:1px;width:3px;border-radius:2px;background:var(--ready);opacity:.55}
+
+/* ---------------------------------------------- Payslip & λεπτομέρειες */
+.pslip{transition:box-shadow .28s var(--ease),transform .28s var(--ease)}
+.pslip:hover{box-shadow:var(--sh-2)}
+.pslip[open]{box-shadow:var(--sh-2)}
+.pslip-h{transition:background-color .22s var(--ease)}
+.pslip-h:hover{background:linear-gradient(120deg,#EDF3FB,#E7EEF7)}
+.pslip[open] .pslip-body{animation:rise .32s var(--ease) both}
+.payslip .ledger tr.l-net td{position:relative;overflow:hidden}
+.detail .dep{transition:transform .2s var(--spring)}
+.detail .dep:hover{transform:translateY(-1px)}
+
+/* Η μπάρα υπολοίπου αδείας «γεμίζει» με κίνηση */
+.meter i{background:linear-gradient(90deg,var(--ready),#38C172);
+  transition:width .6s var(--ease);animation:rise .5s var(--ease) both}
+
+/* ------------------------------------------------------ htmx & toast */
+/* Κατά την αίτηση: ξεθώριασμα + λεπτή «αναπνοή» αντί για σκέτο opacity */
+.htmx-request{opacity:.5;transition:opacity .2s var(--ease);
+  pointer-events:none}
+button.run.htmx-request,button.ghost.htmx-request{
+  background-image:linear-gradient(90deg,transparent 25%,
+    rgba(255,255,255,.28) 50%,transparent 75%);
+  background-size:200% 100%;animation:sweep 1s linear infinite}
+#toast{transform:translateX(-50%) translateY(10px) scale(.96);
+  box-shadow:var(--sh-3);
+  transition:opacity .28s var(--ease),transform .28s var(--spring)}
+#toast.show{transform:translateX(-50%) translateY(0) scale(1)}
+
+/* --------------------------------- Σεβασμός στο prefers-reduced-motion */
+/* Οι χρήστες που ζητούν λιγότερη κίνηση δεν παίρνουν ΚΑΜΙΑ από τις παραπάνω. */
+@media(prefers-reduced-motion:reduce){
+  *,*::before,*::after{animation:none!important;transition:none!important;
+    transform:none!important}
+  body{background:var(--paper)}
+}
+
+/* ---------------------------------------- Responsive: modal & payslip */
+/* Οθόνες με λίγο ύψος: το modal να κυλάει σωστά χωρίς να κόβεται. */
+@media(max-height:720px){
+  .modal-backdrop{padding:14px}
+  .modal,.modal.wide{max-height:calc(100dvh - 28px)}
+}
+/* Μικρές οθόνες (κινητά/στενά παράθυρα): πλήρες πλάτος, μικρότερα paddings,
+   η αλυσίδα παραγόντων τυλίγεται καθαρά. */
+@media(max-width:640px){
+  .modal-backdrop{padding:10px;align-items:stretch}
+  .modal,.modal.wide{width:100%;max-height:calc(100dvh - 20px)}
+  .modal .mhead,.modal .mbody,.modal .mfoot{padding-left:13px;padding-right:13px}
+
+  .payslip>.pslip+.pslip{margin-top:14px}
+  .pslip-h{padding:11px 13px}
+  .pslip-h .net-chip{text-align:left}
+  .payslip .chips{padding:11px 13px 2px}
+  .payslip .chip{flex:1 1 auto}
+  .payslip .grp-label{padding:12px 13px 3px}
+  .payslip .ledger td{padding:8px 13px}
+  .payslip .ledger .lv{font-size:13px}
+
+  /* Προσαυξήσεις σε στενό πλάτος: πιο ρηχά paddings, ο πίνακας κυλάει
+     οριζόντια αν χρειαστεί (δεν σπρώχνει το modal). */
+  .payslip .prem-det{margin:8px 8px 4px}
+  .payslip .pd-scroll{padding:0 6px}
+  .payslip .pd-grp{margin:8px 1px}
+  .payslip .pd-tbl th,.payslip .pd-tbl td{padding-left:8px;padding-right:8px}
+}
+
+/* ------------------------------- eΑΠΔ viewer (iframe σε modal ανάλυσης) */
+.eapd-backdrop{padding:24px 14px}
+.modal.eapd-modal{width:min(1380px,100%);max-height:calc(100vh - 48px)}
+.eapd-title{display:flex;align-items:flex-start;justify-content:space-between;gap:16px}
+.eapd-title h3{margin-bottom:3px}
+.eapd-actions{display:flex;gap:7px;white-space:nowrap}
+.modal .eapd-body{padding:0;overflow:hidden;display:flex}
+.eapd-frame{width:100%;flex:1 1 auto;min-height:min(76vh,880px);
+  border:0;background:#fff;display:block}
+
+/* --- Tooltip προέλευσης ποσού (σελίδα Πληρωμές) — CSS ΜΟΝΟ, χωρίς JS --- */
+/* Το κείμενο μπαίνει στο data-tip· τα «\n» αποδίδονται χάρη στο
+   white-space:pre-line. Εμφανίζεται σε hover ΚΑΙ σε focus (πληκτρολόγιο). */
+.tip{position:relative;cursor:help;border-bottom:1px dotted var(--muted)}
+.tip::after{content:attr(data-tip);position:absolute;right:0;bottom:calc(100% + 7px);
+  z-index:40;min-width:220px;max-width:min(380px,70vw);white-space:pre-line;
+  text-align:left;font-family:'IBM Plex Sans',system-ui,sans-serif;
+  font-size:12px;line-height:1.45;font-weight:400;
+  color:var(--ink);background:var(--card);border:1px solid var(--line);
+  border-radius:9px;padding:8px 10px;box-shadow:0 10px 26px rgba(23,36,47,.20);
+  opacity:0;visibility:hidden;transform:translateY(3px);
+  transition:opacity .14s var(--ease),transform .14s var(--ease),visibility .14s}
+.tip:hover::after,.tip:focus-visible::after{opacity:1;visibility:visible;
+  transform:translateY(0)}
+/* Οι πρώτες γραμμές του πίνακα δεν έχουν χώρο από πάνω: το tooltip πέφτει κάτω */
+table.tbl tbody tr:first-child .tip::after{bottom:auto;top:calc(100% + 7px);
+  transform:translateY(-3px)}
+table.tbl tbody tr:first-child .tip:hover::after{transform:translateY(0)}
+
+/* --- Εγγραφές αρχείου ΦΜΥ (modal ανάλυσης JL10) ------------------------ */
+/* Κάθε εγγραφή σε ΜΙΑ γραμμή, με οριζόντια κύλιση ΜΟΝΟ στο ίδιο το κείμενο
+   (148 χαρακτήρες σταθερού πλάτους — η σελίδα δεν κυλά ποτέ οριζόντια). */
+.fmy-recs{display:flex;flex-direction:column;gap:5px}
+.fmy-rec{display:flex;align-items:center;gap:8px;min-width:0}
+.fmy-rec .len{font-size:11px;color:var(--muted)}
+.fmy-rec code{flex:1;min-width:0;overflow-x:auto;white-space:pre;
+  font-family:var(--mono);font-size:11.5px;background:var(--paper);
+  border:1px solid var(--line);border-radius:7px;padding:5px 8px}
+
+/* --- ΠΕΔΙΟ ΗΜΕΡΟΜΗΝΙΑΣ ΣΕ ΕΛΛΗΝΙΚΗ ΜΟΡΦΗ (static/date-gr.js) -----------
+   Ο browser μορφοποιεί το native <input type="date"> με τη ΔΙΚΗ ΤΟΥ γλώσσα
+   (mm/dd/yyyy σε αγγλικό Chrome), γι' αυτό μπροστά του μπαίνει δικό μας πεδίο
+   ΗΗ/ΜΜ/ΕΕΕΕ. Το native ΔΕΝ γίνεται display:none — μένει rendered (1px,
+   διάφανο, χωρίς pointer events) ώστε να δουλεύει το showPicker(). */
+.dgr{display:inline-flex;align-items:stretch;gap:6px;position:relative;
+  min-width:0;max-width:100%}
+.frm .dgr{width:100%}
+/* Χαμηλή ειδικότητα (ΕΝΑ class): μέσα στις φόρμες υπερισχύει το `.frm input`,
+   ώστε το πεδίο να μοιάζει ΑΚΡΙΒΩΣ με τα διπλανά του. */
+.dgr-text{font:inherit;border:1px solid var(--line);border-radius:8px;
+  padding:6px 8px;background:var(--card);color:var(--ink);min-width:0}
+.dgr-text:focus{outline:none;border-color:var(--ready);
+  box-shadow:0 0 0 3px var(--ready-bg)}
+/* `:user-invalid` (ΟΧΙ `:invalid`): το κενό υποχρεωτικό πεδίο δεν βάφεται
+   κόκκινο πριν καν το αγγίξει ο χρήστης. */
+.dgr-text:user-invalid{border-color:var(--prob)}
+.dgr>.dgr-text{flex:1}
+/* Ο επιλογέας πιάνει το ΙΔΙΟ το native (input[type=date]), όχι κάποια κλάση
+   που πρέπει να θυμηθεί να βάλει το JS: αν ξεφύγει, η ημερομηνία εμφανίζεται
+   ΔΥΟ ΦΟΡΕΣ (δικό μας ΗΗ/ΜΜ/ΕΕΕΕ + το native mm/dd/yyyy). */
+.dgr>input[type=date]{position:absolute;right:0;bottom:0;width:1px;height:1px;
+  min-width:0;opacity:0;padding:0;margin:0;border:0;pointer-events:none}
+.dgr>.dgr-cal{flex:none;font-size:14px;line-height:1;cursor:pointer;
+  background:var(--card);color:var(--ink);border:1px solid var(--line);
+  border-radius:8px;padding:0 9px;
+  transition:border-color .2s var(--ease),background-color .2s var(--ease)}
+.dgr>.dgr-cal:hover{border-color:#C9D4E0;background:var(--paper)}
+
+/* --- Πεδίο με κουμπί αναζήτησης (π.χ. Τοπική Δ/νση e-ΕΦΚΑ) ------------- */
+.fieldrow{display:flex;gap:6px;align-items:stretch}
+.fieldrow>input{flex:1;min-width:0}
+
+/* --- Λίστα επιλογής μητρώου (lookup ΤΟΠΙΚ/ΚΑΔ/ειδικότητας) ------------- */
+.picklist{display:flex;flex-direction:column;gap:4px;max-height:46vh;
+  overflow:auto;border:1px solid var(--line);border-radius:9px;padding:5px}
+button.pick{display:flex;gap:10px;align-items:center;width:100%;
+  text-align:left;background:transparent;border:1px solid transparent;
+  border-radius:7px;padding:7px 9px;font-size:13px;color:var(--ink);
+  cursor:pointer}
+button.pick:hover{background:var(--paper);border-color:var(--line)}
+button.pick>b{font-family:var(--mono);font-size:12px;color:var(--muted);
+  white-space:nowrap}
+button.pick>span:first-of-type{flex:1}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   TAB «ΠΡΟΓΡΑΜΜΑ ΕΡΓΑΣΙΑΣ» της (επανα)πρόσληψης — template εβδομάδας &
+   ΤΥΠΟΣ πρώτης δήλωσης (partials/_schedule_tab.html).
+   ΚΑΘΑΡΟ CSS, ΚΑΜΙΑ γραμμή JS: η ενεργή κάρτα προκύπτει από
+   `:has(input:checked)`, το πεδίο της «ξεδιπλώνεται» με grid-template-rows
+   0fr→1fr (το μόνο κόλπο που κάνει transition σε άγνωστο ύψος).
+   Οι κινήσεις ακυρώνονται από το prefers-reduced-motion παραπάνω.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+/* --- Template εβδομάδας: 7 ημέρες σε πλέγμα, Σα/Κυ διακριτά ------------ */
+/* Το πλάτος της στήλης χωρά ΣΠΑΣΤΟ ωράριο ΜΕ τηλεεργασία, π.χ.
+   «09:00-17:00+Τ20:00-22:00» (24 χαρακτήρες monospace) — μη το μικρύνεις. */
+.wk-tpl{display:grid;gap:8px;
+  grid-template-columns:repeat(auto-fit,minmax(216px,1fr))}
+.wk-tpl .wk-day{display:flex;flex-direction:column;gap:4px;
+  background:var(--card);border:1px solid var(--line);border-radius:10px;
+  padding:7px 8px 8px;transition:border-color .18s var(--ease),
+    box-shadow .18s var(--ease),background .18s var(--ease)}
+.wk-tpl .wk-day:hover{border-color:#C9D4E0;box-shadow:var(--sh-1)}
+.wk-tpl .wk-lbl{font-size:10.5px;font-weight:700;letter-spacing:.08em;
+  text-transform:uppercase;color:var(--muted)}
+.wk-tpl .wk-day input{font-family:var(--mono);font-size:12.5px;
+  text-align:center;padding:6px 6px;text-overflow:ellipsis}
+/* Σαββατοκύριακο: γκρίζα βάση — «ρεπό» είναι η προεπιλογή, όχι λάθος */
+.wk-tpl .wk-day.we{background:var(--paper)}
+.wk-tpl .wk-day.we .wk-lbl{color:#93A1AE}
+/* Ημέρα ΜΕ ωράριο: πράσινη «κορδέλα» στα αριστερά */
+.wk-tpl .wk-day:has(input:not(:placeholder-shown)){
+  box-shadow:inset 3px 0 0 var(--ready)}
+.wk-tpl .wk-day:focus-within{border-color:var(--ink);box-shadow:var(--sh-2)}
+
+/* --- Τύπος πρώτης δήλωσης: δύο κάρτες επιλογής ------------------------- */
+.schopts{display:grid;gap:12px;
+  grid-template-columns:repeat(auto-fit,minmax(280px,1fr))}
+
+/* ⚠ ΔΥΟ κλάσεις: το `.frm label` (0,1,1) θα νικούσε το σκέτο `.schopt` και
+   θα επέβαλλε το δικό του font-size/color/gap. */
+.schopts .schopt{position:relative;display:flex;flex-direction:column;gap:7px;
+  padding:13px 14px 13px 40px;border:1px solid var(--line);border-radius:14px;
+  background:var(--card);cursor:pointer;overflow:hidden;
+  font-size:12.5px;color:var(--muted);
+  transition:border-color .2s var(--ease),box-shadow .2s var(--ease),
+    background .2s var(--ease),transform .2s var(--ease)}
+.schopt.sc-fixed{--sc:var(--ready);--sc-bg:var(--ready-bg);--sc-d:var(--ready-d)}
+.schopt.sc-var{--sc:var(--warn);--sc-bg:var(--warn-bg);--sc-d:#C06E05}
+.schopt:hover{border-color:var(--sc);transform:translateY(-2px);
+  box-shadow:var(--sh-2)}
+
+/* Λωρίδα χρώματος στην κορυφή — «γεμίζει» όταν επιλεγεί η κάρτα */
+.schopt::before{content:'';position:absolute;inset:0 0 auto 0;height:3px;
+  background:var(--sc);transform:scaleX(0);transform-origin:left;
+  transition:transform .3s var(--ease)}
+
+/* Το native radio κρύβεται (μένει προσβάσιμο/εστιάσιμο), ζωγραφίζουμε το
+   .sc-mark — αλλιώς δεν χρωματίζεται ούτε εμψυχώνεται. */
+.schopt>input[type=radio]{position:absolute;opacity:0;width:1px;height:1px;
+  margin:0;pointer-events:none}
+.schopt .sc-mark{position:absolute;left:14px;top:15px;width:16px;height:16px;
+  border:2px solid #C3CDD8;border-radius:50%;background:var(--card);
+  transition:border-color .2s var(--ease),box-shadow .2s var(--ease)}
+.schopt .sc-mark::after{content:'';position:absolute;inset:2px;
+  border-radius:50%;background:var(--sc);transform:scale(0);
+  transition:transform .25s var(--spring)}
+
+.schopt .sc-head{display:flex;align-items:center;gap:8px;flex-wrap:wrap;
+  font-size:14px;color:var(--ink)}
+.schopt .sc-ic{font-size:16px;line-height:1}
+.schopt .sc-tag{margin-left:auto;font-size:10px;font-weight:700;
+  letter-spacing:.07em;text-transform:uppercase;color:var(--sc-d);
+  background:var(--sc-bg);border-radius:999px;padding:3px 9px;
+  transition:opacity .2s var(--ease)}
+.schopt .sc-txt{line-height:1.5}
+.schopt .sc-txt b{color:var(--ink);font-weight:600}
+
+/* Το πεδίο της κάρτας: κλειστό (0fr) όσο η κάρτα δεν είναι επιλεγμένη */
+.schopt .sc-field{display:grid;grid-template-rows:0fr;opacity:0;
+  margin-top:0;transition:grid-template-rows .3s var(--ease),
+    opacity .25s var(--ease),margin-top .3s var(--ease)}
+/* ΕΝΑ παιδί (.sc-in): με δύο, το δεύτερο θα έπεφτε σε implicit row που ΔΕΝ
+   κλείνει — το πεδίο θα έμενε ορατό στη μη επιλεγμένη κάρτα. */
+.schopt .sc-field>.sc-in{min-height:0;overflow:hidden}
+.schopt .sc-fl{display:block;font-size:11px;font-weight:600;
+  letter-spacing:.03em;text-transform:uppercase;color:var(--muted);
+  margin-bottom:4px}
+.schopt .sc-fl i{font-style:normal;font-weight:400;text-transform:none;
+  letter-spacing:0}
+.schopt .sc-field input{max-width:230px}
+
+/* ----------------------------- ΕΠΙΛΕΓΜΕΝΗ κάρτα */
+.schopt:has(input:checked){border-color:var(--sc);background:
+  linear-gradient(180deg,var(--sc-bg) 0%,var(--card) 62%);
+  box-shadow:var(--sh-2)}
+.schopt:has(input:checked)::before{transform:scaleX(1)}
+.schopt:has(input:checked) .sc-mark{border-color:var(--sc)}
+.schopt:has(input:checked) .sc-mark::after{transform:scale(1)}
+.schopt:has(input:checked) .sc-tag{background:var(--sc);color:#fff}
+.schopt:has(input:checked) .sc-field{grid-template-rows:1fr;opacity:1;
+  margin-top:3px}
+/* Το πεδίο της ΜΗ επιλεγμένης κάρτας δεν δέχεται κλικ — έτσι το κλικ πάνω
+   του επιλέγει την κάρτα (activation behavior της <label>), αντί να
+   εστιάζει σε ανενεργό πεδίο. */
+.schopt:not(:has(input:checked)) .sc-field{pointer-events:none}
+/* Πληκτρολόγιο: το native radio είναι κρυμμένο, το δαχτυλίδι το δίνει η κάρτα */
+.schopt:has(input:focus-visible){border-color:var(--sc);
+  box-shadow:0 0 0 3px var(--sc-bg),var(--sh-2)}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   ΕΝΟΤΗΤΕΣ ΦΟΡΜΑΣ (partials/_general_tab.html) — χρωματικός κώδικας ανά
+   θεματική ενότητα της (επανα)πρόσληψης: ταυτότητα / σύμβαση / ασφάλιση /
+   προσαυξήσεις. Κάθε ενότητα ορίζει --fc (χρώμα) & --fc-bg (γέμισμα) και
+   ΟΛΟΙ οι κανόνες παρακάτω τα διαβάζουν — νέα ενότητα = ΜΙΑ γραμμή με τα
+   δύο custom properties, τίποτε άλλο.
+   ΚΑΘΑΡΟ CSS, καμία γραμμή JS. Κινήσεις: prefers-reduced-motion παραπάνω.
+   ═══════════════════════════════════════════════════════════════════════ */
+.fsecs{display:flex;flex-direction:column;gap:14px}
+
+.fsec{--fc:var(--muted);--fc-bg:var(--paper);
+  position:relative;background:var(--card);border:1px solid var(--line);
+  border-radius:14px;padding:13px 15px 15px;overflow:hidden;
+  animation:rise .32s var(--ease) backwards;
+  transition:border-color .2s var(--ease),box-shadow .2s var(--ease)}
+/* Κλιμακωτή εμφάνιση — η φόρμα «χτίζεται» ενότητα-ενότητα */
+.fsec:nth-child(1){animation-delay:.02s}
+.fsec:nth-child(2){animation-delay:.08s}
+.fsec:nth-child(3){animation-delay:.14s}
+.fsec:nth-child(4){animation-delay:.20s}
+.fsec:nth-child(5){animation-delay:.26s}
+/* Η χρωματική «ράχη» αριστερά: λεπτή σε ηρεμία, γεμάτη όταν δουλεύεις εκεί */
+.fsec::before{content:'';position:absolute;left:0;top:0;bottom:0;width:4px;
+  background:var(--fc);opacity:.35;transition:opacity .25s var(--ease),
+    width .25s var(--ease)}
+.fsec:hover{border-color:var(--fc);box-shadow:var(--sh-1)}
+.fsec:hover::before{opacity:.6}
+.fsec:focus-within{border-color:var(--fc);box-shadow:var(--sh-2)}
+.fsec:focus-within::before{opacity:1;width:5px}
+
+.fsec .fs-h{display:flex;align-items:center;gap:9px;flex-wrap:wrap;
+  margin-bottom:11px}
+.fsec .fs-h b{font-size:14px;color:var(--ink)}
+.fsec .fs-ic{display:inline-flex;align-items:center;justify-content:center;
+  width:28px;height:28px;border-radius:9px;background:var(--fc-bg);
+  font-size:15px;line-height:1;
+  transition:transform .25s var(--spring),box-shadow .25s var(--ease)}
+.fsec:focus-within .fs-ic{transform:scale(1.08);
+  box-shadow:0 0 0 3px var(--fc-bg)}
+.fsec .fs-hint{flex:1;min-width:150px;font-size:11.5px;color:var(--muted);
+  line-height:1.45}
+.fsec .fs-note{font-size:12.5px;color:var(--muted);line-height:1.5}
+.fsec.compact{padding:11px 15px 12px}
+.fsec.compact .fs-h{margin-bottom:5px}
+/* Το πεδίο που έχει την εστίαση παίρνει το χρώμα της ενότητάς του */
+.fsec .frm input:focus,.fsec .frm select:focus{border-color:var(--fc);
+  box-shadow:0 0 0 3px var(--fc-bg)}
+.fsec .frm label:focus-within{color:var(--fc)}
+.fsec .warnbox{margin:0}
+.minimum-compensation-note{margin-top:9px;padding:8px 10px;border-radius:8px;
+  background:var(--paper);color:var(--muted);font-size:12px;line-height:1.45}
+.minimum-compensation-note:empty{display:none}
+.minimum-compensation-note.adjusted{background:var(--warn-bg);color:var(--warn);
+  font-weight:600}
+.minimum-compensation-note.error{background:var(--prob-bg);color:var(--prob)}
+
+/* --------------------------------------------- Οι τέσσερις ενότητες */
+.fsec.fs-id{--fc:#4C7FD1;--fc-bg:#EAF1FA}      /* ταυτότητα προσώπου  */
+.fsec.fs-pay{--fc:var(--ready);--fc-bg:var(--ready-bg)}  /* σύμβαση    */
+.fsec.fs-relation{--fc:#7a5af8;--fc-bg:#f1edff}          /* σχέση       */
+.fixed-term-fields[hidden]{display:none!important}
+.fsec.fs-oaed{--fc:#246B8E;--fc-bg:#E3F2F8}
+.fsec.fs-trial{--fc:#8A5C20;--fc-bg:#F8EEDC}
+.fsec.fs-digital-card{--fc:#315DA8;--fc-bg:#E8EFFB}
+[data-oaed-program-fields][hidden],[data-oaed-replacement-fields][hidden],
+[data-trial-date-field][hidden]{display:none!important}
+.fsec.fs-ins{--fc:#2E86A0;--fc-bg:#E4F1F5}     /* ασφάλιση (ΑΠΔ)      */
+.fsec.fs-extra{--fc:var(--warn);--fc-bg:var(--warn-bg)}  /* προσαυξήσεις */
+
+/* ═══════════════════════════════════════════════════════════════════════
+   ΧΡΟΝΟΛΟΓΙΟ ΥΠΟΧΡΕΩΣΕΩΝ ΣΕ 3 ΣΤΗΛΕΣ (partials/_ob_panel.html)
+   Μισθολογικές / Υποβολές / Πληρωμές — η στήλη κάθε τύπου είναι δηλωτική
+   (`obligation_types.track`). Κάθε στήλη ορίζει ΜΟΝΟ --tc/--tc-bg· όλοι οι
+   κανόνες τα διαβάζουν, οπότε νέα στήλη = μία εγγραφή στο μητρώο + ένα
+   ζευγάρι χρωμάτων εδώ. ΚΑΘΑΡΟ CSS, καμία γραμμή JS.
+   ═══════════════════════════════════════════════════════════════════════ */
+.obcols{display:grid;gap:14px;align-items:start;
+  grid-template-columns:repeat(3,minmax(0,1fr));max-height:none;overflow:visible}
+@media(max-width:1100px){.obcols{grid-template-columns:1fr}}
+
+.obcol{--tc:var(--muted);--tc-bg:var(--paper);
+  border:1px solid var(--line);border-radius:14px;background:var(--card);
+  overflow:hidden;animation:rise .3s var(--ease) backwards;
+  transition:border-color .2s var(--ease),box-shadow .2s var(--ease)}
+.obcol:nth-child(2){animation-delay:.06s}
+.obcol:nth-child(3){animation-delay:.12s}
+.obcol:hover{border-color:var(--tc);box-shadow:var(--sh-1)}
+
+.obcol-h{display:flex;align-items:center;gap:8px;padding:9px 12px;
+  background:var(--tc-bg);border-bottom:1px solid var(--line);
+  font-size:13px;color:var(--tc)}
+.obcol-h b{color:var(--ink);font-size:13.5px}
+.obcol-h .ic{font-size:15px;line-height:1}
+/* Μετρητής υποχρεώσεων της στήλης */
+.obcol-h .n{margin-left:auto;font-family:var(--mono);font-size:11.5px;
+  font-weight:700;color:#fff;background:var(--tc);border-radius:99px;
+  min-width:22px;text-align:center;padding:1px 7px}
+.obcol-body{padding:4px 8px 10px;max-height:620px;overflow:auto}
+/* Ο πρώτος μήνας κολλάει στην κεφαλίδα της στήλης */
+.obcol-body .month-h{margin-top:10px;padding-left:30px}
+.obcol-body .empty.sm{padding:14px 6px;text-align:center;color:var(--muted);
+  font-size:12.5px}
+/* Στενότερες στήλες: μικρότερη τυπογραφία, το pill πάει κάτω από τον τίτλο */
+.obcol .ob{padding:8px 8px 8px 4px}
+.obcol .ob .t{font-size:13.5px}
+.obcol .ob .m{font-size:11.5px}
+.obcol .ob .pill{font-size:10.5px;padding:2px 7px}
+
+.obcol-payroll{--tc:#4C7FD1;--tc-bg:#EAF1FA}
+.obcol-submission{--tc:#2E86A0;--tc-bg:#E4F1F5}
+.obcol-payment{--tc:var(--ready);--tc-bg:var(--ready-bg)}
+
+/* Το modal λεπτομερειών φέρει την κλάση `detail` ΣΤΟ ΙΔΙΟ ΤΟ .modal, ώστε να
+   ισχύουν αυτούσιοι οι υπάρχοντες κανόνες (.detail .step/.fact/.chain/table/
+   .mode) — καμία διπλοεγγραφή στυλ. */
+.modal.detail .mhead .ic{font-size:17px}
+
+/* =========================================================== Ζωντανά (/live)
+   Grid πραγματικού χρόνου: ΜΙΑ γραμμή ανά ενεργή απασχόληση, μπάρα
+   προγράμματος + πραγματική παρουσία/χτυπήματα κάρτας, κάθετη γραμμή
+   «τώρα» στο ΚΕΝΤΡΟ. Όλες οι θέσεις δίνονται από τον server σε ΛΕΠΤΑ
+   (--s αρχή, --d διάρκεια)· το live-board.js ορίζει μόνο --ppm (px ανά
+   λεπτό) και --shift (κύλιση), οπότε κάθε λεπτό αλλάζει ΜΙΑ μεταβλητή. */
+/* --lb-h: ΜΙΑ γραμμή ανά εργαζόμενο — σε πραγματική χρήση είναι πολλοί,
+   οπότε το ύψος μένει μικρό και όλη η πληροφορία ζει ΠΑΝΩ στη μπάρα */
+.lboard{--lb-name:244px;--lb-h:32px;--ppm:.9;--shift:0px;
+  --plan:#3D7EB8;--plan-bg:#E8F1F9;--tele:#0E9A93;--act:#63C98B;
+  padding:14px 16px 12px}
+@media(max-width:820px){.lboard{--lb-name:132px}}
+
+.lb-top{display:flex;gap:16px;align-items:center;flex-wrap:wrap;
+  margin-bottom:12px}
+.lb-clock{display:flex;flex-direction:column;line-height:1.15}
+.lb-clock b{font-family:var(--mono);font-size:26px;font-weight:600;
+  letter-spacing:.02em}
+/* min-width: η ένδειξη αλλάζει κείμενο στην ελεύθερη μετακίνηση — χωρίς
+   σταθερό πλάτος η μπάρα εργαλείων θα «χοροπηδούσε» */
+.lb-clock span{font-size:11.5px;color:var(--muted);min-width:158px;
+  font-family:var(--mono)}
+.lb-tally{display:flex;gap:8px;flex-wrap:wrap}
+.lb-t{font-size:12px;border-radius:99px;padding:4px 10px;
+  background:var(--paper);color:var(--muted);border:1px solid var(--line)}
+.lb-t b{font-family:var(--mono);font-weight:600;color:var(--ink)}
+.lb-t.t-on{background:var(--ready-bg);border-color:transparent}
+.lb-t.t-on b{color:var(--ready)}
+.lb-t.t-leave{background:#F2EEF8;
+  background:color-mix(in srgb,var(--lv-any) 12%,#fff);
+  border-color:transparent}
+.lb-t.t-leave b{color:var(--lv-any)}
+/* ασυμφωνία με κάρτα: ΠΟΡΤΟΚΑΛΙ, όπως και η μπάρα που βάφεται */
+.lb-t.t-miss{background:var(--warn-bg);border-color:transparent}
+.lb-t.t-miss b{color:var(--warn)}
+.lb-zoom{display:flex;gap:4px}
+.lb-zoom button{font-family:var(--mono);font-size:12px;padding:5px 10px}
+.lb-zoom button.on{background:var(--ink);color:#fff;border-color:var(--ink)}
+.lb-note{font-size:12.5px;color:var(--warn);background:var(--warn-bg);
+  border-radius:9px;padding:7px 11px;margin-bottom:10px}
+
+.lb-grid{position:relative;border:1px solid var(--line);border-radius:12px;
+  overflow:hidden;background:var(--card)}
+/* Μικρό κενό μετά τον τελευταίο εργαζόμενο: η κάτω μπάρα παρουσίας δεν
+   ακουμπά οπτικά στο περίγραμμα του grid. */
+.lb-win{padding-bottom:6px}
+.lb-row{display:flex;align-items:stretch;border-top:1px solid var(--line);
+  min-height:var(--lb-h)}
+.lb-row:first-child{border-top:0}
+.lb-rulerrow{min-height:30px;background:var(--paper)}
+.lb-name{width:var(--lb-name);flex:none;padding:0 10px;overflow:hidden;
+  border-right:1px solid var(--line);display:flex;gap:7px;
+  align-items:center;background:var(--card)}
+.lb-name a{font-weight:600;font-size:12px;white-space:nowrap;
+  overflow:hidden;text-overflow:ellipsis;min-width:0}
+.lb-name a:hover{text-decoration:underline}
+.lb-head{font-size:11px;font-weight:600;letter-spacing:.1em;
+  text-transform:uppercase;color:var(--muted);background:var(--paper)}
+
+/* ΚΟΥΚΙΔΑ ΚΑΤΑΣΤΑΣΗΣ (τρέχουσα ώρα) — αντικαθιστά τη 2η γραμμή κειμένου·
+   το κείμενο ζει στο tooltip (το γράφει το live-board.js) */
+.lb-dot{width:9px;height:9px;border-radius:50%;flex:none;
+  background:var(--done-bg);box-shadow:inset 0 0 0 1.5px var(--done)}
+.lb-dot.st-on{background:var(--ready);box-shadow:inset 0 0 0 1.5px var(--ready)}
+.lb-dot.st-break{background:var(--plan-bg);
+  box-shadow:inset 0 0 0 1.5px var(--plan)}
+/* άδεια = μωβ (παλέτα αδειών) · ασυμφωνία κάρτας = ΠΟΡΤΟΚΑΛΙ, χωριστά */
+.lb-dot.st-leave{background:var(--lv-any);
+  box-shadow:inset 0 0 0 1.5px var(--lv-any)}
+.lb-dot.st-miss{background:var(--warn);box-shadow:inset 0 0 0 1.5px var(--warn)}
+.lb-dot.st-rest{background:transparent}
+/* Η κουκίδα αφορά την ΤΡΕΧΟΥΣΑ ώρα: όταν ο χρήστης κοιτά αλλού, ξεθωριάζει
+   ώστε να μη διαβαστεί ως κατάσταση της ημέρας που βλέπει */
+.lboard.nowoff .lb-dot{opacity:.4}
+
+/* Σημαία ΕΡΓΑΝΗ (αδήλωτο / αλλαγή μετά τη δήλωση) */
+.lb-flag{font-style:normal;font-size:10px;font-weight:700;flex:none;
+  width:14px;height:14px;border-radius:4px;display:flex;
+  align-items:center;justify-content:center;margin-left:auto}
+.lb-flag.pend{background:var(--prob-bg);color:var(--prob)}
+.lb-flag.mod{background:var(--warn-bg);color:var(--warn)}
+
+/* Λωρίδα χρόνου: το περιεχόμενο ζει στο --track και μετατοπίζεται ΟΛΟ μαζί */
+.lb-lane{flex:1;position:relative;overflow:hidden;min-width:0}
+/* Το πλέγμα (ώρες + όρια ημερών) είναι ΥΠΟΒΑΘΡΟ, όχι στοιχεία: σε προβολή
+   μήνα θα χρειάζονταν χιλιάδες spans. Η περίοδος των ωριαίων γραμμών
+   (--gridmin) αραιώνει με το zoom (60΄ ημέρα · 6ω εβδομάδα · 1 ημέρα μήνας). */
+.lb-track{position:absolute;top:0;bottom:0;left:0;
+  width:calc(var(--mins, 1440) * var(--ppm) * 1px);
+  transform:translate3d(var(--shift),0,0);will-change:transform;
+  background:
+    repeating-linear-gradient(90deg,var(--done) 0 1px,
+      transparent 1px calc(var(--majormin, 1440) * var(--ppm) * 1px)),
+    repeating-linear-gradient(90deg,var(--line) 0 1px,
+      transparent 1px calc(var(--gridmin, 60) * var(--ppm) * 1px))}
+.lb-rulerrow .lb-track{background:none}
+/* Προβολή έτους: το περιεχόμενο ΕΙΝΑΙ κάθετες γραμμές ημερών — κάθε γραμμή
+   πλέγματος (εβδομάδας/ημέρας) θα ήταν σκέτος θόρυβος πάνω τους */
+.lboard.z-year .lb-track{background:none}
+/* ΠΑΡΕΛΘΟΝ: ό,τι είναι αριστερά του δείκτη «τώρα» (--nowx = κέντρο όσο η
+   προβολή είναι κλειδωμένη, αλλιώς η πραγματική θέση της ώρας) */
+.lb-row:not(.lb-rulerrow) .lb-lane::after{content:"";position:absolute;
+  left:0;top:0;bottom:0;width:var(--nowx, 50%);background:rgba(23,36,47,.07);
+  pointer-events:none;z-index:2}
+.lboard.nolive .lb-lane::after{display:none}
+
+.lb-tick{position:absolute;top:0;bottom:0;
+  left:calc(var(--s) * var(--ppm) * 1px);
+  padding-left:5px;font-family:var(--mono);font-size:10.5px;
+  color:var(--muted);border-left:1px solid var(--line);
+  display:flex;align-items:center;white-space:nowrap}
+.lb-tick.h6{color:var(--ink);font-weight:500;border-left-color:var(--done)}
+/* ΠΥΚΝΟΤΗΤΑ ΑΝΑ ΕΠΙΠΕΔΟ ZOOM (κλάσεις z-day/z-week/z-month από το JS):
+   στην εβδομάδα κρατάμε ώρες ανά 6ωρο, στον μήνα καθόλου ώρες. */
+.lboard.z-week .lb-tick:not(.h6){display:none}
+.lboard.z-month .lb-tick,
+.lboard.z-year .lb-tick{display:none}
+/* Κείμενα που δεν χωρούν πια: οι ώρες του χάρακα και το ωράριο πάνω στη
+   μπάρα γίνονται δυσανάγνωστος θόρυβος κάτω από ~40px — μένουν στα tooltip */
+.lboard.z-week .lb-tick i,
+.lboard.z-month .lb-tick i,
+.lboard.z-week .lb-bar em,
+.lboard.z-month .lb-bar em,
+.lboard.z-year .lb-bar em{display:none}
+
+/* ΗΜΕΡΑ: ο χάρακας έχει ΔΥΟ επίπεδα — πάνω οι ημέρες, κάτω οι ώρες */
+.lb-rulerrow{min-height:48px}
+.lb-rulerrow .lb-tick{top:24px}
+.lb-dayspan{position:absolute;top:0;height:23px;
+  left:calc(var(--s) * var(--ppm) * 1px);
+  width:calc(var(--d) * var(--ppm) * 1px);
+  display:flex;align-items:center;padding-left:8px;overflow:hidden;
+  border-left:1px solid var(--line)}
+.lb-dayspan b{font-size:11px;font-weight:600;color:var(--muted);
+  white-space:nowrap}
+.lb-dayspan.we{background:rgba(23,36,47,.04)}
+.lb-dayspan.today b{color:var(--ink)}
+.lb-dayspan.today{background:var(--ready-bg)}
+/* Μία εκδοχή ετικέτας ανά επίπεδο zoom (πλήρης / σύντομη / αριθμός ημέρας) */
+.lb-dayspan b i{font-style:normal;display:none}
+.lboard.z-day .lb-dayspan b .d-f,
+.lboard.z-week .lb-dayspan b .d-m,
+.lboard.z-year .lb-dayspan b .d-m,
+.lboard.z-month .lb-dayspan b .d-s{display:inline}
+.lboard.z-month .lb-dayspan{padding-left:4px}
+/* Προβολή έτους: τα «dayspan» είναι ΜΗΝΕΣ (εναλλάξ απόχρωση) */
+.lboard.z-year .lb-dayspan.today{background:var(--ready-bg)}
+.lboard.z-year .lb-dayspan b{font-size:10.5px}
+/* ΓΡΑΜΜΗ ΑΝΑ ΗΜΕΡΑ ΕΡΓΑΣΙΑΣ (μόνο στο έτος): πυκνές γραμμές = κανονική
+   εργασία, κενά = ρεπό/αργίες. Σκούρα = υπήρξε πραγματική παρουσία.
+   ⚠️ ΕΝΑ στοιχείο ανά ΣΕΡΙ ημερών με ΡΙΓΑ περιόδου μιας ημέρας — όχι ένα
+   στοιχείο ανά ημέρα: κάθε ξεχωριστό στοιχείο στρογγυλοποιείται μόνο του σε
+   ακέραιο pixel και σε πλάτος ημέρας ~2px άλλες γραμμές κολλούσαν (συμπαγής
+   μάζα) και άλλες χώριζαν. Η ρίγα καλύπτει το 42% της ημέρας, ώστε το κενό
+   να μένει ορατό σε κάθε κλίμακα. */
+.lb-comb{position:absolute;top:5px;bottom:5px;
+  left:calc(var(--s) * var(--ppm) * 1px);
+  width:calc(var(--d) * var(--ppm) * 1px);z-index:1;opacity:.55;
+  background:repeating-linear-gradient(90deg,
+    var(--plan) 0 calc(1440 * var(--ppm) * .42px),
+    transparent calc(1440 * var(--ppm) * .42px) calc(1440 * var(--ppm) * 1px))}
+.lb-comb.att{opacity:.85;z-index:2;
+  background:repeating-linear-gradient(90deg,
+    var(--act) 0 calc(1440 * var(--ppm) * .42px),
+    transparent calc(1440 * var(--ppm) * .42px) calc(1440 * var(--ppm) * 1px))}
+/* Στο έτος οι μπάρες αδειών είναι ΔΙΑΣΤΗΜΑΤΑ ημερών: ορθές γωνίες, ώστε
+   δύο διαδοχικά διαστήματα να διαβάζονται ως συνεχόμενα */
+/* ⚠️ ΣΥΜΠΑΓΕΣ χρώμα εδώ (όχι ρίγες): ένα διήμερο άδειας είναι ~5px — οι
+   ρίγες θα ήταν αόρατες. Δεν υπάρχει κίνδυνος σύγχυσης με το πορτοκαλί της
+   ασυμφωνίας: σε αυτό το επίπεδο δεν υπάρχουν μπάρες ωραρίου να βαφτούν. */
+.lboard.z-year .lb-leaveband{border-radius:0;top:4px;bottom:4px;
+  background:color-mix(in srgb,var(--lv) 55%,#fff)}
+/* Σταθερή ένδειξη ημέρας στην αριστερή άκρη (δεν μετακινείται με τη λωρίδα) */
+.lb-daynow{position:absolute;left:6px;top:3px;z-index:3;font-size:11px;
+  font-weight:600;color:#fff;background:var(--ink);border-radius:99px;
+  padding:1px 9px;white-space:nowrap;pointer-events:none}
+.lb-tick.d0{border-left-color:var(--done)}
+
+/* Μπάρα ΠΡΟΓΡΑΜΜΑΤΟΣ — κουβαλά ΟΛΗ την πληροφορία της γραμμής:
+   ωράριο + ώρες, π.χ. «09:00-17:00 (8ω)» */
+.lb-bar{position:absolute;top:4px;height:16px;
+  left:calc(var(--s) * var(--ppm) * 1px);
+  width:calc(var(--d) * var(--ppm) * 1px);
+  background:var(--plan-bg);border:1px solid var(--plan);border-radius:5px;
+  z-index:1;display:flex;align-items:center;overflow:hidden;
+  transition:background-color .25s ease,border-color .25s ease}
+.lb-bar em{font-style:normal;font-family:var(--mono);font-size:10px;
+  color:var(--plan);padding:0 6px;white-space:nowrap;overflow:hidden;
+  text-overflow:ellipsis}
+.lb-bar em b{font-weight:600}
+.lb-bar.tele{border-style:dashed;border-color:var(--tele);
+  background:rgba(14,154,147,.10)}
+.lb-bar.tele em{color:var(--tele)}
+.lb-bar.cont{border-top-left-radius:0;border-bottom-left-radius:0;
+  border-left-style:dotted}
+/* ΑΣΥΜΦΩΝΙΑ ΜΕ ΤΗΝ ΚΑΡΤΑ (χωρίς χτύπημα / έχει ήδη χτυπήσει έξοδο ενώ το
+   πρόγραμμα τρέχει): ΠΟΡΤΟΚΑΛΙ μπάρα — αντικαθιστά την παλιά ετικέτα */
+.lb-bar.miss{background:var(--warn-bg);border-color:var(--warn)}
+.lb-bar.miss em{color:var(--warn);font-weight:600}
+/* ΠΡΑΓΜΑΤΙΚΗ παρουσία (κάρτα εργασίας) — από κάτω, για άμεση σύγκριση */
+.lb-act{position:absolute;top:22px;height:6px;
+  left:calc(var(--s) * var(--ppm) * 1px);
+  width:calc(var(--d) * var(--ppm) * 1px);
+  background:var(--act);border-radius:3px;opacity:.82;z-index:1}
+/* ΧΤΥΠΗΜΑ ΚΑΡΤΑΣ: κάθετη γραμμή ακριβώς στο χρονικό σημείο */
+.lb-punch{position:absolute;top:3px;bottom:3px;width:2px;
+  left:calc(var(--s) * var(--ppm) * 1px);margin-left:-1px;
+  background:var(--act);z-index:3;border-radius:1px}
+/* Το «πτερύγιο» δείχνει τη ΦΟΡΑ της διέλευσης στο επάνω μέρος — είσοδος
+   δεξιά, έξοδος αριστερά: η κατεύθυνση διαβάζεται χωρίς tooltip. */
+.lb-punch::after{content:"";position:absolute;left:0;top:-1px;width:5px;
+  height:5px;background:inherit;border-radius:1px 3px 1px 1px}
+.lb-punch.out::after{top:-1px;bottom:auto;left:auto;right:0;
+  border-radius:3px 1px 1px 1px}
+.lb-punch.tone-warn{background:var(--prob)}
+.lb-punch.tone-info{background:var(--ready)}
+/* ΑΝΟΙΧΤΗ/ΕΛΛΙΠΗΣ ΔΙΕΛΕΥΣΗ (χωρίς ταίρι): παλλόμενη, ώστε να ζητά διόρθωση */
+.lb-punch.tone-open{background:var(--warn)}
+.lb-punch.tone-open::after{animation:lb-pulse 1.8s ease-in-out infinite}
+@keyframes lb-pulse{0%,100%{opacity:1;transform:scale(1)}
+  50%{opacity:.35;transform:scale(1.5)}}
+/* ΣΕ ΕΞΕΛΙΞΗ: η μπάρα παρουσίας μεγαλώνει ζωντανά (το --d το γράφει το
+   live-board.js σε κάθε καρέ) και σβήνει προς τα δεξιά — «δεν έχει τελειώσει» */
+.lb-act.open{background:linear-gradient(90deg,var(--act) 0%,
+  var(--act) 62%,color-mix(in srgb,var(--act) 15%,transparent) 100%);
+  border-radius:3px 1px 1px 3px;opacity:.9}
+.lb-act.open::after{content:"";position:absolute;right:-1px;top:-2px;
+  width:3px;height:10px;border-radius:2px;background:var(--ready);
+  animation:lb-pulse 1.6s ease-in-out infinite}
+@media(prefers-reduced-motion:reduce){
+  .lb-punch.tone-open::after,.lb-act.open::after{animation:none}}
+/* ΑΔΕΙΑ: ριγέ ζώνη ολόκληρης της ημέρας, ΧΡΩΜΑΤΙΣΜΕΝΗ ΑΝΑ ΤΥΠΟ με την
+   παλέτα των «Αδειών» (--lv-*). ⚠️ ΠΟΤΕ πορτοκαλί εδώ: το πορτοκαλί σημαίνει
+   ΑΣΥΜΦΩΝΙΑ ΜΕ ΤΗΝ ΚΑΡΤΑ (.lb-bar.miss) — τα δύο δεν επιτρέπεται να
+   μοιράζονται χρώμα. */
+.lb-leaveband{--lv:var(--lv-any);position:absolute;top:3px;bottom:3px;
+  left:calc(var(--s) * var(--ppm) * 1px);
+  width:calc(var(--d) * var(--ppm) * 1px);border-radius:5px;z-index:0;
+  background:#EFF4F1;  /* fallback χωρίς color-mix — η ζώνη δεν εξαφανίζεται */
+  box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--lv) 45%,transparent);
+  background:repeating-linear-gradient(135deg,
+    color-mix(in srgb,var(--lv) 13%,#fff) 0 7px,
+    color-mix(in srgb,var(--lv) 26%,#fff) 7px 14px)}
+.lb-leaveband.lv-kanoniki_adeia{--lv:var(--lv-annual)}
+.lb-leaveband.lv-astheneia{--lv:var(--lv-sick)}
+.lb-leaveband.lv-adeia_aneu_apodoxon{--lv:var(--lv-unpaid)}
+.lb-leaveband.lv-mitrotita{--lv:var(--lv-maternity)}
+.lb-leaveband.lv-goniki{--lv:var(--lv-parental)}
+
+/* Η κάθετη γραμμή της ΤΡΕΧΟΥΣΑΣ ΩΡΑΣ — σταθερά στο κέντρο των λωρίδων */
+/* Η θέση δίνεται από το JS (--nowx): στο κλειδωμένο grid είναι το κέντρο,
+   στην ελεύθερη μετακίνηση ακολουθεί την πραγματική ώρα μέσα στη λωρίδα. */
+.lb-nowline{position:absolute;top:0;bottom:0;width:2px;margin-left:-1px;
+  left:calc(var(--lb-name) + var(--nowx, 50%));
+  background:var(--prob);z-index:4;pointer-events:none}
+.lb-nowline::before{content:"";position:absolute;top:0;left:-4px;width:10px;
+  height:10px;border-radius:50%;background:var(--prob)}
+.lboard.nolive .lb-nowline{display:none}
+/* Η ώρα βγήκε εκτός της ορατής λωρίδας (ελεύθερη μετακίνηση) */
+.lboard.nowoff .lb-nowline{display:none}
+
+/* ΚΕΝΤΡΟ ΠΡΟΒΟΛΗΣ: γκρίζα γραμμή σταθερά στη μέση — δείχνει ΠΑΝΤΑ πού
+   κοιτάς (όσο η προβολή είναι κλειδωμένη συμπίπτει με την κόκκινη «τώρα») */
+.lb-centerline{position:absolute;top:0;bottom:0;width:1px;
+  left:calc(var(--lb-name) + (100% - var(--lb-name)) / 2);
+  background:var(--done);opacity:.7;z-index:3;pointer-events:none}
+.lb-centerline::before{content:"";position:absolute;top:0;left:-3px;width:7px;
+  height:7px;border-radius:50%;background:var(--done)}
+
+/* Επιστροφή στο «τώρα» από μακριά: σβήσιμο -> άλμα -> εμφάνιση */
+.lb-grid{transition:opacity .19s ease}
+.lboard.warp .lb-grid{opacity:0}
+/* Ιστορική ημέρα: δεν υπάρχει «τώρα», άρα ούτε στιγμιαία σύνολα */
+.lboard.nolive .lb-tally{display:none}
+
+/* ------ ΖΟΥΜ (ημέρα/εβδομάδα/μήνας/έτος): το εύρος της λωρίδας ταξιδεύει
+   γεωμετρικά (--ppm, live-board.js) και ΟΛΟ το περιεχόμενο ανοίγει/κλείνει
+   μαζί του. Εδώ μόνο δύο συνοδευτικά:
+   α) το ΝΕΟ παράθυρο δεδομένων (άλλο πλήθος ημερών, στο έτος και άλλη μορφή
+      γραμμών) μπαίνει με fade αντί να «σκάει» στη μέση της κίνησης —
+      η κλάση `zooming` υπάρχει ΜΟΝΟ όσο τρέχει η μετάβαση, οπότε στην
+      ανανέωση/μετακύλιση του παραθύρου δεν παίζει τίποτα·
+   β) οι ετικέτες του χάρακα εναλλάσσονται (z-day/z-week/…) στη μέση της
+      κίνησης — ένα σύντομο fade σβήνει το «πήδημα». */
+@keyframes lb-zoomin{from{opacity:0}to{opacity:1}}
+.lboard.zooming .lb-win{animation:lb-zoomin .24s ease both}
+.lboard.zooming .lb-dayspan b,
+.lboard.zooming .lb-tick{animation:lb-zoomin .3s ease both}
+@media(prefers-reduced-motion:reduce){
+  .lboard.zooming .lb-win,
+  .lboard.zooming .lb-dayspan b,
+  .lboard.zooming .lb-tick{animation:none}
+}
+
+/* ------ ΕΛΕΥΘΕΡΗ ΜΕΤΑΚΙΝΗΣΗ: παγωμένη κύλιση + σύρσιμο με το ποντίκι */
+.lb-nav{display:flex;gap:4px}
+.lb-nav button{padding:5px 10px;font-size:12px}
+#lb-lock{white-space:nowrap}
+#lb-lock.on{background:var(--ink);color:#fff;border-color:var(--ink)}
+.lboard.free .lb-lane{cursor:grab;touch-action:pan-y}
+.lboard.free.drag .lb-lane{cursor:grabbing}
+.lboard.drag{user-select:none}
+.lboard.free .lb-grid{box-shadow:inset 0 0 0 2px var(--ink)}
+
+.lb-legend{display:flex;gap:16px;flex-wrap:wrap;margin-top:10px;
+  font-size:11.5px;color:var(--muted)}
+.lb-legend span{display:flex;gap:6px;align-items:center}
+.lb-legend i{width:16px;height:9px;border-radius:3px;display:inline-block}
+.lb-legend i.k-plan{background:var(--plan-bg);
+  box-shadow:inset 0 0 0 1px var(--plan)}
+.lb-legend i.k-tele{background:rgba(14,154,147,.12);
+  box-shadow:inset 0 0 0 1px var(--tele)}
+.lb-legend i.k-act{background:var(--act)}
+.lb-legend i.k-punch{width:3px;height:14px;border-radius:1px;
+  background:var(--act)}
+.lb-legend i.k-punch.warn{background:var(--prob)}
+.lb-legend i.k-miss{background:var(--warn-bg);
+  box-shadow:inset 0 0 0 1px var(--warn)}
+.lb-legend i.k-open{background:linear-gradient(90deg,var(--act) 0%,
+  var(--act) 55%,color-mix(in srgb,var(--act) 12%,transparent) 100%)}
+.lb-legend i.k-leave{background:#EFF4F1;
+  box-shadow:inset 0 0 0 1px
+    color-mix(in srgb,var(--lv-annual) 45%,transparent);
+  background:repeating-linear-gradient(135deg,
+    color-mix(in srgb,var(--lv-annual) 13%,#fff) 0 4px,
+    color-mix(in srgb,var(--lv-annual) 26%,#fff) 4px 8px)}
+
+/* ============================ ΨΗΦΙΑΚΗ ΚΑΡΤΑ — modal χειροκίνητης καταχώρησης
+   Το modal ζει στη σελίδα «Ζωντανά» (#modal-host) και ξαναχτίζεται ολόκληρο
+   μετά από κάθε καταγραφή/ακύρωση: εδώ μόνο η εμφάνιση των «τσιπ» —
+   ΔΙΕΛΕΥΣΕΙΣ (ωμά γεγονότα) και ΒΑΡΔΙΕΣ (παράγωγα του ζευγαρώματος), ώστε
+   να ξεχωρίζουν με μια ματιά. */
+.kindpick{display:flex;gap:10px;align-items:center}
+.kindpick .chk{display:flex;align-items:center;gap:6px;font-size:13px;
+  color:var(--ink);padding:5px 9px;border:1px solid var(--line);
+  border-radius:8px;background:var(--paper)}
+.kindpick .chk:has(input:checked).k-in{border-color:var(--ready);
+  background:var(--ready-bg)}
+.kindpick .chk:has(input:checked).k-out{border-color:var(--prob);
+  background:var(--prob-bg)}
+.punch-go{display:flex;gap:12px;align-items:center;margin:12px 0 4px}
+.cardday{border:1px solid var(--line);border-radius:10px;padding:8px 10px;
+  margin-top:8px;background:var(--paper)}
+.cd-head{display:flex;gap:10px;align-items:baseline;font-size:13px}
+.cd-head .muted{font-size:12px}
+.cd-chips{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px}
+/* ΔΙΕΛΕΥΣΗ: ωμό γεγονός — φέρει το κουμπί ακύρωσης (αντισταθμιστικό event) */
+.punchchip{display:inline-flex;align-items:center;gap:5px;font-size:12px;
+  border-radius:99px;padding:3px 4px 3px 9px;border:1px solid var(--line);
+  background:#fff}
+.punchchip b{font-family:var(--mono);font-weight:600}
+.punchchip.in{border-color:color-mix(in srgb,var(--ready) 45%,transparent);
+  background:var(--ready-bg)}
+.punchchip.out{border-color:color-mix(in srgb,var(--prob) 45%,transparent);
+  background:var(--prob-bg)}
+.punchchip .x{border:0;background:transparent;cursor:pointer;font-size:11px;
+  color:var(--muted);padding:1px 5px;border-radius:99px;line-height:1}
+.punchchip .x:hover{background:var(--warn-bg);color:var(--warn)}
+/* ΒΑΡΔΙΑ: παράγωγο — τετράγωνη, με μονόχωρη γραμματοσειρά, ώστε να μη
+   συγχέεται με τη διέλευση. Ανοιχτή/ορφανή = ΚΙΤΡΙΝΗ προειδοποίηση. */
+.shiftchip{display:inline-flex;align-items:center;gap:5px;font-size:12px;
+  font-family:var(--mono);border-radius:6px;padding:3px 8px;
+  border:1px solid var(--line);background:#fff;color:var(--ink)}
+.shiftchip i{font-style:normal;color:var(--muted)}
+.shiftchip.open,.shiftchip.orphan{border-color:var(--warn);
+  background:var(--warn-bg);color:var(--warn)}
+
+/* ---------------------------------------------------------- ΠΟΛΛΕΣ ΕΤΑΙΡΕΙΕΣ
+   Επιλογέας ενεργής εταιρείας στη θέση της στατικής επωνυμίας (φαίνεται μόνο
+   όταν ο χρήστης έχει πρόσβαση σε περισσότερες από μία), διαχωριστικό για τις
+   σελίδες ΣΥΣΤΗΜΑΤΟΣ και το πλαίσιο χρήστη/εξόδου του header. */
+nav.side form.cosel{padding:0 10px 16px}
+nav.side form.cosel select{font:inherit;font-size:12.5px;font-weight:600;
+  width:100%;border:1px solid var(--line);border-radius:8px;padding:6px 8px;
+  background:var(--paper);color:var(--ink)}
+nav.side .navsep{height:1px;background:var(--line);margin:14px 10px 8px}
+
+header form.userbox{display:flex;gap:8px;align-items:center}
+header form.userbox .who{font-size:12.5px;color:var(--muted);
+  text-decoration:none;max-width:220px;overflow:hidden;text-overflow:ellipsis;
+  white-space:nowrap}
+header form.userbox .who:hover{color:var(--ink)}
+
+/* Σελίδες ΕΚΤΟΣ εφαρμογής (σύνδεση/πρόσκληση/επαναφορά): μία κάρτα στο
+   κέντρο, χωρίς nav — ο χρήστης δεν έχει ακόμη εταιρεία. */
+body.authpage{background:var(--paper);min-height:100vh;display:flex;
+  align-items:center;justify-content:center;padding:24px}
+.authbox{width:min(430px,100%)}
+.authbox .authbrand{font-size:18px;font-weight:700;margin-bottom:10px}
+.authbox .warnbox{margin-bottom:10px}

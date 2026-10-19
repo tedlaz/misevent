@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+{% block title %}Αρχεία ΦΜΥ{% endblock %}
+{% block heading %}Αρχεία ΦΜΥ{% endblock %}
+{% block subheading %}Δήλωση απόδοσης ΦΜΥ{% endblock %}
+
+{% block content %}
+<div class="card">
+  <h2>Παραχθέντα αρχεία
+    <span class="norm">— παράγωγα των events, δεν αποθηκεύονται στον δίσκο:
+      παράγονται τη στιγμή που ζητούνται· «Ανάλυση» δείχνει τις αναλυτικές
+      αμοιβές και τις εγγραφές, «⬇» κατεβάζει το JL10 σε ZIP</span></h2>
+
+  {% if rows %}
+    <table class="tbl">
+      <thead><tr>
+        <th>Περίοδος</th><th>Αρχείο</th>
+        <th style="text-align:right">Εργαζόμενοι</th>
+        <th style="text-align:right">Αποδοχές</th>
+        <th style="text-align:right">Φόρος</th>
+        <th></th>
+      </tr></thead>
+      <tbody>
+        {% for r in rows %}
+          <tr>
+            <td class="mono">{{ '%02d'|format(r.month) }}/{{ r.year }}</td>
+            <td class="mono" style="font-size:11.5px">{{ r.name }}</td>
+            <td class="num">{{ r.employees }}</td>
+            <td class="num">{{ r.gross|money }} €</td>
+            <td class="num">{{ r.tax|money }} €</td>
+            <td style="white-space:nowrap">
+              <a type="button" class="ghost"
+                      hx-get="{{ url_for('fmy.modal', year=r.year, month=r.month) }}"
+                      hx-target="#modal-host" hx-swap="innerHTML">Ανάλυση</a>
+              <a class="ghost" href="{{ url_for('fmy.download', year=r.year,
+                                                month=r.month) }}">⬇</a>
+            </td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  {% else %}
+    <div class="empty">Δεν έχει παραχθεί κανένα αρχείο ΦΜΥ.
+      Παράγονται με τη δήλωση ΦΜΥ, από τις
+      <a href="{{ url_for('obligations.index') }}">Υποχρεώσεις</a>.</div>
+  {% endif %}
+
+  <div id="modal-host">
+    {% if analysis %}
+      {% with r = analysis.r, records = analysis.records,
+              earnings = analysis.earnings %}
+        {% include "partials/_fmy_modal.html" %}
+      {% endwith %}
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

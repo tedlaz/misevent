@@ -1,0 +1,403 @@
+{% from "_macros.html" import emp_status, emp_pay %}
+{% set prof = e.insurance_profile %}
+{% set mid = e.employment_id %}
+<div id="employment-card">
+
+  <div class="grid-2">
+    {# ------------------------------------------------------------ Σύμβαση #}
+    <div class="card">
+      <h2 class="bar"><span>Σύμβαση</span>
+        <span class="acts">
+          {% if e.hire_submitted %}
+          <button class="ghost sm"
+                  hx-get="{{ url_for('employments.modal', employment_id=mid, name='contract') }}"
+                  hx-target="#modal-host" hx-swap="innerHTML">✏️ Αλλαγή σύμβασης</button>
+          <button class="ghost sm"
+                  hx-get="{{ url_for('employments.modal', employment_id=mid, name='contract_history') }}"
+                  hx-target="#modal-host" hx-swap="innerHTML">📜 Ιστορικό συμβάσεων</button>
+          {% if e.active %}
+            <button class="ghost sm danger"
+                    hx-get="{{ url_for('employments.modal', employment_id=mid, name='terminate') }}"
+                    hx-target="#modal-host" hx-swap="innerHTML">🚪 Αποχώρηση</button>
+          {% endif %}
+          {% endif %}
+        </span>
+      </h2>
+
+      <div class="facts">
+        <div class="f wide"><span>Πρόσωπο</span>
+          <b>{{ e.full_name }}</b>&ensp;{{ emp_status(e) }}</div>
+        <div class="f hi"><span>Αμοιβή</span><b>{{ emp_pay(e) }}</b></div>
+        <div class="f"><span>Ώρες/εβδομάδα</span>
+          <b class="mono">{{ '%g'|format(e.weekly_hours) }}</b>
+          <span class="contract-status-badge contract-status-{{ employment_status.tone }}">
+            {{ employment_status.label }}
+          </span></div>
+        {# ΟΡΟΣ ΣΥΜΒΑΣΗΣ (όχι ασφαλιστικό): ΑΠΔ No 55 + ημερήσιο νόμιμο #}
+        <div class="f"><span>Σύστημα εργασίας</span>
+          <b>{{ 'Εξαήμερο' if e.weekly_system == 6 else 'Πενθήμερο' }}</b></div>
+        <div class="f"><span>Πρόσληψη</span>
+          <b class="mono">{{ e.hire_date|date_gr }}</b></div>
+        <div class="f"><span>Σχέση απασχόλησης</span>
+          <b>{{ 'Ορισμένου χρόνου' if e.employment_relationship == '1'
+                else 'Αορίστου χρόνου' }}</b>
+          {% if e.employment_relationship == '1' %}
+            <small class="mono">{{ e.fixed_term_from|date_gr }}–{{ e.fixed_term_to|date_gr }}</small>
+          {% endif %}</div>
+        <div class="f"><span>Κατώτατο όριο</span>
+          <b class="mono">{{ '%.2f'|format(min_floor[0]) }}€</b>
+          {% if min_floor[1] %}<small>{{ min_floor[1] }}</small>{% endif %}</div>
+        {# ΧΡΟΝΟΣ ΕΡΓΑΣΙΑΣ — ΔΥΟ γραμμές (§7): (1) ο ΣΥΝΟΛΙΚΟΣ χρόνος
+           (δηλωθείσα + παγωμένη προϋπηρεσία + χρόνος στον ίδιο εργοδότη),
+           (2) ό,τι ΜΕΤΡΑ ΣΤΙΣ ΤΡΙΕΤΙΕΣ — ίδια βάση με το κατώτατο όριο. #}
+        <div class="f wide"><span>Χρόνος εργασίας</span>
+          <b class="soft"><b>{{ service.total|service_gr }}</b>
+            · προϋπηρεσία {{ service.declared|service_gr }}
+            {%- if service.frozen %} (Παγωμένα
+              {{ service.frozen|service_gr }}){% endif %}
+            · Υπηρεσία {{ service.employer|service_gr }}
+            {%- if e.married %} · γάμος 10%{% endif %}
+            {%- if e.extra_allowances_pct %} · λοιπές
+              {{ '%g'|format(e.extra_allowances_pct) }}%{% endif %}<br>
+            <span title="Ο χρόνος 14/02/2012–31/12/2023 δεν διαμορφώνει τριετίες">
+              · Για τριετίες {{ service.triennia|service_gr }}</span></b></div>
+      </div>
+
+      {# Υποβολές πρόσληψης στο ΕΡΓΑΝΗ — τις ενεργοποιεί ο χρήστης χειροκίνητα #}
+      <h3 class="sec">ΕΡΓΑΝΗ πρόσληψης</h3>
+      <div class="btnrow">
+        {% if e3_done %}
+          <button type="button" class="tag ok lnk-tag"
+            hx-get="{{ url_for('employments.hire_details_form', employment_id=mid) }}"
+            hx-target="#modal-host" hx-swap="innerHTML"
+            title="Προβολή της υποβληθείσας φόρμας πρόσληψης WebE3N">
+            WebE3N ✓</button>
+        {% else %}
+          <button class="ghost sm"
+            hx-get="{{ url_for('employments.hire_details_form', employment_id=mid) }}"
+            hx-target="#modal-host" hx-swap="innerHTML"
+            title="Διόρθωση της αρχικής φόρμας πριν από το WebE3N">
+            ✏️ Επεξεργασία φόρμας πρόσληψης</button>
+          <button class="run sm"
+            hx-post="{{ url_for('employments.ergani_e3', employment_id=mid) }}"
+            hx-target="#employment-card" hx-swap="outerHTML"
+            title="Αναγγελία Πρόσληψης WebE3N">Υποβολή WebE3N</button>
+        {% endif %}
+        {% if wto_done %}
+          <span class="tag ok" title="Ψηφιακή Οργάνωση Χρόνου Εργασίας">ΟΧΕ ✓</span>
+        {% else %}
+          <button class="ghost sm"
+            hx-post="{{ url_for('employments.ergani_wto', employment_id=mid) }}"
+            hx-target="#employment-card" hx-swap="outerHTML"
+            title="Ψηφιακή Οργάνωση Χρόνου Εργασίας">Υποβολή ΟΧΕ</button>
+        {% endif %}
+        {% if not (e3_done and wto_done) %}
+          <span class="muted" style="font-size:12px">
+            προαπαιτούμενα για την έγκριση παρουσιών</span>
+        {% endif %}
+      </div>
+    </div>
+
+    {# ------------------------------ Εκκαθάριση αποχώρησης (αποζημιώσεις) #}
+    {% if e.termination_date %}
+    <div class="card">
+      <h2 class="bar"><span>Εκκαθάριση αποχώρησης</span>
+        <span class="norm">— λήξη {{ e.termination_date|date_gr }}</span>
+      </h2>
+      <h3 class="sec">Αποζημίωση μη ληφθείσας Αδείας</h3>
+      {% if leave_comp %}
+        <div class="box" style="font-size:13px">
+          {{ leave_comp.leave_days }} ημέρες αδείας × 1,2 =
+          {{ leave_comp.comp_days }} ημέρες → μικτά
+          <b>{{ leave_comp.gross|money }}€</b> · ΦΜΥ {{ leave_comp.fmy|money }}€ ·
+          καθαρά <b>{{ leave_comp.net|money }}€</b>
+          <span class="tag ok">Υπολογισμένη</span>
+          <span class="muted" style="font-size:12px">— μόνο φορολογική κράτηση,
+            καμία ασφαλιστική</span>
+        </div>
+        <div class="btnrow" style="margin-top:6px">
+          <a class="ghost" target="_blank"
+            href="{{ url_for('payroll.print_settlement', kind='leave', employment_id=mid) }}">
+            Εκτύπωση απόδειξης</a>
+        </div>
+      {% else %}
+        <div class="muted" style="font-size:12.5px">
+          Κανένα υπόλοιπο κανονικής άδειας — δεν οφείλεται αποζημίωση αδείας.</div>
+      {% endif %}
+
+      {% if is_dismissal %}
+        <h3 class="sec">Αποζημίωση Απόλυσης</h3>
+        {% if severance %}
+          <div class="box" style="font-size:13px">
+            {{ '%g'|format(severance.months) }} μήνες
+            {{ 'με' if severance.with_notice else 'χωρίς' }} προειδοποίηση ×
+            {{ severance.monthly_salary|money }}€ × 7/6 = μικτά
+            <b>{{ severance.gross|money }}€</b> · αυτοτελής φόρος
+            {{ severance.fmy|money }}€ · καθαρά <b>{{ severance.net|money }}€</b>
+            <span class="tag ok">Υπολογισμένη</span>
+          </div>
+          <div class="btnrow" style="margin-top:6px">
+            <a class="ghost" target="_blank"
+              href="{{ url_for('payroll.print_settlement', kind='severance', employment_id=mid) }}">
+              Εκτύπωση απόδειξης</a>
+          </div>
+        {% else %}
+          <div class="muted" style="font-size:12.5px">
+            Υπηρεσία στον εργοδότη < 1 έτος — δεν οφείλεται αποζημίωση απόλυσης.</div>
+        {% endif %}
+      {% endif %}
+
+      {% if settlement %}
+        <h3 class="sec">Ανάλυση & σύνολο προς καταβολή</h3>
+        <table class="tbl">
+          <thead><tr>
+            <th>Ποσό</th>
+            <th class="num">Μικτά</th>
+            <th class="num">ΕΦΚΑ εργαζ.</th>
+            <th class="num">ΦΜΥ</th>
+            <th class="num">Καθαρά</th>
+          </tr></thead>
+          <tbody>
+            {% for it in settlement.lines %}
+            <tr>
+              <td>{{ it.label }}
+                <span class="muted" style="font-size:11px">— {{ it.note }}</span></td>
+              <td class="num">{{ it.gross|money }}€</td>
+              <td class="num">{{ it.efka|money }}€</td>
+              <td class="num">{{ it.fmy|money }}€</td>
+              <td class="num">{{ it.net|money }}€</td>
+            </tr>
+            {% endfor %}
+            <tr class="tot">
+              <td>Καταβλητέο στην αποχώρηση
+                ({{ settlement.termination_date|date_gr }})</td>
+              <td class="num">{{ settlement.now_gross|money }}€</td>
+              <td class="num">{{ settlement.now_efka|money }}€</td>
+              <td class="num">{{ settlement.now_fmy|money }}€</td>
+              <td class="num">{{ settlement.now_net|money }}€</td>
+            </tr>
+          </tbody>
+        </table>
+        {% if settlement.payroll_missing %}
+          <div class="warnbox" style="margin-top:8px">
+            ⚠️ Λείπουν οι αποδοχές {{ settlement.payroll_period }}:
+            {{ settlement.payroll_missing }}. Θα υπολογιστούν στον τακτικό
+            κύκλο μισθοδοσίας και δεν περιλαμβάνονται στο παραπάνω σύνολο.
+          </div>
+        {% endif %}
+        <div class="btnrow" style="margin-top:8px">
+          <a class="run" target="_blank"
+            href="{{ url_for('payroll.print_exit_settlement', employment_id=mid) }}">
+            🖨️ Εκτύπωση αποδείξεων εκκαθάρισης</a>
+        </div>
+        <div class="muted" style="font-size:11.5px;margin-top:6px">
+          Όλα τα ποσά καταβάλλονται την ημέρα της αποχώρησης, ΕΚΤΟΣ του Δώρου
+          {% if settlement.later_lines %}
+            ({{ settlement.later_net|money }}€ καθαρά), που καταβάλλεται στις
+            {{ settlement.later_lines[0].pay_date|date_gr }} και αποδίδεται
+            στην ΑΠΔ/ΕΡΓΑΝΗ μαζί με τα υπόλοιπα Δώρα της περιόδου.
+          {% else %}.{% endif %}</div>
+      {% endif %}
+    </div>
+    {% endif %}
+
+    {# ----------------------------------- Ασφαλιστικό προφίλ + πρόγραμμα #}
+    <div class="card">
+      <h2 class="bar"><span>Ασφαλιστικό προφίλ</span>
+        <span class="acts">
+          {% if e.hire_submitted %}
+          <button class="ghost sm"
+                  hx-get="{{ url_for('employments.modal', employment_id=mid, name='insurance') }}"
+                  hx-target="#modal-host" hx-swap="innerHTML">✏️ Ενημέρωση</button>
+          {% endif %}
+        </span>
+      </h2>
+      {% if prof %}
+        <div class="facts">
+          <div class="f"><span>Ειδικότητα</span>
+            <b>{{ prof.specialty_name or '— (παλαιό προφίλ, χωρίς ειδικότητα)' }}</b></div>
+          <div class="f"><span>Παράρτημα</span>
+            <b>{{ selected_branch.employment_label if selected_branch
+                  else prof.branch_no }}</b></div>
+          <div class="f"><span>Επικουρικό</span>
+            <span class="ins-badge ins-{{ auxiliary_badge.tone }}">
+              {{ auxiliary_badge.label }}</span></div>
+          <div class="f"><span>Άλλα ταμεία</span>
+            {% if other_fund_badges %}
+              <span class="ins-badges">
+              {% for badge in other_fund_badges %}
+                <span class="ins-badge ins-{{ badge.tone }}">{{ badge.label }}</span>
+              {% endfor %}
+              </span>
+            {% else %}
+              <span class="ins-badge ins-no">ΟΧΙ</span>
+            {% endif %}</div>
+          <div class="f wide"><span>Ασφαλιστικές καλύψεις (ΚΑΔ · Ειδ. · ΚΠΚ)</span>
+            <div class="covs" style="margin-top:3px">
+              {% for c in coverages %}
+                <span class="cov {{ c.fund }}">
+                  <i>{{ c.label }}</i>
+                  <span class="mono">{{ c.kad }} · {{ c.specialty_code }}
+                    · {{ c.kpk }}</span>
+                </span>
+              {% endfor %}
+            </div>
+          </div>
+        </div>
+      {% else %}
+        <div class="empty">Δεν έχει οριστεί ασφαλιστικό προφίλ — η ΑΠΔ θα αποτύχει.</div>
+      {% endif %}
+
+      <h3 class="sec bar"><span>Πρόγραμμα εργασίας</span>
+        <span class="acts">
+          {% if e.hire_submitted %}
+          <button class="ghost sm"
+                  hx-get="{{ url_for('employments.modal', employment_id=mid, name='schedule') }}"
+                  hx-target="#modal-host" hx-swap="innerHTML">🗓️ Εβδομαδιαίο</button>
+          <button class="ghost sm"
+                  hx-get="{{ url_for('employments.modal', employment_id=mid, name='daily') }}"
+                  hx-target="#modal-host" hx-swap="innerHTML">📆 Ημερήσιο</button>
+          {% endif %}
+        </span>
+      </h3>
+      {% if e.schedule %}
+        <div class="wk">
+          {% for code, lbl in days %}
+            {% set segs = e.schedule.get(code, '')|day_segments %}
+            <div class="d {{ 'on' if segs else 'off' }}"><i>{{ lbl }}</i>
+              {% for sg in segs %}
+                {# Έναρξη/λήξη σε δικές τους γραμμές — χωράνε στο πλακίδιο #}
+                <b class="{{ 'tele' if sg.telework }}"
+                   title="{{ 'Τηλεεργασία' if sg.telework }}">
+                  {{- sg.text.split('-')[0] }}<br>{{ sg.text.split('-')[1] -}}
+                </b>
+              {% else %}<b class="rep">ρεπό</b>{% endfor %}
+            </div>
+          {% endfor %}
+        </div>
+        {% if e.schedule.values()|map('day_segments')|sum(start=[])
+              |selectattr('telework')|list %}
+          <div class="muted" style="font-size:11.5px;margin-top:6px">
+            <b class="tele-key">μοβ</b> = τηλεεργασία (λογίζεται ως
+            πραγματοποιηθείσα — δεν καταγράφεται από το σύστημα παρουσιών)</div>
+        {% endif %}
+      {% else %}
+        <div class="empty">Δεν έχει οριστεί πρόγραμμα.</div>
+      {% endif %}
+
+      {% if daily_schedule %}
+        <h3 class="sec">Ημερήσιο πρόγραμμα
+          <span class="norm">— υπερισχύει του εβδομαδιαίου</span></h3>
+        <table class="tbl">
+          <thead><tr><th>Ημέρα</th><th>Ωράριο</th></tr></thead>
+          <tbody>
+            {% for d, h in daily_schedule %}
+              <tr><td class="mono">{{ d|date_gr }}</td>
+                <td class="mono">{{ h or '— ΡΕΠΟ —' }}</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      {% endif %}
+    </div>
+  </div>
+
+  {% if e.hire_submitted %}
+  {# ------------------------------------------------------------ Παρουσίες #}
+  <div class="card" style="margin-top:20px">
+    <h2 class="bar"><span>Παρουσίες</span>
+      {% if e.pay_type == 'daily' %}
+        <span class="norm">— ΑΠΑΡΑΙΤΗΤΕΣ: ημερομίσθιο × ημέρες παρουσίας</span>
+      {% else %}
+        <span class="norm">— προαιρετικές για μισθωτούς (25 ημέρες/μήνα)</span>
+      {% endif %}
+      <span class="acts">
+        <button class="ghost sm"
+                hx-get="{{ url_for('employments.modal', employment_id=mid, name='attendance') }}"
+                hx-target="#modal-host" hx-swap="innerHTML">⏱️ Καταγραφή παρουσιών</button>
+      </span>
+    </h2>
+    {% if attendance %}
+      <table class="tbl">
+        <thead><tr><th>Περίοδος</th>
+          <th style="text-align:right">Ημέρες παρουσίας</th></tr></thead>
+        <tbody>
+          {% for (py, pm), n in attendance %}
+            <tr><td class="mono">{{ pm }}/{{ py }}</td><td class="num">{{ n }}</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    {% else %}
+      <div class="empty">
+        Καμία καταγεγραμμένη παρουσία.
+        {% if e.pay_type == 'daily' %}
+          Ο εργαζόμενος είναι ΗΜΕΡΟΜΙΣΘΙΟΣ — μέχρι να καταγραφούν παρουσίες,
+          η μισθοδοσία του βγαίνει μηδενική και παραλείπεται.
+        {% endif %}
+      </div>
+    {% endif %}
+  </div>
+
+  {# --------------------------------------------------------------- Άδειες #}
+  <div class="card" style="margin-top:20px">
+    <h2 class="bar"><span>Άδειες</span>
+      <span class="acts">
+        <button class="ghost sm"
+                hx-get="{{ url_for('employments.modal', employment_id=mid, name='leave') }}"
+                hx-target="#modal-host" hx-swap="innerHTML">🏖️ Καταχώρηση άδειας</button>
+      </span>
+    </h2>
+
+    {# Υπόλοιπο κανονικής άδειας έτους — μπάρα προόδου #}
+    <div class="leave-sum">
+      <span>Κανονική άδεια {{ year }}: <b>{{ taken }}</b>/{{ entitlement }} ημέρες
+        · υπόλοιπο <b>{{ entitlement - taken }}</b></span>
+      <div class="meter"><i style="width:
+        {{ (100 * taken / entitlement)|round|int if entitlement else 0 }}%"></i></div>
+    </div>
+
+    {% set leaves = e.active_leaves() %}
+    {% if leaves %}
+      <table class="tbl">
+        <thead><tr><th>Τύπος</th><th>Από</th><th>Έως</th><th>Σημειώσεις</th>
+          <th>Επίδομα ΕΦΚΑ</th><th></th></tr></thead>
+        <tbody>
+          {% for lv in leaves %}
+            <tr>
+              <td>{{ leave_labels.get(lv.leave_type.value, lv.leave_type.value) }}</td>
+              <td class="mono">{{ lv.date_from|date_gr }}</td>
+              <td class="mono">{{ lv.date_to|date_gr }}</td>
+              <td class="muted">{{ lv.notes or '—' }}</td>
+              {# Μόνο η ασθένεια επιδοτείται από τον ΕΦΚΑ. Το ποσό είναι γνωστό
+                 εκ των υστέρων, γι' αυτό καταχωρείται χειροκίνητα (modal). #}
+              <td>
+                {% if lv.leave_type.value == 'astheneia' %}
+                  {% set ben = e.sickness_benefits.get(lv.leave_id, 0.0) %}
+                  <button class="ghost sm"
+                    hx-get="{{ url_for('employments.benefit_modal',
+                                       employment_id=mid, leave_id=lv.leave_id) }}"
+                    hx-target="#modal-host" hx-swap="innerHTML">
+                    {% if ben %}{{ '%.2f'|format(ben) }}€ ✏️
+                    {% else %}Καταχώρηση{% endif %}</button>
+                {% else %}<span class="muted">—</span>{% endif %}
+              </td>
+              <td>
+                <button class="ghost sm"
+                  hx-post="{{ url_for('employments.leave_cancel',
+                                      employment_id=mid, leave_id=lv.leave_id) }}"
+                  hx-target="#employment-card" hx-swap="outerHTML">Ακύρωση</button>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    {% else %}
+      <div class="empty">Καμία ενεργή άδεια.</div>
+    {% endif %}
+  </div>
+  {% endif %}
+
+  {# Εδώ φορτώνονται τα modals της καρτέλας (κενό όσο είναι κλειστά).
+     Επιτυχής εντολή αντικαθιστά όλη την κάρτα -> το modal κλείνει μόνο του. #}
+  <div id="modal-host"></div>
+
+</div>

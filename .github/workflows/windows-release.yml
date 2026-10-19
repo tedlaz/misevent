@@ -1,0 +1,86 @@
+name: Build Windows installer
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing release tag to build (for example, v1.0.0)
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  build-windows-installer:
+    name: Windows installer
+    runs-on: windows-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Check out tagged commit
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.tag || github.ref }}
+
+      - name: Install uv and Python
+        uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
+        with:
+          enable-cache: true
+
+      - name: Verify tag matches pyproject.toml
+        id: version
+        shell: pwsh
+        env:
+          RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
+        run: |
+          $projectVersion = (uv version --short).Trim()
+          $tagVersion = $env:RELEASE_TAG -replace '^v', ''
+          if ($tagVersion -ne $projectVersion) {
+              throw "Tag version '$tagVersion' does not match pyproject.toml version '$projectVersion'."
+          }
+          "value=$projectVersion" >> $env:GITHUB_OUTPUT
+
+      - name: Install Inno Setup
+        shell: pwsh
+        run: choco install innosetup --no-progress --yes
+
+      - name: Build installer
+        shell: pwsh
+        run: .\desktop\build-windows.ps1
+
+      - name: Upload Windows setup artifact
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: misevent-Setup-${{ steps.version.outputs.value }}
+          path: installer-output/misevent-Setup-${{ steps.version.outputs.value }}.exe
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Publish installer on GitHub Release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
+          PROJECT_VERSION: ${{ steps.version.outputs.value }}
+        run: |
+          $installer = "installer-output/misevent-Setup-$env:PROJECT_VERSION.exe"
+
+          gh release view $env:RELEASE_TAG --repo $env:GITHUB_REPOSITORY 2>$null
+          if ($LASTEXITCODE -ne 0) {
+              gh release create $env:RELEASE_TAG $installer `
+                  --repo $env:GITHUB_REPOSITORY `
+                  --verify-tag `
+                  --title "misevent $env:PROJECT_VERSION" `
+                  --generate-notes
+          } else {
+              gh release upload $env:RELEASE_TAG $installer `
+                  --repo $env:GITHUB_REPOSITORY `
+                  --clobber
+          }
+          if ($LASTEXITCODE -ne 0) {
+              throw "Publishing the GitHub Release asset failed."
+          }

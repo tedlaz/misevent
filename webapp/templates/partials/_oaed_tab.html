@@ -1,0 +1,64 @@
+{% set oaed_placement = fv.get('f_topothetisioaed', '0')|string %}
+{% set oaed_replacement = fv.get('f_replaceprograma', '0')|string %}
+{% set trial_period = fv.get('f_trial_period', '0')|string %}
+<div class="fsecs" data-oaed-tab>
+  <div class="fsec fs-oaed">
+    <div class="fs-h"><span class="fs-ic">🏛️</span>
+      <b>Πρόγραμμα απασχόλησης ΟΑΕΔ / ΔΥΠΑ</b>
+      <span class="fs-hint">πεδία τοποθέτησης και αντικατάστασης ωφελούμενου WebE3N</span></div>
+    <div class="frm cols">
+      <label>Τοποθέτηση με πρόγραμμα ΔΥΠΑ
+        <select name="f_topothetisioaed" data-oaed-placement required>
+          <option value="0" {{ 'selected' if oaed_placement == '0' }}>0 — ΟΧΙ</option>
+          <option value="1" {{ 'selected' if oaed_placement == '1' }}>1 — ΝΑΙ</option>
+        </select></label>
+    </div>
+    <div data-oaed-program-fields {{ 'hidden' if oaed_placement != '1' }}>
+      <div class="frm cols" style="margin-top:10px">
+        <label>Κωδικός προγράμματος ΔΥΠΑ
+          <input name="f_programaoaed" maxlength="10" pattern="[0-9-]{1,10}"
+            value="{{ fv.get('f_programaoaed', '') }}"
+            {{ 'required' if oaed_placement == '1' }}
+            {{ 'disabled' if oaed_placement != '1' }}></label>
+        <label>Αντικατάσταση ωφελούμενου ίδιου προγράμματος
+          <select name="f_replaceprograma" data-oaed-replacement
+            {{ 'required' if oaed_placement == '1' }}
+            {{ 'disabled' if oaed_placement != '1' }}>
+            <option value="0" {{ 'selected' if oaed_replacement != '1' }}>0 — ΟΧΙ</option>
+            <option value="1" {{ 'selected' if oaed_replacement == '1' }}>1 — ΝΑΙ</option>
+          </select></label>
+      </div>
+      <div class="frm cols" data-oaed-replacement-fields
+           {{ 'hidden' if oaed_placement != '1' or oaed_replacement != '1' }}
+           style="margin-top:10px">
+        <label>ΑΦΜ αντικατασταθέντος (προαιρετικό)
+          <input name="f_replaceprograma_afm" inputmode="numeric" maxlength="9"
+            pattern="[0-9]{9}" value="{{ fv.get('f_replaceprograma_afm', '') }}"
+            {{ 'disabled' if oaed_placement != '1' or oaed_replacement != '1' }}></label>
+        <label>ΑΜΚΑ αντικατασταθέντος (προαιρετικό)
+          <input name="f_replaceprograma_amka" inputmode="numeric" maxlength="20"
+            pattern="[0-9]{1,20}" value="{{ fv.get('f_replaceprograma_amka', '') }}"
+            {{ 'disabled' if oaed_placement != '1' or oaed_replacement != '1' }}></label>
+      </div>
+    </div>
+  </div>
+
+  <div class="fsec fs-trial">
+    <div class="fs-h"><span class="fs-ic">🗓️</span>
+      <b>Δοκιμαστική περίοδος</b>
+      <span class="fs-hint">δήλωση δοκιμαστικής περιόδου στην πρόσληψη WebE3N</span></div>
+    <div class="frm cols">
+      <label>Αφορά δοκιμαστική περίοδο
+        <select name="f_trial_period" data-trial-period required>
+          <option value="0" {{ 'selected' if trial_period == '0' }}>0 — ΟΧΙ</option>
+          <option value="1" {{ 'selected' if trial_period == '1' }}>1 — ΝΑΙ</option>
+        </select></label>
+      <label data-trial-date-field {{ 'hidden' if trial_period != '1' }}>
+        Δοκιμαστική περίοδος έως
+        <input type="date" name="f_trial_date_to"
+          value="{{ fv.get('f_trial_date_to', '') }}"
+          {{ 'required' if trial_period == '1' }}
+          {{ 'disabled' if trial_period != '1' }}></label>
+    </div>
+  </div>
+</div>

@@ -1,0 +1,68 @@
+{# ΧΡΟΝΟΛΟΓΙΟ ΥΠΟΧΡΕΩΣΕΩΝ σε ΤΡΕΙΣ ΣΤΗΛΕΣ (μισθολογικές / υποβολές / πληρωμές).
+   Η στήλη κάθε τύπου είναι ΔΗΛΩΤΙΚΗ (`obligation_types.track`) — το UI απλώς
+   ομαδοποιεί· νέος τύπος δεν αγγίζει αυτό το αρχείο.
+
+   Οι «Λεπτομέρειες ενέργειας» ανοίγουν σε MODAL (#modal-host, μοτίβο §9).
+   Ανανεώνεται ολόκληρο με htmx. Τα φίλτρα (view/locked) ταξιδεύουν σε ΚΑΘΕ
+   αίτημα μέσα στο panel μέσω hx-vals — το htmx τα κληρονομεί στα παιδιά,
+   ώστε να μη χάνονται όταν ο χρήστης ανοίγει ή ενεργοποιεί υποχρέωση. #}
+<div id="ob-panel"
+     hx-vals='{"view": "{{ view }}", "locked": "{{ '1' if show_locked else '0' }}"}'>
+
+  <div class="card">
+    <h2>Χρονολόγιο υποχρεώσεων</h2>
+
+    {# Φίλτρο: εκκρεμείς / ολοκληρωμένες / όλες #}
+    <div class="btnrow" style="margin-bottom:10px">
+      {% for code, label in views %}
+        <button class="ghost {{ 'on' if view == code else '' }}"
+                hx-get="{{ url_for('obligations.panel') }}"
+                hx-vals='{"view": "{{ code }}"}'
+                hx-target="#ob-panel" hx-swap="outerHTML">{{ label }}</button>
+      {% endfor %}
+    </div>
+
+    <div class="legend">
+      <span><i style="background:var(--done)"></i>Ολοκληρωμένη</span>
+      <span><i style="background:var(--ready)"></i>Διαθέσιμη</span>
+      <span><i style="background:var(--warn)"></i>Λήγει σύντομα</span>
+      <span><i style="background:var(--prob)"></i>Εκπρόθεσμη / πρόβλημα</span>
+    </div>
+
+    {# Οι κλειδωμένες (περιμένουν προαπαιτούμενο) δεν εμφανίζονται — ξεκλειδώνουν
+       μόλις ενεργοποιηθεί το προαπαιτούμενο. Εδώ μόνο ο μετρητής/διακόπτης. #}
+    {% if locked_n or show_locked %}
+      <div class="btnrow" style="margin:-4px 0 12px">
+        <span class="muted" style="font-size:12.5px">
+          🔒 {{ locked_n }} υποχρεώσεις περιμένουν προαπαιτούμενο</span>
+        <button class="ghost"
+                hx-get="{{ url_for('obligations.panel') }}"
+                hx-vals='{"locked": "{{ '0' if show_locked else '1' }}"}'
+                hx-target="#ob-panel" hx-swap="outerHTML">
+          {{ 'Απόκρυψη' if show_locked else 'Εμφάνιση' }}
+        </button>
+      </div>
+    {% endif %}
+
+    {% if obs %}
+      <div id="timeline" class="obcols">
+        {% for track in tracks %}
+          {% set items = obs | selectattr('track', 'equalto', track[0]) | list %}
+          {% include "partials/_ob_timeline.html" %}
+        {% endfor %}
+      </div>
+    {% else %}
+      <div class="empty">
+        {% if view == 'done' %}Καμία ολοκληρωμένη υποχρέωση ακόμη.
+        {% elif view == 'active' %}Καμία εκκρεμής υποχρέωση.
+        {% else %}Καμία υποχρέωση. Ξεκινήστε με μια πρόσληψη.{% endif %}
+      </div>
+    {% endif %}
+
+    {# Ο host του modal ζει ΜΕΣΑ στο panel: κάθε swap του panel τον αδειάζει,
+       οπότε το modal κλείνει μετά από ενεργοποίηση/παράταση. #}
+    <div id="modal-host">
+      {% if detail %}{% include "partials/_ob_detail_modal.html" %}{% endif %}
+    </div>
+  </div>
+</div>

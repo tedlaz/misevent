@@ -1,0 +1,56 @@
+{# Modal ΑΝΑΛΥΣΗΣ προσαυξήσεων (read-only). Ανά είδος ώρας:
+   ώρες × κανονικό ωρομίσθιο × συντελεστή = ποσό. Κλείνει με «Κλείσιμο». #}
+<div class="modal-backdrop">
+  <div class="modal">
+    <div class="mhead">
+      <h3>Ανάλυση προσαυξήσεων — {{ row.name }}</h3>
+      <span class="muted" style="font-size:12.5px">
+        Κανονικό ωρομίσθιο <b>{{ '%.2f'|format(row.hourly_rate) }}€</b> ·
+        {{ 'Ημερομίσθιος' if row.pay_type == 'daily' else 'Μισθωτός' }}</span>
+    </div>
+
+    <div class="mbody">
+      {% if lines %}
+        <table class="tbl">
+          <thead><tr>
+            <th>Είδος ώρας</th>
+            <th class="rt">Ώρες</th>
+            <th class="rt">Ωρομίσθιο</th>
+            <th class="rt">Συντελεστής</th>
+            <th class="rt">Ποσό</th>
+          </tr></thead>
+          <tbody>
+            {% for f, ln in lines.items() %}
+              <tr>
+                <td>
+                  {% if ln.cls == 'illegal' %}<b style="color:var(--prob)">{{ ln.label }}</b>
+                  {% else %}{{ ln.label }}{% endif %}</td>
+                <td class="rt mono">{{ '%g'|format(ln.hours) }}</td>
+                <td class="rt mono">{{ '%.2f'|format(row.hourly_rate) }}€</td>
+                <td class="rt mono">×{{ '%g'|format(ln.mult * 100) }}%</td>
+                <td class="rt mono">{{ '%.2f'|format(ln.amount) }}€</td>
+              </tr>
+            {% endfor %}
+            <tr>
+              <td colspan="4" class="rt"><b>Σύνολο προσαυξήσεων</b></td>
+              <td class="rt mono"><b>{{ '%.2f'|format(total) }}€</b></td>
+            </tr>
+          </tbody>
+        </table>
+        <div class="muted" style="font-size:12px;margin-top:10px">
+          Ο συντελεστής προκύπτει πολλαπλασιαστικά: ωρομίσθιο κλάσης
+          (1 + κλάση%) × (1 + νύχτα 25% + αργία 75%). Οι «εντός ωραρίου»
+          ώρες πληρώνονται ήδη από τον μισθό — μετρά μόνο η προσαύξηση.
+        </div>
+      {% else %}
+        <div class="empty">Καμία προσαύξηση για αυτόν τον εργαζόμενο.</div>
+      {% endif %}
+    </div>
+
+    <div class="mfoot">
+      <button type="button" class="run"
+              hx-get="{{ url_for('attendance.modal_close') }}"
+              hx-target="#modal-host" hx-swap="innerHTML">Κλείσιμο</button>
+    </div>
+  </div>
+</div>

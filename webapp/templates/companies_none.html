@@ -1,0 +1,23 @@
+{% extends "auth_base.html" %}
+{% block title %}Εταιρείες{% endblock %}
+{% block heading %}Καμία εταιρεία{% endblock %}
+{% block subheading %}{{ user.email }}{% endblock %}
+
+{% block content %}
+{% if error %}<div class="warnbox">{{ error }}</div>{% endif %}
+<p class="muted">Ο λογαριασμός σας δημιουργήθηκε, αλλά δεν σας έχει δοθεί ακόμη
+  πρόσβαση σε καμία εταιρεία. Ζητήστε από τον διαχειριστή να σας αποδώσει
+  δικαιώματα.</p>
+
+{% if may_create %}
+  <form class="frm" method="post" action="{{ url_for('companies.create') }}">
+    <label>Δημιουργία δικής μου εταιρείας
+      <input name="name" required placeholder="π.χ. ΑΛΦΑ ΕΜΠΟΡΙΚΗ ΑΕ"></label>
+    <div class="btnrow"><button class="run" type="submit">Δημιουργία</button></div>
+  </form>
+{% endif %}
+
+<div class="btnrow" style="margin-top:12px">
+  <a class="ghost" href="{{ url_for('auth.logout') }}">Έξοδος</a>
+</div>
+{% endblock %}

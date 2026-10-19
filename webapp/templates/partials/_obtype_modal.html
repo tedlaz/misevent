@@ -1,0 +1,72 @@
+{# Modal παραμετροποίησης ΤΥΠΟΥ υποχρέωσης: κανόνας προθεσμίας + πολιτική
+   παράτασης. ΔΕΝ είναι αναδρομικό — αφορά ό,τι προγραμματιστεί στο εξής.
+   Οι καταβολές (as_source) κληρονομούν την προθεσμία της πηγής: μόνο
+   παράταση ρυθμίζεται. #}
+{% set f = form or {} %}
+<div class="modal-backdrop">
+  <div class="modal">
+    <form hx-post="{{ url_for('settings.obtype_save', code=code) }}"
+          hx-target="#set-panel" hx-swap="outerHTML">
+      <div class="mhead">
+        <h3>✏️ {{ icon }} {{ label }}</h3>
+        <span class="muted" style="font-size:12.5px">
+          καταγράφεται ως ObligationTypeConfigured — οι ήδη προγραμματισμένες
+          υποχρεώσεις κρατούν την προθεσμία τους (μη αναδρομικό)</span>
+      </div>
+      <div class="mbody">
+        {% if editable %}
+          {% set kind = f.get('due_kind', due[0]) %}
+          <div class="frm cols">
+            <label>Κανόνας προθεσμίας
+              <select name="due_kind">
+                <option value="eom" {{ 'selected' if kind == 'eom' }}>
+                  Τελ. εργάσιμη περιόδου + k μήνες</option>
+                <option value="fixed" {{ 'selected' if kind == 'fixed' }}>
+                  Σταθερή ημερομηνία (μήνας/ημέρα)</option>
+                <option value="easter_minus"
+                        {{ 'selected' if kind == 'easter_minus' }}>
+                  k ημέρες πριν το Πάσχα</option>
+              </select></label>
+            <label>k (μήνες ή ημέρες)
+              <input type="number" name="due_k" step="1" min="0"
+                value="{{ f.get('due_k',
+                         due[1] if due[0] in ('eom', 'easter_minus') else 0) }}"></label>
+            <label>Μήνας (για σταθερή)
+              <input type="number" name="due_month" step="1" min="1" max="12"
+                value="{{ f.get('due_month',
+                         due[1] if due[0] == 'fixed' else 12) }}"></label>
+            <label>Ημέρα (για σταθερή)
+              <input type="number" name="due_day" step="1" min="1" max="28"
+                value="{{ f.get('due_day',
+                         due[2] if due[0] == 'fixed' else 21) }}"></label>
+          </div>
+        {% else %}
+          <div class="muted" style="font-size:13px;margin-bottom:8px">
+            Η προθεσμία κληρονομείται από την υποχρέωση-πηγή («όπως η πηγή»)
+            — ρυθμίζεται μόνο η παράταση.</div>
+        {% endif %}
+
+        <div class="frm cols" style="margin-top:8px">
+          {% set allowed = f.get('ext_allowed',
+                                 '1' if extension.allowed else '0') %}
+          <label>Παράταση προθεσμίας
+            <select name="ext_allowed">
+              <option value="0" {{ 'selected' if allowed != '1' }}>
+                Δεν επιτρέπεται</option>
+              <option value="1" {{ 'selected' if allowed == '1' }}>
+                Επιτρέπεται</option>
+            </select></label>
+          <label>Μέγιστη παράταση (ημέρες από την αρχική προθεσμία)
+            <input type="number" name="ext_max_days" step="1" min="1" max="365"
+              value="{{ f.get('ext_max_days', extension.max_days or 10) }}"></label>
+        </div>
+      </div>
+      <div class="mfoot">
+        <button type="button" class="ghost"
+                hx-get="{{ url_for('settings.modal_close') }}"
+                hx-target="#modal-host" hx-swap="innerHTML">Άκυρο</button>
+        <button class="run" type="submit">Αποθήκευση</button>
+      </div>
+    </form>
+  </div>
+</div>

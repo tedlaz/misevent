@@ -1,0 +1,165 @@
+{% from "_macros.html" import emp_state_short %}
+{% set month_names = ['Ιαν', 'Φεβ', 'Μαρ', 'Απρ', 'Μάι', 'Ιουν',
+                      'Ιουλ', 'Αυγ', 'Σεπ', 'Οκτ', 'Νοε', 'Δεκ'] %}
+<div id="leave-planner-panel" data-leave-planner data-year="{{ year }}"
+     data-days="{{ days_in_year }}"
+     data-closed-end="{{ closed_end.isoformat() if closed_end else '' }}"
+     data-closed-label="{{ closed_label }}">
+  <script type="application/json" data-workday-offsets>{{ workday_offsets|tojson }}</script>
+  <div class="leave-toolbar card">
+    <div>
+      <h2>Ετήσιο πλάνο {{ year }}</h2>
+      <p>Σύρετε μια μπάρα ή τα άκρα της ανά ημέρα · διπλό κλικ σε κενή ημέρα
+        για νέα άδεια.</p>
+    </div>
+    <div class="leave-toolbar-actions">
+      <div class="leave-zoom" role="group" aria-label="Μεγέθυνση χρονολογίου">
+        <button class="ghost" type="button" data-zoom-out
+                aria-label="Σμίκρυνση" disabled>−</button>
+        <button class="ghost leave-zoom-level" type="button" data-zoom-reset
+                title="Επαναφορά στην προβολή έτους"><span data-zoom-label>1×</span></button>
+        <button class="ghost" type="button" data-zoom-in
+                aria-label="Μεγέθυνση">+</button>
+      </div>
+      <div class="leave-year-nav">
+        <a class="ghost" href="{{ url_for('leaves.index', year=year-1) }}"
+           aria-label="Προηγούμενο έτος">‹</a>
+        <form action="{{ url_for('leaves.index') }}" method="get">
+          <label>Έτος <input type="number" name="year" min="1900" max="2100"
+                             value="{{ year }}"></label>
+          <button class="ghost" type="submit">Προβολή</button>
+        </form>
+        <a class="ghost" href="{{ url_for('leaves.index', year=year+1) }}"
+           aria-label="Επόμενο έτος">›</a>
+      </div>
+    </div>
+  </div>
+
+  <div class="leave-legend" aria-label="Χρωματικός κώδικας αδειών">
+    {% for value, label in leave_labels.items() %}
+      <span><i class="leave-color leave-{{ value }}"></i>{{ label }}</span>
+    {% endfor %}
+    <span class="leave-accrual-key" title="Προβλεπόμενο υπόλοιπο κανονικής άδειας στο τέλος κάθε μήνα">
+      <i></i> Μηνιαίο υπόλοιπο δικαιώματος
+    </span>
+    {% if closed_band %}
+      <span title="{{ closed_band.label }} — δεν επιτρέπονται αλλαγές">
+        <i class="leave-color leave-closed-key"></i>Κλεισμένη μισθοδοσία
+      </span>
+    {% endif %}
+    <span title="Πληροφοριακή ένδειξη — δεν κλειδώνει το grid">
+      <i class="leave-color leave-contract-end-key"></i>Λήξη σύμβασης ορισμένου χρόνου
+    </span>
+  </div>
+
+  <div class="leave-board card">
+    <div class="leave-board-scroll">
+      <div class="leave-head">
+        <div class="leave-name-head">Ονοματεπώνυμο εργαζομένου</div>
+        <div class="leave-months">
+          {% for month, days in months %}
+            <div style="flex:{{ days }} 0 0"
+                 class="{{ 'closed' if month in closed_months }}"
+                 {% if month in closed_months %}
+                   title="Κλεισμένη μισθοδοσία — κλειδωμένος μήνας"
+                 {% endif %}>{{ month_names[month-1] }}</div>
+          {% endfor %}
+        </div>
+      </div>
+      {% for row in rows %}
+        <div class="leave-row" style="--row-index:{{ loop.index0 }}">
+          <a class="leave-employee" href="{{ url_for('employments.detail', employment_id=row.employment.employment_id) }}">
+            <b>{{ row.employment.full_name }}</b>
+            <small>{{ emp_state_short(row.employment) }}</small>
+            {% if row.employment.employment_relationship == '1' and row.employment.fixed_term_to %}
+              <small class="leave-contract-summary">Σύμβαση έως {{ row.employment.fixed_term_to|date_gr }}</small>
+            {% endif %}
+            <div class="leave-balance-summary tone-{{ row.accrual.tone }}"
+                 data-balance-summary
+                 data-reference-offset="{{ row.accrual.reference_offset }}"
+                 data-reference-label="{{ row.accrual.reference_date|date_gr }}"
+                 title="Κανονική άδεια έως {{ row.accrual.reference_date|date_gr }}">
+              <span><em>Δικαίωμα</em><strong data-summary-accrued>{{ row.accrual.accrued }}</strong></span>
+              <span><em>Άδειες</em><strong data-summary-taken>{{ row.accrual.taken }}</strong></span>
+              <span><em>Υπόλοιπο</em><strong data-summary-balance>{{ row.accrual.balance }}</strong></span>
+            </div>
+            {% if row.accrual.future_planned %}
+              <small class="leave-future-planned" data-future-planned>
+                +{{ row.accrual.future_planned }} προγραμματισμένες μετά την ημερομηνία αναφοράς
+              </small>
+            {% else %}
+              <small class="leave-future-planned" data-future-planned hidden></small>
+            {% endif %}
+          </a>
+          <div class="leave-track" style="height:{{ row.height }}px"
+               data-create-url="{{ url_for('leaves.new_leave_modal', employment_id=row.employment.employment_id) }}"
+               data-active-from="{{ row.employment.hire_date.isoformat() if row.employment.hire_date else '' }}"
+               data-active-to="{{ row.employment.termination_date.isoformat() if row.employment.termination_date else '' }}"
+               title="Διπλό κλικ για νέα άδεια">
+            <script type="application/json" data-accrual-daily>{{ row.accrual_daily|tojson }}</script>
+            {% if closed_band %}
+              <div class="leave-closed" aria-label="{{ closed_band.label }}"
+                   title="{{ closed_band.label }} — δεν επιτρέπονται αλλαγές"
+                   style="width:{{ '%.6f'|format(closed_band.width) }}%">
+                {% if closed_band.width >= 8 %}<span>Κλεισμένη μισθοδοσία</span>{% endif %}
+              </div>
+            {% endif %}
+            {% for period in row.inactive %}
+              <div class="leave-inactive" aria-label="{{ period.label }}"
+                   title="{{ period.label }}"
+                   style="left:{{ '%.6f'|format(period.left) }}%;width:{{ '%.6f'|format(period.width) }}%">
+                {% if period.width >= 8 %}<span>Δεν εργάζεται</span>{% endif %}
+              </div>
+            {% endfor %}
+            {% if row.contract_end %}
+              <div class="leave-contract-end" aria-label="{{ row.contract_end.label }}"
+                   title="{{ row.contract_end.label }} — πληροφοριακή ένδειξη, επιτρέπεται παράταση"
+                   style="left:{{ '%.6f'|format(row.contract_end.left) }}%">
+                <span>{{ row.contract_end.date|date_gr }}</span>
+              </div>
+            {% endif %}
+            <div class="leave-month-lines" aria-hidden="true">
+              {% for month, days in months %}<i style="flex:{{ days }} 0 0"></i>{% endfor %}
+            </div>
+            <div class="leave-accrual-strip" aria-label="Προβλεπόμενο υπόλοιπο κανονικής άδειας ανά μήνα">
+              {% for point in row.accrual.months %}
+                <div class="leave-accrual-month tone-{{ point.tone }}"
+                     data-accrual-month
+                     data-checkpoint-offset="{{ point.checkpoint_offset }}"
+                     data-accrued="{{ point.accrued }}"
+                     data-active="{{ 1 if point.active else 0 }}"
+                     data-month-name="{{ month_names[point.month-1] }}"
+                     style="flex:{{ point.days }} 0 0"
+                     title="{{ month_names[point.month-1] }} · Δικαίωμα {{ point.accrued }} · Άδειες {{ point.taken }} · Υπόλοιπο {{ point.balance }}">
+                  <i aria-hidden="true"></i>
+                  <span data-accrual-value>{{ point.balance if point.active else '—' }}</span>
+                </div>
+              {% endfor %}
+            </div>
+            {% for bar in row.bars %}
+              {% set lv = bar.leave %}
+              <div class="leave-bar leave-{{ lv.leave_type.value }}"
+                   tabindex="0" role="button"
+                   aria-label="{{ bar.label }}, {{ lv.date_from|date_gr }} έως {{ lv.date_to|date_gr }}, {{ bar.days_label }} {{ 'εργάσιμη ημέρα' if bar.days_label == '1' else 'εργάσιμες ημέρες' }}"
+                   title="{{ bar.label }} · {{ lv.date_from|date_gr }} – {{ lv.date_to|date_gr }} · {{ bar.days_label }} {{ 'εργάσιμη ημέρα' if bar.days_label == '1' else 'εργάσιμες ημέρες' }}"
+                   data-leave-bar data-from="{{ lv.date_from.isoformat() }}"
+                   data-to="{{ lv.date_to.isoformat() }}"
+                   data-label="{{ bar.label }}"
+                   data-update-url="{{ url_for('leaves.drag_leave', employment_id=row.employment.employment_id, leave_id=lv.leave_id) }}"
+                   data-modal-url="{{ url_for('leaves.leave_modal', employment_id=row.employment.employment_id, leave_id=lv.leave_id, year=year) }}"
+                   data-type="{{ lv.leave_type.name }}" data-notes="{{ lv.notes }}"
+                   style="left:{{ '%.6f'|format(bar.left) }}%;width:{{ '%.6f'|format(bar.width) }}%;top:{{ 8 + bar.lane * 28 }}px">
+                {% if not bar.start_clipped %}<span class="leave-handle start" aria-hidden="true"></span>{% endif %}
+                <span class="leave-bar-text">{{ bar.days_label }}</span>
+                {% if not bar.end_clipped %}<span class="leave-handle end" aria-hidden="true"></span>{% endif %}
+              </div>
+            {% endfor %}
+          </div>
+        </div>
+      {% else %}
+        <div class="empty">Δεν υπάρχουν απασχολήσεις για το {{ year }}.</div>
+      {% endfor %}
+    </div>
+  </div>
+  <div id="modal-host"></div>
+</div>

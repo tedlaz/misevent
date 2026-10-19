@@ -1,0 +1,70 @@
+{# Φόρμα πρόσληψης σε TABS (χωρίς JS — CSS-only). Με `person` -> ΕΠΑΝΑΠΡΟΣΛΗΨΗ
+   (καμία επανάληψη στοιχείων ταυτότητας). Χωρίς `person` -> νέο πρόσωπο +
+   απασχόληση. `form`: οι τιμές που υποβλήθηκαν (μετά από σφάλμα) — η φόρμα
+   ΞΑΝΑΓΕΜΙΖΕΙ ώστε ο χρήστης να διορθώσει. #}
+{% set fv = form|default({}, true) %}
+{% set current_nationality = fv.get('nationality_code', '048') %}
+{% set third_country_enabled = current_nationality and current_nationality not in eu_nationality_codes %}
+<div id="hire-form">
+  <form style="margin-top:16px"
+        data-eu-nationalities="{{ eu_nationality_codes|join(',') }}"
+        hx-post="{{ url_for('employments.create') }}"
+        hx-target="#persons-panel" hx-swap="outerHTML">
+
+    {% if person %}
+      <input type="hidden" name="person_id" value="{{ person.person_id }}">
+    {% endif %}
+
+    <input class="tabradio" type="radio" name="_tab" id="tab-general" checked>
+    {% if not person %}
+      <input class="tabradio" type="radio" name="_tab" id="tab-foreign"
+             data-third-country-radio {{ 'disabled' if not third_country_enabled }}>
+    {% endif %}
+    <input class="tabradio" type="radio" name="_tab" id="tab-oaed">
+    <input class="tabradio" type="radio" name="_tab" id="tab-schedule">
+    <div class="tabbar">
+      <label for="tab-general">① Γενικά στοιχεία</label>
+      {% if not person %}
+        <label for="tab-foreign" data-third-country-label
+               aria-disabled="{{ 'false' if third_country_enabled else 'true' }}"
+               class="{{ 'is-disabled' if not third_country_enabled }}">② Πολίτες τρίτων χωρών</label>
+      {% endif %}
+      <label for="tab-schedule">{{ '③' if not person else '②' }} Πρόγραμμα εργασίας</label>
+      <label for="tab-oaed">{{ '④' if not person else '③' }} ΟΑΕΔ</label>
+    </div>
+
+    {# ───────────────────────── TAB 1: Γενικά στοιχεία ─────────────────────
+       ΚΟΙΝΟ markup με το modal (επανα)πρόσληψης: partials/_general_tab.html #}
+    <div class="tabpane tp-general">
+      {% set ident = not person %}
+      {% set person_note = true %}
+      {# Επαναπρόσληψη = νέα περίοδος που ξεκινά τώρα, ποτέ «παλαιά πρόσληψη»
+         μεταφερόμενη από άλλο πρόγραμμα μισθοδοσίας. #}
+      {% set allow_migration = not person %}
+      {% include "partials/_general_tab.html" %}
+    </div>
+
+    {% if not person %}
+      <div class="tabpane tp-foreign">
+        {% include "partials/_third_country_tab.html" %}
+      </div>
+    {% endif %}
+
+    {# ───────────────────────── TAB 2: Πρόγραμμα εργασίας ─────────────────── #}
+    <div class="tabpane tp-schedule">
+      {% include "partials/_schedule_tab.html" %}
+    </div>
+
+    <div class="tabpane tp-oaed">
+      {% include "partials/_oaed_tab.html" %}
+    </div>
+
+    <div class="btnrow" style="margin-top:16px">
+      {# Η καταχώρηση είναι ΠΡΟΧΕΙΡΗ (draft): το Ε3/ΟΧΕ υποβάλλονται χειροκίνητα
+         από την καρτέλα της απασχόλησης (§5.7). #}
+      <button class="run" type="submit" {{ 'disabled' if not specialties }}>
+        Προσωρινή αποθήκευση
+      </button>
+    </div>
+  </form>
+</div>

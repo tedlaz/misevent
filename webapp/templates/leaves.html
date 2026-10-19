@@ -1,0 +1,10 @@
+{% extends "base.html" %}
+{% block title %}Άδειες — misevent{% endblock %}
+{% block heading %}Άδειες{% endblock %}
+{% block subheading %}Άδειες εργαζομένων{% endblock %}
+{% block head %}
+  <script src="{{ url_for('static', filename='leave-planner.js') }}" defer></script>
+{% endblock %}
+{% block content %}
+  {% include "partials/_leave_planner_panel.html" %}
+{% endblock %}

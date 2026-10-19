@@ -1,0 +1,49 @@
+<div class="modal-backdrop">
+  <div class="modal">
+    <form hx-post="{{ url_for('work_schedules.submit_ergani', employment_id=e.employment_id, year=year) }}"
+          hx-target="#work-schedule-panel" hx-swap="outerHTML">
+      <div class="mhead">
+        <h3>📤 Υποβολή προγράμματος στο ΕΡΓΑΝΗ — {{ e.full_name }}</h3>
+        <span class="muted" style="font-size:12.5px">
+          {% if e.schedule_mode == 'variable' %}Μεταβλητό{% else %}Σταθερό{% endif %}
+          πρόγραμμα · κάθε εβδομάδα υποβάλλεται ως ΜΕΤΑΒΛΗΤΟ ημερήσιο ΟΧΕ ·
+          χρονολογικά, ώστε να μη μένουν κενά
+        </span>
+      </div>
+      <div class="mbody">
+        {% if weeks %}
+          <p class="muted" style="font-size:12.5px;margin:0 0 8px">
+            Επιλέχθηκαν οι εβδομάδες με αδήλωτες ή τροποποιημένες ημέρες.
+            Η υποβολή γίνεται χρονολογικά — δεν επιτρέπεται να παραλείψεις
+            προγενέστερη <b>αδήλωτη</b> ημέρα.
+          </p>
+          <div class="erg-week-list">
+            {% for w in weeks %}
+              <label class="erg-week">
+                <input type="checkbox" name="week" value="{{ w.iso }}" checked>
+                <b>Ε{{ w.iso_week }}</b>
+                <span>{{ w.label }}</span>
+                <small>
+                  {% if w.pending %}{{ w.pending }} αδήλωτες{% endif %}
+                  {% if w.pending and w.modified %} · {% endif %}
+                  {% if w.modified %}{{ w.modified }} τροποποιημένες{% endif %}
+                </small>
+              </label>
+            {% endfor %}
+          </div>
+        {% else %}
+          <p class="ok" style="margin:0">✓ Καμία εκκρεμότητα — το πρόγραμμα του
+            {{ e.full_name }} είναι πλήρως δηλωμένο στο ΕΡΓΑΝΗ.</p>
+        {% endif %}
+      </div>
+      <div class="mfoot">
+        <button type="button" class="ghost"
+                hx-get="{{ url_for('work_schedules.modal_close') }}"
+                hx-target="#modal-host" hx-swap="innerHTML">Άκυρο</button>
+        {% if weeks %}
+          <button class="run" type="submit">Υποβολή στο ΕΡΓΑΝΗ</button>
+        {% endif %}
+      </div>
+    </form>
+  </div>
+</div>

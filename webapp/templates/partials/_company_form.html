@@ -1,0 +1,34 @@
+{# `oob`: η φόρμα έρχεται ως δευτερεύουσα απάντηση (π.χ. εισαγωγή JSON που
+   ανανεώνει ΟΛΑ τα tabs μαζί). #}
+<form id="company-form" class="frm cols"
+      {% if oob %}hx-swap-oob="outerHTML"{% endif %}
+      hx-post="{{ url_for('company.save') }}"
+      hx-target="#company-form" hx-swap="outerHTML">
+  {% set fv = company_values|default({}) %}
+  <label>ΑΜΕ (Αρ. Μητρώου Εργοδότη, 10ψήφιο)
+    <input name="ame" value="{{ fv.get('ame', '') }}" maxlength="10" required></label>
+  <label>ΑΦΜ
+    <input name="afm" value="{{ fv.get('afm', '') }}" maxlength="9" required></label>
+  <label class="wide">Επωνυμία / Επώνυμο
+    <input name="legal_name" value="{{ fv.get('legal_name', '') }}" required
+           placeholder="εταιρία: η επωνυμία — ατομική: το επώνυμο του φυσικού προσώπου"></label>
+  {# Όνομα/Πατρώνυμο ΜΟΝΟ για ατομική επιχείρηση: η συμπλήρωσή τους είναι
+     που κάνει τον δηλούντα φυσικό πρόσωπο (JL10 πεδίο 2.4 = 1). #}
+  <label>Όνομα <span class="muted">(μόνο ατομική)</span>
+    <input name="first_name" value="{{ fv.get('first_name', '') }}"></label>
+  <label>Πατρώνυμο <span class="muted">(μόνο ατομική)</span>
+    <input name="father_name" value="{{ fv.get('father_name', '') }}"></label>
+  <label class="wide">Αντικείμενο δραστηριότητας
+    <input name="activity" maxlength="16"
+           value="{{ fv.get('activity', '') }}"
+           placeholder="πεδίο 2.6 του αρχείου ΦΜΥ JL10 — έως 16 χαρακτήρες"></label>
+  {% with code=fv.get('local_office_code', ''),
+          office_name=fv.get('local_office_name', '') %}
+    {% include "partials/_company_office_fields.html" %}
+  {% endwith %}
+  <div class="wide btnrow">
+    <button class="run" type="submit">Αποθήκευση στοιχείων</button>
+    <span class="muted" style="font-size:12.5px">
+      Καταγράφεται ως event CompanyRegistered — απαιτείται για την ΑΠΔ.</span>
+  </div>
+</form>

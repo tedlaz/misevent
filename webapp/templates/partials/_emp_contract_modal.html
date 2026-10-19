@@ -1,0 +1,87 @@
+{# Modal αλλαγής σύμβασης. Επιτυχία -> αντικαθιστά όλο το #employment-card
+   (το κενό modal-host κλείνει το modal)· σε σφάλμα το view κάνει retarget
+   εδώ με form=τα δεδομένα του χρήστη.
+
+   Ενότητες με ΧΡΩΜΑΤΙΚΟ ΚΩΔΙΚΑ (.fsec — ΤΟ ΙΔΙΟ σύστημα με τη φόρμα
+   πρόσληψης, app.css §ΕΝΟΤΗΤΕΣ ΦΟΡΜΑΣ): ισχύς = μπλε, αποδοχές = πράσινο,
+   ωράριο/σύστημα = τιρκουάζ. Καθαρό CSS, καμία γραμμή JS. #}
+{% set f = form or {} %}
+{% set pt = f.get('pay_type', e.pay_type) %}
+{% set ws = f.get('weekly_system', e.weekly_system)|string %}
+<div class="modal-backdrop">
+  <div class="modal wide">
+    <form hx-post="{{ url_for('employments.contract', employment_id=e.employment_id) }}"
+          hx-target="#employment-card" hx-swap="outerHTML">
+      <div class="mhead">
+        <h3>✏️ Αλλαγή σύμβασης — {{ e.full_name }}</h3>
+        <span class="muted" style="font-size:12.5px">
+          υποβάλλεται αυτόματα Δήλωση Μεταβολής στο ΕΡΓΑΝΗ</span>
+      </div>
+      <div class="mbody">
+        <div class="fsecs">
+
+          {# ① ΙΣΧΥΣ — από πότε πιάνει η νέα σύμβαση #}
+          <div class="fsec fs-id">
+            <div class="fs-h"><span class="fs-ic">📅</span>
+              <b>Ισχύς μεταβολής</b>
+              <span class="fs-hint">οι τριετίες ωριμάζουν ως αυτή την
+                ημερομηνία</span></div>
+            <div class="frm cols">
+              <label>Ισχύς από<input type="date" name="effective_from"
+                value="{{ f.get('effective_from', today.isoformat()) }}" required></label>
+            </div>
+          </div>
+
+          {# ② ΑΠΟΔΟΧΕΣ — ελέγχονται έναντι του κατώτατου ΜΕ τις προσαυξήσεις #}
+          <div class="fsec fs-pay">
+            <div class="fs-h"><span class="fs-ic">💶</span>
+              <b>Αποδοχές</b>
+              <span class="fs-hint">ελέγχονται έναντι του κατώτατου ορίου με τις
+                προσαυξήσεις της απασχόλησης</span></div>
+            <div class="frm cols">
+              <label>Τύπος αμοιβής
+                <select name="pay_type">
+                  <option value="monthly" {{ 'selected' if pt == 'monthly' }}>
+                    Μισθός (μηνιαίος)</option>
+                  <option value="daily" {{ 'selected' if pt == 'daily' }}>
+                    Ημερομίσθιο</option>
+                </select></label>
+              <label>Μικτές αποδοχές (€)
+                <input type="number" step="0.01" name="amount" required
+                  value="{{ f.get('amount',
+                           e.daily_wage if e.pay_type == 'daily' else e.monthly_gross) }}"></label>
+            </div>
+          </div>
+
+          {# ③ ΩΡΑΡΙΟ & ΣΥΣΤΗΜΑ ΕΡΓΑΣΙΑΣ — ΟΡΟΙ ΣΥΜΒΑΣΗΣ, όχι ασφαλιστικά.
+             Το σύστημα (5/6) γράφεται στην ΑΠΔ (No 55) και καθορίζει το
+             ημερήσιο νόμιμο όριο στην κατάταξη ωρών (§5.10). #}
+          <div class="fsec fs-ins">
+            <div class="fs-h"><span class="fs-ic">🕒</span>
+              <b>Ωράριο &amp; σύστημα εργασίας</b>
+              <span class="fs-hint">&lt;40 ώρες = μερική απασχόληση· το σύστημα
+                ορίζει το ημερήσιο νόμιμο (9ω πενθήμερο / 8ω εξαήμερο)</span></div>
+            <div class="frm cols">
+              <label>Ώρες/εβδομάδα<input type="number" name="weekly_hours"
+                value="{{ f.get('weekly_hours', e.weekly_hours) }}"
+                min="1" max="48" step="0.5"></label>
+              <label>Σύστημα εργασίας
+                <select name="weekly_system">
+                  <option value="5" {{ 'selected' if ws != '6' }}>
+                    Πενθήμερο (5 ημέρες)</option>
+                  <option value="6" {{ 'selected' if ws == '6' }}>
+                    Εξαήμερο (6 ημέρες)</option>
+                </select></label>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="mfoot">
+        <button type="button" class="ghost"
+                hx-get="{{ url_for('employments.modal_close') }}"
+                hx-target="#modal-host" hx-swap="innerHTML">Άκυρο</button>
+        <button class="run" type="submit">Αλλαγή σύμβασης → ΕΡΓΑΝΗ</button>
+      </div>
+    </form>
+  </div>
+</div>

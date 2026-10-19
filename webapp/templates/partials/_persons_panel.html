@@ -1,0 +1,37 @@
+{# Μητρώο εργαζομένων (πρόσωπα + απασχολήσεις σε μία οθόνη). Ο «Νέος
+   εργαζόμενος» καταχωρεί ΜΟΝΟ τα ΣΤΟΙΧΕΙΑ του προσώπου (ταυτότητα)· η
+   ΠΡΟΣΛΗΨΗ γίνεται χωριστά, μετά, από το badge «πρόσληψη» της γραμμής του.
+   Το #modal-host είναι ΜΕΣΑ στο panel, ώστε η επιτυχής καταχώρηση (που
+   αντικαθιστά όλο το panel) να κλείνει αυτόματα το modal. #}
+<div id="persons-panel">
+
+  <div class="card">
+    <h2 style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+      <span>Εργαζόμενοι</span>
+      <span class="norm">— μοναδικοί ανά ΑΦΜ, ΑΜΚΑ και Επώνυμο/Όνομα/Πατρώνυμο+γέννηση</span>
+      {# Το αρχείο κουβαλά ΜΟΝΟ τα στοιχεία των προσώπων (ταυτότητα) — όχι
+         προσλήψεις. Η εξαγωγή είναι απλό κατέβασμα· η εισαγωγή περνά από τα
+         κανονικά commands (ίδιο ΑΦΜ = ενημέρωση) και ξαναχτίζει το panel. #}
+      <span style="margin-left:auto;display:flex;align-items:center;gap:8px;
+                   flex-wrap:wrap">
+        <a class="ghost" href="{{ url_for('persons.export_json') }}"
+           download>⬇️ Εξαγωγή αρχείου</a>
+        <form hx-post="{{ url_for('persons.import_json') }}"
+              hx-target="#persons-panel" hx-swap="outerHTML"
+              hx-encoding="multipart/form-data" class="btnrow">
+          <input type="file" name="file" accept=".json,application/json" required
+                 style="font-size:12px;max-width:200px">
+          <button class="ghost" type="submit">⬆️ Εισαγωγή αρχείου</button>
+        </form>
+        <button class="run"
+                hx-get="{{ url_for('persons.new_modal') }}"
+                hx-target="#modal-host" hx-swap="innerHTML">➕ Νέος εργαζόμενος</button>
+      </span>
+    </h2>
+    {% include "partials/_persons_table.html" %}
+  </div>
+
+  {# Εδώ φορτώνεται το modal (κενό όσο είναι κλειστό) #}
+  <div id="modal-host"></div>
+
+</div>

@@ -1,0 +1,36 @@
+<form class="frm cols" hx-post="{{ url_for('company.branch_save') }}"
+      hx-target="#branches-panel" hx-swap="outerHTML">
+  {% set code = branch.code if branch else suggested_code %}
+  <label>Κωδικός
+    <input type="number" min="0" name="code" value="{{ code }}" required
+           {{ 'readonly' if first_branch or branch }}></label>
+  <label>Οδός<input name="street" value="{{ branch.street if branch else '' }}"></label>
+  <label>Αριθμός<input name="street_no" value="{{ branch.street_no if branch else '' }}"></label>
+  <label>Τ.Κ.<input name="postal_code" maxlength="5"
+                    value="{{ branch.postal_code if branch else '00000' }}"></label>
+  <label>Πόλη<input name="city" value="{{ branch.city if branch else '' }}"></label>
+
+  <label>Υπηρεσία ΣΕΠΕ
+    <select name="sepe_code">
+      <option value="">— Επιλογή —</option>
+      {% for r in sepe_rows %}<option value="{{ r.code }}" {{ 'selected' if branch and branch.sepe_code == r.code }}>{{ r.code }} — {{ r.description }}</option>{% endfor %}
+    </select></label>
+  <label>Υπηρεσία ΟΑΕΔ
+    <select name="oaed_code">
+      <option value="">— Επιλογή —</option>
+      {% for r in oaed_rows %}<option value="{{ r.code }}" {{ 'selected' if branch and branch.oaed_code == r.code }}>{{ r.code }} — {{ r.description }}</option>{% endfor %}
+    </select></label>
+  <label>ΚΑΔ παραρτήματος
+    <select name="kad_code">
+      <option value="">— Επιλογή —</option>
+      {% for r in kad_rows %}<option value="{{ r.code }}" {{ 'selected' if branch and branch.kad_code == r.code }}>{{ r.code }} — {{ r.description }}</option>{% endfor %}
+    </select></label>
+  <label>Καλλικράτης
+    <select name="kallikratis_code">
+      <option value="">— Επιλογή —</option>
+      {% for r in koinotites_rows %}<option value="{{ r.code }}" {{ 'selected' if branch and branch.kallikratis_code == r.code }}>{{ r.code }} — {{ r.description }}</option>{% endfor %}
+    </select></label>
+  <div class="wide btnrow">
+    <button class="run" type="submit">{{ 'Εισαγωγή παραρτήματος' if first_branch or not branch else 'Αποθήκευση διορθώσεων' }}</button>
+  </div>
+</form>

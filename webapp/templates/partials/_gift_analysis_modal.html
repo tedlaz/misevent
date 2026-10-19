@@ -1,0 +1,28 @@
+{# Modal ΑΝΑΛΥΣΗΣ Δώρου / Επιδόματος Αδείας (read-only) — ΙΔΙΑ ανάλυση με τη
+   μισθοδοσία (κοινό `_analysis_slip.html`): βάση & κανόνας αναλογίας,
+   συντελεστής αδείας, εισφορές ανά ταμείο/ΚΠΚ, πλήρης παραγωγή του ΦΜΥ
+   (εδώ με αναγωγή x28 για Δώρο Πάσχα/Επίδομα Αδείας). #}
+{% set multi = rows|length > 1 %}
+{% set png_period = png_period or (label ~ ' ' ~ y) %}
+<div class="modal-backdrop">
+  <div class="modal wide">
+    <div class="mhead">
+      <h3>Ανάλυση — {{ label }}</h3>
+      <span class="muted" style="font-size:12.5px">
+        Πλήρης ανάλυση υπολογισμού ανά εργαζόμενο ({{ rows|length }})
+        {%- if net_total %} · σύνολο καθαρών <b>{{ net_total|money }} €</b>{% endif %}</span>
+    </div>
+
+    <div class="mbody payslip">
+      {% for r in rows %}
+        {% include 'partials/_analysis_slip.html' %}
+      {% endfor %}
+    </div>
+
+    <div class="mfoot">
+      <button type="button" class="run"
+              hx-get="{{ url_for('payroll.modal_close') }}"
+              hx-target="#modal-host" hx-swap="innerHTML">Κλείσιμο</button>
+    </div>
+  </div>
+</div>

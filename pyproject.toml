@@ -1,0 +1,42 @@
+[project]
+name = "misevent"
+version = "0.1.0"
+description = "Event driven Greek payroll system"
+readme = "README.md"
+requires-python = ">=3.14"
+dependencies = [
+    "flask>=3.1.3",
+    "fpdf2>=2.8.7",
+]
+
+[dependency-groups]
+dev = [
+    "pyinstaller>=6.22.3",
+    "pytest>=9.1.1",
+    "ruff>=0.14",
+]
+
+# ΜΙΑ ΕΝΤΟΛΗ ΓΙΑ ΟΛΑ ΤΑ TESTS: `uv run pytest` (ή `uv run pytest tests/test_x.py`
+# για ένα αρχείο). Αντικατέστησε τη χειρόγραφη λίστα ~28 εντολών
+# `uv run tests/test_x.py` που ζούσε στο ARCH_REF.md §4.
+#
+# ⚠️ ΟΛΑ ΤΑ TESTS ΜΟΙΡΑΖΟΝΤΑΙ ΜΙΑ ΔΙΕΡΓΑΣΙΑ — ΔΕΝ ΕΙΝΑΙ ΠΙΑ ΔΩΡΕΑΝ Η
+# ΑΠΟΜΟΝΩΣΗ. Το `webapp.system.registry` (χρήστες, κωδικοί, εταιρείες) και τα
+# `config._OVERRIDES` / `obligation_types._OVERRIDES` είναι κατάσταση
+# ΔΙΕΡΓΑΣΙΑΣ. Όποιο test τα μεταβάλλει ΠΡΕΠΕΙ να ζητά το fixture
+# `fresh_system` (βλ. tests/conftest.py).
+#
+# ΓΙΑΤΙ ΟΧΙ pytest-xdist: οι workers κληρονομούν το ίδιο `MISEVENT_DATA_DIR`
+# από το περιβάλλον, οπότε θα έγραφαν όλοι στην ίδια `system.db`. Το
+# `--dist loadfile` ΔΕΝ λύνει το πρόβλημα (ένας worker παίρνει πολλά αρχεία).
+# Σειριακά: ~18s για 215 tests — αρκετά γρήγορο, και ντετερμινιστικό.
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+addopts = "-q"
+
+[tool.ruff]
+line-length = 100  # η πραγματική σύμβαση του κώδικα (στα 88 θα ήταν 71 παραβάσεις, στα 100 μόλις 5)
+
+[tool.ruff.lint]
+select = ["E", "F", "I"]

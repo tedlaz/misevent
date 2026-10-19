@@ -1,0 +1,91 @@
+{# Ενότητα «Ασφάλιση» της (επανα)πρόσληψης — ΟΛΕΣ οι επιλογές ΠΑΡΑΓΟΝΤΑΙ από
+   τη δηλωμένη ειδικότητα (webapp/views/employments.py::insurance_ctx →
+   svc.specialty_options/specialty_lines):
+     · Φορέας επικουρικής: μόνο οι επιτρεπτοί της ειδικότητας. Ένας μόνος
+       φορέας δεν ρωτιέται — κλειδώνεται και ταξιδεύει ως hidden.
+     · Πρόνοια: ρωτιέται ΜΟΝΟ όταν υπάρχει πραγματική επιλογή (διαφοροποιημένη
+       ή προαιρετική). Ενιαία+υποχρεωτική ή ανύπαρκτη προκύπτει μόνη της.
+     · ΖΩΝΤΑΝΗ προεπισκόπηση των γραμμών ΑΠΔ με ΚΑΔ/ειδικότητα/ΚΠΚ και τα
+       ποσοστά που ισχύουν την ημ. πρόσληψης.
+   Κάθε αλλαγή ξαναφορτώνει ΟΛΟ το fragment με htmx (καμία γραμμή JS). #}
+{% set hx = {'hx-post': url_for('employments.insurance_fields'),
+             'hx-target': '#ins-fields', 'hx-swap': 'outerHTML',
+             'hx-include': '#ins-fields, [data-hire-date]'} %}
+<div id="ins-fields">
+  <div class="frm cols">
+    <label class="wide">Ειδικότητα
+      <select name="specialty_name" required
+              hx-post="{{ hx['hx-post'] }}" hx-target="{{ hx['hx-target'] }}"
+              hx-swap="{{ hx['hx-swap'] }}" hx-include="{{ hx['hx-include'] }}">
+        {% for n in specialties %}
+          <option value="{{ n }}"
+            {{ 'selected' if ins.selected == n }}>{{ n }}</option>
+        {% endfor %}
+      </select></label>
+
+    {% if ins.carriers|length > 1 %}
+      <label>Φορέας επικουρικής
+        <select name="auxiliary_scheme"
+                hx-post="{{ hx['hx-post'] }}" hx-target="{{ hx['hx-target'] }}"
+                hx-swap="{{ hx['hx-swap'] }}" hx-include="{{ hx['hx-include'] }}">
+          {% for c in ins.carriers %}
+            <option value="{{ c }}"
+              {{ 'selected' if ins.auxiliary_scheme == c }}>
+              {{ carrier_labels[c] }}</option>
+          {% endfor %}
+        </select></label>
+    {% elif ins.carriers %}
+      <input type="hidden" name="auxiliary_scheme" value="{{ ins.carriers[0] }}">
+      <label>Φορέας επικουρικής
+        <div class="lockbox">🔒 {{ carrier_labels[ins.carriers[0]] }} — ο μόνος
+          που προβλέπει η ειδικότητα</div></label>
+    {% endif %}
+
+    {% if ins.pron_choices %}
+      <label>{{ ins.pron.name or 'Προνοιακή ασφάλιση' }}
+        <select name="pron_choice"
+                hx-post="{{ hx['hx-post'] }}" hx-target="{{ hx['hx-target'] }}"
+                hx-swap="{{ hx['hx-swap'] }}" hx-include="{{ hx['hx-include'] }}">
+          {% for c in ins.pron_choices %}
+            <option value="{{ c }}"
+              {{ 'selected' if ins.pron_choice == c }}>{{ pron_labels[c] }}</option>
+          {% endfor %}
+        </select></label>
+    {% elif ins.pron.enabled %}
+      <input type="hidden" name="pron_choice" value="{{ ins.pron_choice }}">
+      <label>{{ ins.pron.name or 'Προνοιακή ασφάλιση' }}
+        <div class="lockbox">🔒 Υποχρεωτική για όλους</div></label>
+    {% endif %}
+  </div>
+
+  {# ------------------------------------- Προεπισκόπηση γραμμών ΑΠΔ #}
+  {% if ins.error %}
+    <div class="warnbox">{{ ins.error }}</div>
+  {% elif ins.lines %}
+    <table class="tbl ins-preview">
+      <thead><tr><th>Γραμμή ΑΠΔ</th><th>ΚΑΔ</th><th>Ειδικότητα</th><th>ΚΠΚ</th>
+        <th class="rt">Εργαζόμενος</th><th class="rt">Εργοδότης</th></tr></thead>
+      <tbody>
+        {% for l in ins.lines %}
+          <tr class="{{ 'bad' if not l.has_rate }}">
+            <td><b>{{ l.label }}</b>
+              {% if l.kpk_name %}<div class="muted" style="font-size:11.5px">
+                {{ l.carrier_label }} · {{ l.kpk_name }}</div>{% endif %}</td>
+            <td class="mono">{{ l.kad }}</td>
+            <td class="mono">{{ l.specialty_code }}</td>
+            <td class="mono">{{ l.kpk }}</td>
+            {% if l.has_rate %}
+              <td class="num">{{ '%.2f'|format(l.employee * 100) }}%</td>
+              <td class="num">{{ '%.2f'|format(l.employer * 100) }}%</td>
+            {% else %}
+              <td class="num" colspan="2">χωρίς ποσοστά για την ημ. πρόσληψης</td>
+            {% endif %}
+          </tr>
+        {% endfor %}
+        <tr class="tot"><td colspan="4">Σύνολο κρατήσεων</td>
+          <td class="num">{{ '%.2f'|format(ins.employee * 100) }}%</td>
+          <td class="num">{{ '%.2f'|format(ins.employer * 100) }}%</td></tr>
+      </tbody>
+    </table>
+  {% endif %}
+</div>

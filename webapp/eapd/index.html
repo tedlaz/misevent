@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="el-GR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>eΑΠΔ</title>
+  <link rel="icon" type="image/x-icon" href="./favicon.ico" />
+  <link rel="stylesheet" href="./styles.css" />
+
+</head>
+<body>
+<!-- Ένδειξη φόρτωσης: ορατή από την πρώτη στιγμή (τα scripts του viewer είναι
+     ~830KB) — τη σβήνει το bridge.js, που φορτώνεται ΤΕΛΕΥΤΑΙΟ, αφού μπουν
+     τα δεδομένα στη φόρμα. -->
+<div id="apdBoot" class="apd-boot"><span class="apd-boot-spin"></span>Φόρτωση αρχείου ΑΠΔ…</div>
+<div class="wrap">
+  <div class="card">
+    <div class="row top-toolbar">
+      <label class="fund-pick">Ταμείο
+        <select id="fundSel" aria-label="Γραμμογράφηση ΑΠΔ">
+          <option value="efka">e-ΕΦΚΑ (162)</option>
+          <option value="teka">ΤΕΚΑ (148)</option>
+        </select>
+      </label>
+      <button id="btnAddGenika" class="secondary">+ Γενικά Στοιχεία</button>
+      <button id="btnAddAsf" class="secondary">+ Ασφαλισμένος</button>
+      <button id="btnAddEof" class="secondary">+ EOF</button>
+      <button id="btnRecalc" class="secondary">Υπολογισμός</button>
+      <button id="btnClear" class="secondary danger-soft clear-btn">Clear</button>
+      <select id="genEncoding" aria-label="Generate encoding"><option>utf-8</option><option>iso-8859-7</option><option selected>windows-1253</option></select>
+      <button id="btnGenerate" class="secondary">Αρχείο ΑΠΔ</button>
+      <button id="btnHelp" class="secondary" onclick="document.getElementById('helpModal').style.display='flex'">Βοήθεια</button>
+      <span class="spacer"></span>
+      <span id="recalcIndicator" class="recalc-indicator recalc-needed">Needs recalculation</span>
+    </div>
+    <div id="records"></div>
+  </div>
+  <div class="card" id="parseCard">
+    <h4>Διάβασε αρχείο ΑΠΔ</h4>
+    <div class="row"><input type="file" id="fileIn" accept=".txt"/><select id="parseEncoding" aria-label="Parse encoding"><option>utf-8</option><option>iso-8859-7</option><option selected>windows-1253</option></select><button id="btnParse">Διάβασε</button></div>
+    <textarea id="parsedJson"></textarea>
+  </div>
+
+  <div class="card" id="outCard">
+    <h4>Περιεχόμενο ΑΠΔ</h4>
+    <textarea id="outText"></textarea>
+  </div>
+</div>
+
+<div id="lookupModal" class="modal-overlay"><div class="modal"><div class="row"><strong id="lookupTitle">Find</strong><span class="spacer"></span><button class="secondary" id="closeLookup">Close</button></div><input id="lookupSearch" placeholder="Search by code or description"/><div id="lookupResults" class="list"></div></div></div>
+
+<div id="helpModal" class="modal-overlay">
+  <div class="modal" style="width:min(1000px,96vw);height:min(86vh,900px);padding:0;display:flex;flex-direction:column;">
+    <div class="row" style="padding:10px 12px;border-bottom:1px solid #e2e8f0;">
+      <strong>Help</strong>
+      <span class="spacer"></span>
+      <button id="closeHelp" class="secondary" onclick="document.getElementById('helpModal').style.display='none'">Close</button>
+    </div>
+    <iframe id="helpFrame" src="./help.html" style="border:0;flex:1;width:100%;"></iframe>
+  </div>
+</div>
+
+<script src="./loader.js"></script>
+</body>
+</html>

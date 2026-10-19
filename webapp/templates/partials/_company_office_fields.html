@@ -1,0 +1,24 @@
+{# Τα ΔΥΟ πεδία «Τοπική Δ/νση e-ΕΦΚΑ» των στοιχείων εργοδότη — ταυτίζονται με
+   τα No 3 / No 4 της ΑΠΔ. ΕΝΑ fragment για δύο χρήσεις (καμία διπλοεγγραφή
+   markup):
+     α) μέσα στο #company-form (oob=false)
+     β) ως απάντηση της επιλογής από το μητρώο ΤΟΠΙΚ (oob=true) — τα δύο
+        labels γίνονται swap στη θέση τους με hx-swap-oob, ενώ το κενό
+        υπόλοιπο της απάντησης αδειάζει τον #employer-modal-host (κλείνει).
+   Ο host ζει ΕΞΩ από τη φόρμα: το modal περιέχει δικό του input αναζήτησης
+   και δεν επιτρέπεται να βρεθεί μέσα σε <form>. #}
+{% set oob = oob | default(false) %}
+<label id="fld-office-code" {% if oob %}hx-swap-oob="true"{% endif %}>
+  Κωδ. Τοπικής Δ/νσης e-ΕΦΚΑ
+  <span class="fieldrow">
+    <input name="local_office_code" value="{{ code or '' }}" maxlength="10">
+    <button type="button" class="ghost sm"
+            title="Αναζήτηση στο μητρώο Τοπικών Διευθύνσεων e-ΕΦΚΑ"
+            hx-get="{{ url_for('company.topik_modal') }}"
+            hx-target="#employer-modal-host" hx-swap="innerHTML">🔎</button>
+  </span>
+</label>
+<label id="fld-office-name" {% if oob %}hx-swap-oob="true"{% endif %}>
+  Ονομασία Τοπικής Δ/νσης
+  <input name="local_office_name" value="{{ office_name or '' }}">
+</label>

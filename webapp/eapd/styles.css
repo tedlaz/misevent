@@ -1,0 +1,83 @@
+    body{font-family:Inter,system-ui,sans-serif;background:linear-gradient(160deg,#eef4ff,#f6fff7);margin:0;color:#1f2937}
+    .wrap{max-width:1200px;margin:20px auto;padding:0 16px}
+    .card{background:#fff;border-radius:12px;padding:14px;box-shadow:0 8px 24px rgba(0,0,0,.08);margin-bottom:12px}
+    .row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+    .top-toolbar{position:sticky;top:0;z-index:50;background:#f8fafc;padding:8px 0;border-bottom:1px solid #e2e8f0;box-shadow:0 4px 10px rgba(15,23,42,.08)}
+    .header-row{flex-wrap:nowrap}.spacer{margin-left:auto}
+    button{border:none;background:#2563eb;color:#fff;padding:8px 12px;border-radius:8px;cursor:pointer;transition:transform .15s ease, box-shadow .2s ease}
+    button:active{transform:scale(.97)}
+.top-toolbar button:hover,.top-toolbar select:hover,.toolbar-like:hover{filter:brightness(0.97);box-shadow:0 2px 8px rgba(15,23,42,.12);transform:translateY(-1px)}
+    button.secondary{background:#eef2ff;color:#334155;border:1px solid #cbd5e1}
+button.danger-soft{background:#ffedd5 !important;color:#9a3412 !important;border:1px solid #fdba74 !important}
+button.remove-btn:hover,button.clear-btn:hover{background:#ef4444 !important;color:#fff !important;border-color:#b91c1c !important;box-shadow:0 0 0 3px rgba(239,68,68,.25),0 8px 18px rgba(127,29,29,.35) !important;transform:translateY(-1px) scale(1.03)}
+button.fold-toggle{font-weight:800;font-size:16px;line-height:1;background:transparent !important;border:none !important;box-shadow:none !important}
+button.ellipsis-btn{font-weight:800}
+    .record{border:1px solid #dbe4f0;border-radius:10px;padding:10px;background:#fff;margin:8px 0}
+    .record.type-GenikaStoixeia{border-left:6px solid #1d4ed8;background:#dbeafe}
+    .record.type-StoixeiaAsfalismenou{border-left:6px solid #6d28d9;background:#ede9fe}
+    .record.type-StoixeiaAsfalisis{border-left:6px solid #0f766e;background:#ccfbf1}
+    .record.type-StoixeiaEpidotiseon{border-left:6px solid #b45309;background:#ffedd5}
+    .record.type-TelosArxeiou{border-left:6px solid #334155;background:#e2e8f0}
+    .children-host{margin-top:8px;display:flex;flex-direction:column;gap:8px}
+.child-actions{margin-top:8px}
+    .children-host .record{margin-left:14px;border-left-width:4px}
+    .grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+    label{font-size:12px;display:flex;flex-direction:column;gap:4px}
+    input,select,textarea{padding:7px;border:1px solid #cbd5e1;border-radius:7px;background:white}
+    textarea{width:100%;min-height:160px;background:#0b1020;color:#e2e8f0}
+    .status-pill{font-size:11px;padding:2px 8px;border-radius:999px;border:1px solid transparent}
+    .recalc-flash{animation:recalcPulse .6s ease}
+    @keyframes recalcPulse{
+      0%{transform:scale(1);box-shadow:0 0 0 0 rgba(37,99,235,.35)}
+      35%{transform:scale(1.06);box-shadow:0 0 0 10px rgba(37,99,235,0)}
+      100%{transform:scale(1);box-shadow:0 0 0 0 rgba(37,99,235,0)}
+    }
+    .complete{background:#dcfce7;color:#166534;border-color:#86efac}.incomplete{background:#ffedd5;color:#9a3412;border-color:#fdba74}
+    .field-row{display:flex;gap:6px;align-items:center}.field-row>input{flex:1}
+    .code-desc{flex:1;min-width:0;font-size:12px;color:#475569;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .modal-overlay{position:fixed;inset:0;background:rgba(2,6,23,.45);display:none;align-items:center;justify-content:center;padding:20px;z-index:999}
+    .modal{width:min(760px,95vw);max-height:80vh;overflow:auto;background:white;border-radius:12px;padding:14px;box-shadow:0 16px 40px rgba(0,0,0,.28)}
+    .list{display:flex;flex-direction:column;gap:6px;margin-top:8px}
+    .list button{width:100%;text-align:left;background:#f8fafc;color:#0f172a;border:1px solid #cbd5e1}
+.recalc-indicator{font-size:12px;font-weight:600;padding:6px 10px;border-radius:999px;border:1px solid transparent}
+.recalc-needed{background:#fee2e2;color:#991b1b;border-color:#fecaca}
+.recalc-ok{background:#dcfce7;color:#166534;border-color:#86efac}
+  
+
+/* --- Επιλογή γραμμογράφησης (e-ΕΦΚΑ 162 / ΤΕΚΑ 148) ------------------- */
+.fund-pick{flex-direction:row;align-items:center;gap:6px;font-weight:700;
+  color:#334155;background:#eef2ff;border:1px solid #cbd5e1;border-radius:8px;
+  padding:3px 8px 3px 10px}
+.fund-pick select{border-color:#cbd5e1;font-weight:700}
+body[data-apd-fund="teka"] .fund-pick{background:#fef3c7;border-color:#f59e0b;
+  color:#92400e}
+body[data-apd-fund="teka"] .fund-pick select{border-color:#f59e0b;color:#92400e}
+
+/* --- ΠΡΟΒΟΛΗ ΜΟΝΟ (?readonly=1, ενσωμάτωση στη μισθοδοσία) ------------
+   Το αρχείο είναι παράγωγο των events — δεν συντάσσεται εδώ. Κρύβουμε ό,τι
+   μεταβάλλει: toolbar, ανάγνωση αρχείου, προσθήκη/αφαίρεση τμημάτων, lookup.
+   Μένουν ενεργά ΜΟΝΟ τα fold toggles (δεν αλλάζουν δεδομένα). */
+body.apd-readonly .top-toolbar,
+body.apd-readonly #parseCard,
+body.apd-readonly .remove-btn,
+body.apd-readonly .child-actions,
+body.apd-readonly .ellipsis-btn,
+body.apd-readonly .status-pill{display:none !important}
+body.apd-readonly .wrap{margin-top:12px}
+body.apd-readonly input,
+body.apd-readonly select,
+body.apd-readonly textarea{background:#f8fafc;color:#1f2937;cursor:default}
+body.apd-readonly #records input,
+body.apd-readonly #records select{pointer-events:none}
+body.apd-readonly select:disabled{opacity:1;-webkit-text-fill-color:#1f2937}
+body.apd-readonly .apd-empty{padding:24px;text-align:center;color:#64748b;
+  font-size:13px}
+
+/* --- Ένδειξη φόρτωσης (boot overlay) ---------------------------------
+   Ο viewer φορτώνει ~830KB scripts (μητρώα ΟΣΥΚ)· χωρίς ένδειξη το modal
+   «Ανάλυση αρχείου» έδειχνε λευκό. Το σβήνει το bridge.js. */
+.apd-boot{position:fixed;inset:0;z-index:9999;display:flex;align-items:center;
+  justify-content:center;gap:10px;background:#fff;color:#64748b;font-size:14px}
+.apd-boot-spin{width:16px;height:16px;border:2px solid #cbd5e1;
+  border-top-color:#2563eb;border-radius:50%;animation:apd-spin .8s linear infinite}
+@keyframes apd-spin{to{transform:rotate(360deg)}}

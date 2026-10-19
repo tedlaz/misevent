@@ -1,0 +1,614 @@
+{
+  "schema": "misevent.parameters",
+  "version": 1,
+  "families": {
+    "minimum_wage": {
+      "entries": [
+        {
+          "valid_from": "2024-04-01",
+          "repealed": false,
+          "values": {
+            "monthly": 830.0,
+            "daily": 37.07
+          }
+        },
+        {
+          "valid_from": "2025-04-01",
+          "repealed": false,
+          "values": {
+            "monthly": 880.0,
+            "daily": 39.3
+          }
+        },
+        {
+          "valid_from": "2026-04-01",
+          "repealed": false,
+          "values": {
+            "monthly": 920.0,
+            "daily": 41.09
+          }
+        }
+      ]
+    },
+    "efka": {
+      "entries": [
+        {
+          "valid_from": "2025-01-01",
+          "repealed": false,
+          "values": {
+            "monthly_cap": 7572.62
+          }
+        }
+      ]
+    },
+    "tax": {
+      "entries": [
+        {
+          "valid_from": "2025-01-01",
+          "repealed": false,
+          "model": "standard",
+          "brackets": [
+            {
+              "up_to": 10000,
+              "rate": 0.09
+            },
+            {
+              "up_to": 20000,
+              "rate": 0.22
+            },
+            {
+              "up_to": 30000,
+              "rate": 0.28
+            },
+            {
+              "up_to": 40000,
+              "rate": 0.36
+            },
+            {
+              "up_to": null,
+              "rate": 0.44
+            }
+          ],
+          "reductions": [
+            777.0,
+            900.0,
+            1120.0,
+            1340.0,
+            1580.0
+          ],
+          "extra_child_reduction": 220.0,
+          "phaseout_threshold": 12000.0,
+          "phaseout_per_1000": 20.0,
+          "model_params": {}
+        },
+        {
+          "valid_from": "2026-01-01",
+          "repealed": false,
+          "model": "youth2026",
+          "brackets": [
+            {
+              "up_to": 10000,
+              "rate": 0.09
+            },
+            {
+              "up_to": 20000,
+              "rate": 0.2
+            },
+            {
+              "up_to": 30000,
+              "rate": 0.26
+            },
+            {
+              "up_to": 40000,
+              "rate": 0.34
+            },
+            {
+              "up_to": 60000,
+              "rate": 0.39
+            },
+            {
+              "up_to": null,
+              "rate": 0.44
+            }
+          ],
+          "reductions": [
+            777.0,
+            900.0,
+            1120.0,
+            1340.0,
+            1580.0,
+            1780.0
+          ],
+          "extra_child_reduction": 220.0,
+          "phaseout_threshold": 12000.0,
+          "phaseout_per_1000": 20.0,
+          "model_params": {
+            "band1_child_rates": [
+              0.09,
+              0.09,
+              0.09,
+              0.09,
+              0.0
+            ],
+            "band2_child_rates": [
+              0.2,
+              0.18,
+              0.16,
+              0.09,
+              0.0
+            ],
+            "band3_child_rates": [
+              0.26,
+              0.24,
+              0.22,
+              0.2,
+              0.18
+            ],
+            "band3_extra_child_step": 0.02,
+            "band1_index": 0,
+            "band2_index": 1,
+            "band3_index": 2,
+            "youth_zero_max_age": 25,
+            "youth_low_max_age": 30,
+            "youth_low_rate": 0.09
+          }
+        }
+      ]
+    },
+    "sick_leave": {
+      "entries": [
+        {
+          "valid_from": "2024-01-01",
+          "repealed": false,
+          "values": {
+            "half_wage_days": 3,
+            "limit_under_year": 13,
+            "limit_over_year": 26
+          }
+        }
+      ]
+    },
+    "allowance": {
+      "entries": [
+        {
+          "valid_from": "2024-01-01",
+          "repealed": false,
+          "values": {
+            "monthly_triennium_pct": 0.1,
+            "monthly_max_triennia": 3,
+            "daily_triennium_pct": 0.05,
+            "daily_max_triennia": 6,
+            "marriage_pct": 0.1
+          }
+        }
+      ]
+    },
+    "severance": {
+      "entries": [
+        {
+          "valid_from": "2022-01-01",
+          "repealed": false,
+          "months": [
+            [
+              1,
+              2
+            ],
+            [
+              4,
+              3
+            ],
+            [
+              6,
+              4
+            ],
+            [
+              8,
+              5
+            ],
+            [
+              10,
+              6
+            ],
+            [
+              11,
+              7
+            ],
+            [
+              12,
+              8
+            ],
+            [
+              13,
+              9
+            ],
+            [
+              14,
+              10
+            ],
+            [
+              15,
+              11
+            ],
+            [
+              16,
+              12
+            ]
+          ],
+          "gift_factor": 1.1666666666666667,
+          "tax_brackets": [
+            {
+              "up_to": 60000.0,
+              "rate": 0.0
+            },
+            {
+              "up_to": 100000.0,
+              "rate": 0.1
+            },
+            {
+              "up_to": 150000.0,
+              "rate": 0.2
+            },
+            {
+              "up_to": null,
+              "rate": 0.3
+            }
+          ]
+        }
+      ]
+    },
+    "work_hours": {
+      "entries": [
+        {
+          "valid_from": "2024-01-01",
+          "repealed": false,
+          "values": {
+            "night_start": 22,
+            "night_end": 6,
+            "night_premium": 0.25,
+            "holiday_premium": 0.75,
+            "extra_premium": 0.12,
+            "overwork_premium": 0.2,
+            "overtime_premium": 0.4,
+            "illegal_premium": 0.8,
+            "weekly_legal_5": 45,
+            "weekly_legal_6": 48,
+            "daily_legal_5": 9,
+            "daily_legal_6": 8,
+            "daily_overwork_start": 8,
+            "overtime_day_cap": 3,
+            "overtime_year_cap": 150
+          }
+        }
+      ]
+    }
+  },
+  "obligation_types": [
+    {
+      "code": "ATTENDANCE_APPROVAL",
+      "due": [
+        "eom",
+        0
+      ],
+      "extension": {
+        "allowed": false
+      }
+    },
+    {
+      "code": "MONTHLY_PAYROLL",
+      "due": [
+        "eom",
+        0
+      ],
+      "extension": {
+        "allowed": false
+      }
+    },
+    {
+      "code": "SALARY_PAYMENT",
+      "due": [
+        "eom",
+        0
+      ],
+      "extension": {
+        "allowed": false
+      }
+    },
+    {
+      "code": "APD_SUBMISSION",
+      "due": [
+        "eom",
+        1
+      ],
+      "extension": {
+        "allowed": false
+      }
+    },
+    {
+      "code": "EFKA_PAYMENT",
+      "due": [
+        "eom",
+        1
+      ],
+      "extension": {
+        "allowed": false
+      }
+    },
+    {
+      "code": "APD_TEKA_SUBMISSION",
+      "due": [
+        "eom",
+        1
+      ],
+      "extension": {
+        "allowed": false
+      }
+    },
+    {
+      "code": "TEKA_PAYMENT",
+      "due": [
+        "eom",
+        1
+      ],
+      "extension": {
+        "allowed": false
+      }
+    },
+    {
+      "code": "FMY_SUBMISSION",
+      "due": [
+        "eom",
+        2
+      ],
+      "extension": {
+        "allowed": false
+      }
+    },
+    {
+      "code": "FMY_PAYMENT",
+      "due": [
+        "eom",
+        2
+      ],
+      "extension": {
+        "allowed": false
+      }
+    },
+    {
+      "code": "EASTER_GIFT",
+      "due": [
+        "easter_minus",
+        4
+      ],
+      "extension": {
+        "allowed": false
+      }
+    },
+    {
+      "code": "CHRISTMAS_GIFT",
+      "due": [
+        "fixed",
+        12,
+        21
+      ],
+      "extension": {
+        "allowed": false
+      }
+    },
+    {
+      "code": "LEAVE_ALLOWANCE",
+      "due": [
+        "eom",
+        0
+      ],
+      "extension": {
+        "allowed": true,
+        "max_days": 365,
+        "within_period_year": true
+      }
+    },
+    {
+      "code": "WAGE_ADJUSTMENT",
+      "due": [
+        "eom",
+        0
+      ],
+      "extension": {
+        "allowed": false
+      }
+    },
+    {
+      "code": "EASTER_GIFT_PAYMENT",
+      "due": [
+        "as_source"
+      ],
+      "extension": {
+        "allowed": false
+      }
+    },
+    {
+      "code": "CHRISTMAS_GIFT_PAYMENT",
+      "due": [
+        "as_source"
+      ],
+      "extension": {
+        "allowed": false
+      }
+    },
+    {
+      "code": "LEAVE_ALLOWANCE_PAYMENT",
+      "due": [
+        "as_source"
+      ],
+      "extension": {
+        "allowed": false
+      }
+    }
+  ],
+  "kpks": [
+    {
+      "carrier": "efka",
+      "kpk": "0101",
+      "name": "ΙΚΑ-ΤΕΑΜ ΜΙΚΤΑ",
+      "tier": "main_auxiliary",
+      "rates": [
+        {
+          "valid_from": "2025-01-01",
+          "employee": 0.1337,
+          "employer": 0.2179,
+          "components": [
+            {
+              "branch": "main_pension",
+              "employee": 0.0667,
+              "employer": 0.1333
+            },
+            {
+              "branch": "healthcare",
+              "employee": 0.0255,
+              "employer": 0.0455
+            },
+            {
+              "branch": "auxiliary",
+              "employee": 0.03,
+              "employer": 0.03
+            },
+            {
+              "branch": "dypa",
+              "employee": 0.0115,
+              "employer": 0.0091
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "carrier": "efka",
+      "kpk": "0103",
+      "name": "ΙΚΑ ΜΙΚΤΑ (κύρια)",
+      "tier": "main",
+      "rates": [
+        {
+          "valid_from": "2025-01-01",
+          "employee": 0.1037,
+          "employer": 0.1879,
+          "components": [
+            {
+              "branch": "main_pension",
+              "employee": 0.0667,
+              "employer": 0.1333
+            },
+            {
+              "branch": "healthcare",
+              "employee": 0.0255,
+              "employer": 0.0455
+            },
+            {
+              "branch": "dypa",
+              "employee": 0.0115,
+              "employer": 0.0091
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "carrier": "efka",
+      "kpk": "0105",
+      "name": "ΙΚΑ-ΤΕΑΜ ΒΑΡΕΑ",
+      "tier": "main_auxiliary",
+      "rates": [
+        {
+          "valid_from": "2025-01-01",
+          "employee": 0.1682,
+          "employer": 0.2394,
+          "components": [
+            {
+              "branch": "main_pension",
+              "employee": 0.0667,
+              "employer": 0.1333
+            },
+            {
+              "branch": "healthcare",
+              "employee": 0.0255,
+              "employer": 0.0455
+            },
+            {
+              "branch": "auxiliary",
+              "employee": 0.03,
+              "employer": 0.03
+            },
+            {
+              "branch": "dypa",
+              "employee": 0.0115,
+              "employer": 0.0091
+            },
+            {
+              "branch": "heavy",
+              "employee": 0.0345,
+              "employer": 0.0215
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "carrier": "teka",
+      "kpk": "4169",
+      "name": "ΤΕΚΑ Επικουρική",
+      "tier": "auxiliary",
+      "rates": [
+        {
+          "valid_from": "2022-06-01",
+          "employee": 0.03,
+          "employer": 0.03,
+          "components": [
+            {
+              "branch": "auxiliary",
+              "employee": 0.03,
+              "employer": 0.03
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "carrier": "efka",
+      "kpk": "0024",
+      "name": "Πρόνοια νέων",
+      "tier": "welfare",
+      "rates": [
+        {
+          "valid_from": "2013-12-01",
+          "employee": 0.04,
+          "employer": 0.0,
+          "components": [
+            {
+              "branch": "welfare",
+              "employee": 0.04,
+              "employer": 0.0
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "carrier": "efka",
+      "kpk": "0026",
+      "name": "Πρόνοια παλαιών",
+      "tier": "welfare",
+      "rates": [
+        {
+          "valid_from": "2013-12-01",
+          "employee": 0.04,
+          "employer": 0.04,
+          "components": [
+            {
+              "branch": "welfare",
+              "employee": 0.04,
+              "employer": 0.04
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

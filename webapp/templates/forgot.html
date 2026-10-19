@@ -1,0 +1,22 @@
+{% extends "auth_base.html" %}
+{% block title %}Επαναφορά κωδικού{% endblock %}
+{% block heading %}Επαναφορά κωδικού{% endblock %}
+{% block subheading %}αίτημα προς τον διαχειριστή{% endblock %}
+
+{% block content %}
+{% if done %}
+  <p class="muted">{{ done }}</p>
+  <div class="btnrow"><a class="ghost" href="{{ url_for('auth.login') }}">Πίσω στη σύνδεση</a></div>
+{% else %}
+  <form class="frm" method="post" action="{{ url_for('auth.forgot') }}">
+    <label>Email λογαριασμού
+      <input name="email" type="email" required autofocus></label>
+    <p class="muted" style="font-size:12.5px">Ο διαχειριστής θα δει το αίτημα και
+      θα σας στείλει προσωπικό σύνδεσμο για να ορίσετε νέο κωδικό.</p>
+    <div class="btnrow">
+      <button class="run" type="submit">Αποστολή αιτήματος</button>
+      <a class="ghost" href="{{ url_for('auth.login') }}">Άκυρο</a>
+    </div>
+  </form>
+{% endif %}
+{% endblock %}

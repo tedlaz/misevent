@@ -1,0 +1,51 @@
+{% set f = form or {} %}
+<div class="modal-backdrop">
+  <div class="modal">
+    <form hx-post="{{ url_for('leaves.create_leave', employment_id=e.employment_id, year=year) }}"
+          hx-target="#leave-planner-panel" hx-swap="outerHTML">
+      <div class="mhead">
+        <h3>🏖️ Νέα άδεια — {{ e.full_name }}</h3>
+        <span class="muted" style="font-size:12.5px">Η ημέρα επιλέχθηκε από το ετήσιο πλάνο</span>
+      </div>
+      <div class="mbody">
+        <div class="frm cols">
+          {% set sel = f.get('leave_type', 'ANNUAL') %}
+          {% set values = {'ANNUAL':'kanoniki_adeia','SICK':'astheneia','UNPAID':'adeia_aneu_apodoxon','MATERNITY':'mitrotita','PARENTAL':'goniki'} %}
+          <label>Τύπος
+            <select name="leave_type">
+              {% for kind in ['ANNUAL', 'SICK', 'UNPAID', 'MATERNITY', 'PARENTAL'] %}
+                <option value="{{ kind }}" {{ 'selected' if sel == kind }}>{{ leave_labels[values[kind]] }}</option>
+              {% endfor %}
+            </select>
+          </label>
+          <label>Σημειώσεις<input name="notes" value="{{ f.get('notes', '') }}"></label>
+          <div class="leave-range wide" data-leave-range>
+            <span class="leave-range-label">Περίοδος άδειας</span>
+            <input type="hidden" name="date_from" value="{{ f.get('date_from', selected_date.isoformat()) }}">
+            <input type="hidden" name="date_to" value="{{ f.get('date_to', selected_date.isoformat()) }}">
+            <button type="button" class="leave-range-trigger" aria-haspopup="dialog" aria-expanded="false">
+              <span class="leave-range-value"></span><span class="leave-range-icon" aria-hidden="true">📅</span>
+            </button>
+            <div class="leave-range-popover" role="dialog" aria-label="Επιλογή περιόδου άδειας" hidden>
+              <div class="leave-range-head">
+                <button type="button" data-range-prev aria-label="Προηγούμενος μήνας">‹</button>
+                <strong data-range-month></strong>
+                <button type="button" data-range-next aria-label="Επόμενος μήνας">›</button>
+              </div>
+              <div class="leave-range-weekdays" aria-hidden="true">
+                <span>Δε</span><span>Τρ</span><span>Τε</span><span>Πέ</span><span>Πα</span><span>Σά</span><span>Κυ</span>
+              </div>
+              <div class="leave-range-days" data-range-days></div>
+              <div class="leave-range-hint" data-range-hint></div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="mfoot">
+        <button type="button" class="ghost" hx-get="{{ url_for('leaves.modal_close') }}"
+                hx-target="#modal-host" hx-swap="innerHTML">Άκυρο</button>
+        <button class="run" type="submit">Δημιουργία</button>
+      </div>
+    </form>
+  </div>
+</div>

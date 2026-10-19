@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="el">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>{% block title %}misevent{% endblock %}</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="icon" href="{{ url_for('static', filename='app.ico') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='app.css') }}">
+<script src="{{ url_for('static', filename='htmx.min.js') }}" defer></script>
+{# Ελληνική μορφή ΗΗ/ΜΜ/ΕΕΕΕ σε ΚΑΘΕ πεδίο ημερομηνίας — ο browser θα
+   μορφοποιούσε το native input με τη ΔΙΚΗ ΤΟΥ γλώσσα (mm/dd/yyyy) #}
+<script src="{{ url_for('static', filename='date-gr.js') }}" defer></script>
+{# Θυμάται ποιες ομάδες του μενού είναι ανοιχτές, μεταξύ σελίδων #}
+<script src="{{ url_for('static', filename='nav-fold.js') }}" defer></script>
+<script src="{{ url_for('static', filename='leave-range.js') }}" defer></script>
+<script src="{{ url_for('static', filename='third-country-tab.js') }}" defer></script>
+<script src="{{ url_for('static', filename='employment-relationship.js') }}" defer></script>
+<script src="{{ url_for('static', filename='hire-minimum.js') }}" defer></script>
+<script src="{{ url_for('static', filename='oaed-tab.js') }}" defer></script>
+{# Αποθήκευση της ανάλυσης ενός εργαζομένου σε PNG (modal «Ανάλυση») #}
+<script src="{{ url_for('static', filename='slip-png.js') }}" defer></script>
+{% block head %}{% endblock %}
+</head>
+<body>
+<div class="shell">
+
+  <nav class="side">
+    <div class="brand">misevent</div>
+    {# ΕΝΕΡΓΗ ΕΤΑΙΡΕΙΑ: ο επιλογέας ορίζει τι δείχνουν ΟΛΕΣ οι σελίδες.
+       Με μία μόνο εταιρεία μένει απλό κείμενο (τίποτα να διαλέξεις). #}
+    {% if my_companies|length > 1 %}
+      <form class="cosel" method="post" id="cosel-form">
+        <select name="cosel" onchange="
+            this.form.action = this.value; this.form.submit();">
+          {% for c in my_companies %}
+            <option value="{{ url_for('companies.select', company_id=c.company_id) }}"
+                    {% if c.company_id == company_id %}selected{% endif %}>
+              {{ c.name }}</option>
+          {% endfor %}
+        </select>
+      </form>
+    {% else %}
+      <span class="co">{{ company_name or '— δεν έχει καταχωρηθεί εταιρεία —' }}</span>
+    {% endif %}
+    {# Η αρχική: εκτός ομάδων, πάντα ορατή. #}
+    <a class="nl {{ 'on' if request.endpoint == NAV_HOME[0] else '' }}"
+       href="{{ url_for(NAV_HOME[0]) }}">
+      <span class="ic">{{ NAV_HOME[1] }}</span><span>{{ NAV_HOME[2] }}</span>
+    </a>
+    <div class="navsep"></div>
+    {# ΠΤΥΣΣΟΜΕΝΕΣ ΟΜΑΔΕΣ με native <details> — μηδέν JS για το ίδιο το
+       άνοιγμα/κλείσιμο (ίδιο μοτίβο με τα CSS-only tabs). Ο server ανοίγει
+       την ομάδα της ΤΡΕΧΟΥΣΑΣ σελίδας· το `nav-fold.js` απλώς θυμάται τις
+       υπόλοιπες επιλογές του χρήστη μεταξύ σελίδων. #}
+    {% for g in nav %}
+      <details class="navgrp" data-nav-group="{{ g.key }}"
+               {{ 'open' if g.open }}>
+        <summary class="navgrp-h">
+          <span class="ic">{{ g.icon }}</span><span>{{ g.label }}</span>
+          <span class="chev" aria-hidden="true">›</span>
+        </summary>
+        {% for it in g["items"] %}
+          <a class="nl sub {{ 'on' if it.on else '' }}"
+             href="{{ url_for(it.endpoint) }}">
+            <span class="ic">{{ it.icon }}</span><span>{{ it.label }}</span>
+          </a>
+        {% endfor %}
+      </details>
+    {% endfor %}
+  </nav>
+
+  <div>
+    <header>
+      <h1>{% block heading %}{% endblock %}</h1>
+      <span class="sub">{% block subheading %}{% endblock %}</span>
+      <span class="grow"></span>
+      {# Ημερομηνία αναφοράς: το «σήμερα» του UI — για δοκιμές όλου του κύκλου #}
+      <form class="clock {{ 'sim' if time_travel else '' }}"
+            action="{{ url_for('clock.set_ref') }}" method="post">
+        <input type="hidden" name="next" value="{{ request.full_path }}">
+        <label class="ref" title="Το «σήμερα» του συστήματος — άλλαξέ το για να
+δοκιμάσεις μελλοντικές ή παρελθοντικές περιόδους">
+          {# ⚠️ ΚΑΝΕΝΑ 📅 ΕΔΩ: το `date-gr.js` προσθέτει ΤΟ ΔΙΚΟ ΤΟΥ κουμπί
+             ημερολογίου δίπλα σε κάθε πεδίο ημερομηνίας, οπότε ένα δεύτερο,
+             ίδιο εικονίδιο θα ήταν διακοσμητικό και θα έμοιαζε χαλασμένο.
+             Το ρολόι μένει: σημαίνει «η ημερομηνία ΔΕΝ είναι η σημερινή». #}
+          {% if time_travel %}🕰️{% endif %}
+          <input type="date" name="ref" value="{{ today.isoformat() }}">
+        </label>
+        <button class="ghost" type="submit">Εφαρμογή</button>
+        {% if time_travel %}
+          <button class="ghost" type="submit"
+                  formaction="{{ url_for('clock.reset') }}">Σήμερα
+            ({{ real_today|date_gr }})</button>
+        {% endif %}
+      </form>
+      {% block headeractions %}{% endblock %}
+      {% if current_user %}
+        <form class="userbox" method="post" action="{{ url_for('auth.logout') }}">
+          <a class="who" href="{{ url_for('auth.password') }}"
+             title="Αλλαγή κωδικού">{{ current_user.email }}</a>
+          <button class="ghost" type="submit">Έξοδος</button>
+        </form>
+      {% endif %}
+    </header>
+    <main>
+      {% block content %}{% endblock %}
+    </main>
+  </div>
+
+</div>
+
+<div id="toast"></div>
+
+<script>
+// Ο μόνος χειρόγραφος JS: δείχνει τα toasts που στέλνει ο server
+// με header HX-Trigger (βλ. webapp/helpers.py).
+let toastTimer;
+function toast(msg, err){
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = 'show' + (err ? ' err' : '');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { t.className = ''; }, 4600);
+}
+document.body.addEventListener('flash', e => toast(e.detail.msg, e.detail.err));
+</script>
+{% block scripts %}{% endblock %}
+</body>
+</html>

@@ -1,0 +1,57 @@
+{# Πίνακας εργαζομένων. Στήλη ΚΑΤΑΣΤΑΣΗ = badges:
+   (α) πλήθος απασχολήσεων -> ανοίγει το modal πληροφοριών (περίοδοι
+       απασχόλησης, άδεια, ασθένεια — με links στις καρτέλες),
+   (β) αν ενεργός: «ενεργή» -> καρτέλα της ενεργής απασχόλησης,
+       αλλιώς: «πρόσληψη»/«επαναπρόσληψη» -> modal (επανα)πρόσληψης. #}
+<div id="persons-table">
+{% if rows %}
+  <table class="tbl">
+    <thead><tr>
+      <th>Ονοματεπώνυμο</th><th>Πατρώνυμο / Μητρώνυμο</th>
+      <th>Κατάσταση</th><th>Ειδικότητα</th>
+      <th style="text-align:right">Ενέργειες</th>
+    </tr></thead>
+    <tbody>
+      {% for r in rows %}
+        <tr>
+          <td>
+            <b>{{ r.person.full_name }}</b>
+            <div class="muted mono" style="font-size:11.5px">ΑΦΜ {{ r.person.afm }}</div>
+          </td>
+          <td class="muted">{{ r.person.father_name }} / {{ r.person.mother_name }}</td>
+          <td class="btnrow" style="gap:6px">
+            <button type="button" class="tag lnk-tag"
+                    hx-get="{{ url_for('persons.info_modal', person_id=r.person.person_id) }}"
+                    hx-target="#modal-host" hx-swap="innerHTML"
+                    title="Απασχολήσεις & στοιχεία">{{ r.count }} απασχ.</button>
+            {% if r.active_emp %}
+              {# «ενεργή» ΜΟΝΟ με ολοκληρωμένη πρόσληψη (αναγγελία Ε3) —
+                 αλλιώς η (επανα)πρόσληψη είναι ΕΚΚΡΕΜΗΣ. #}
+              <a class="tag {{ EMP_LIFECYCLE[r.active_emp.lifecycle][1] }} lnk-tag"
+                 href="{{ url_for('employments.detail', employment_id=r.active_emp.employment_id) }}"
+                 title="{{ 'Εκκρεμεί η αναγγελία πρόσληψης (Ε3)'
+                           if r.active_emp.lifecycle == 'pending'
+                           else 'Καρτέλα ενεργής απασχόλησης' }}">
+                {{ EMP_LIFECYCLE[r.active_emp.lifecycle][0]|lower }} →</a>
+            {% else %}
+              <button type="button" class="tag warn lnk-tag"
+                      hx-get="{{ url_for('persons.employ_modal', person_id=r.person.person_id) }}"
+                      hx-target="#modal-host" hx-swap="innerHTML"
+                      title="Άνοιγμα φόρμας (επανα)πρόσληψης">
+                ➕ {{ 'επαναπρόσληψη' if r.count else 'πρόσληψη' }}</button>
+            {% endif %}
+          </td>
+          <td>{{ r.specialty or '—' }}</td>
+          <td class="btnrow" style="justify-content:flex-end">
+            <button class="ghost" title="Επεξεργασία στοιχείων"
+                    hx-get="{{ url_for('persons.edit_modal', person_id=r.person.person_id, ctx='list') }}"
+                    hx-target="#modal-host" hx-swap="innerHTML">✏️</button>
+          </td>
+        </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+{% else %}
+  <div class="empty">Κανένας εργαζόμενος. Προσθέστε τον πρώτο με «Νέος εργαζόμενος».</div>
+{% endif %}
+</div>

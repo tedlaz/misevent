@@ -1,0 +1,143 @@
+{# Όλο το panel των χρηστών. Κάθε ενέργεια το ξαναδίνει ολόκληρο (hx-target
+   #users-panel), οπότε δικαιώματα, προσκλήσεις και αιτήματα μένουν πάντα
+   συγχρονισμένα μεταξύ τους. #}
+{% if link %}
+  {# ΤΟ ΩΜΟ TOKEN ΦΑΙΝΕΤΑΙ ΜΟΝΟ ΕΔΩ, ΜΙΑ ΦΟΡΑ — στο event υπάρχει μόνο το
+     hash του, ώστε το log να μη λειτουργεί ως μόνιμο κλειδί. #}
+  <div class="card">
+    <h2>{{ link_label }} <span class="norm">— δεν ξαναεμφανίζεται</span></h2>
+    <input class="mono" style="width:100%" readonly value="{{ link }}"
+           onfocus="this.select()">
+  </div>
+{% endif %}
+
+<div class="card">
+  <h2>Λογαριασμοί</h2>
+  <table class="tbl">
+    <thead><tr>
+      <th>Email</th><th>Ρόλος</th><th>Πρόσβαση</th><th>Ενέργειες</th>
+    </tr></thead>
+    <tbody>
+      {% for r in rows %}
+        {% set u = r.user %}
+        <tr>
+          <td>
+            <b>{{ u.email }}</b>
+            {% if not u.active %}<span class="tag off">ανενεργός</span>{% endif %}
+            {% if u.must_change_password %}
+              <span class="tag warn">προσωρινός κωδικός</span>{% endif %}
+            {% if r.pending_reset %}
+              <span class="tag warn">αίτημα επαναφοράς</span>{% endif %}
+          </td>
+          <td>
+            <form hx-post="{{ url_for('users.admin_flag', user_id=u.user_id) }}"
+                  hx-target="#users-panel">
+              <label class="chk" style="font-size:12.5px">
+                <input type="checkbox" name="is_admin" value="1"
+                       {% if u.is_admin %}checked{% endif %}
+                       onchange="this.form.requestSubmit()">
+                Διαχειριστής</label>
+            </form>
+          </td>
+          <td>
+            {% if u.is_admin %}
+              <span class="muted">όλες (διαχειριστής)</span>
+            {% elif u.all_companies %}
+              <span class="tag ok">όλες οι εταιρείες</span>
+            {% elif r.names %}
+              {% for n in r.names %}<span class="tag">{{ n }}</span> {% endfor %}
+            {% else %}
+              <span class="muted">καμία</span>
+            {% endif %}
+            {% if u.can_create_companies %}
+              <span class="tag">δημιουργεί δικές του</span>{% endif %}
+          </td>
+          <td class="rt">
+            <div class="btnrow">
+              <form hx-post="{{ url_for('users.reset', user_id=u.user_id) }}"
+                    hx-target="#users-panel">
+                <button class="ghost sm" type="submit">Επαναφορά κωδικού</button>
+              </form>
+              <form hx-post="{{ url_for('users.active', user_id=u.user_id) }}"
+                    hx-target="#users-panel">
+                {% if u.active %}
+                  <button class="ghost sm" type="submit">Απενεργοποίηση</button>
+                {% else %}
+                  <input type="hidden" name="active" value="1">
+                  <button class="ghost sm" type="submit">Ενεργοποίηση</button>
+                {% endif %}
+              </form>
+            </div>
+          </td>
+        </tr>
+        {% if not u.is_admin %}
+          <tr>
+            <td colspan="4">
+              {# Δικαιώματα ανά χρήστη: όλες / συγκεκριμένες / καμία, και
+                 χωριστά το δικαίωμα να δημιουργεί ΔΙΚΕΣ ΤΟΥ εταιρείες. #}
+              <form class="frm" hx-post="{{ url_for('users.access', user_id=u.user_id) }}"
+                    hx-target="#users-panel">
+                <div class="btnrow">
+                  <label class="chk"><input type="radio" name="scope" value="none"
+                    {% if not u.all_companies and not u.companies %}checked{% endif %}> Καμία</label>
+                  <label class="chk"><input type="radio" name="scope" value="all"
+                    {% if u.all_companies %}checked{% endif %}> Όλες οι εταιρείες</label>
+                  <label class="chk"><input type="radio" name="scope" value="some"
+                    {% if u.companies and not u.all_companies %}checked{% endif %}> Συγκεκριμένες:</label>
+                  {% for c in companies %}
+                    <label class="chk">
+                      <input type="checkbox" name="companies" value="{{ c.company_id }}"
+                             {% if c.company_id in u.companies %}checked{% endif %}>
+                      {{ c.name }}</label>
+                  {% endfor %}
+                  <label class="chk">
+                    <input type="checkbox" name="can_create" value="1"
+                           {% if u.can_create_companies %}checked{% endif %}>
+                    Μπορεί να δημιουργεί εταιρείες</label>
+                  <button class="ghost sm" type="submit">Αποθήκευση δικαιωμάτων</button>
+                </div>
+              </form>
+            </td>
+          </tr>
+        {% endif %}
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<div class="card">
+  <h2>Προσκλήσεις <span class="norm">— ο προσκεκλημένος ορίζει ΜΟΝΟΣ ΤΟΥ email
+    και κωδικό· τα δικαιώματα δίνονται μετά</span></h2>
+  <form class="frm" hx-post="{{ url_for('users.invite') }}" hx-target="#users-panel">
+    <div class="btnrow">
+      <input name="note" placeholder="σημείωση — σε ποιον δόθηκε (προαιρετικό)">
+      <button class="run" type="submit">Νέα πρόσκληση</button>
+    </div>
+  </form>
+  {% if invitations %}
+    <table class="tbl">
+      <thead><tr><th>Σημείωση</th><th>Κατάσταση</th><th></th></tr></thead>
+      <tbody>
+        {% for inv in invitations %}
+          <tr>
+            <td>{{ inv.note or '—' }}</td>
+            <td>
+              {% if inv.status == 'open' %}<span class="tag ok">σε ισχύ</span>
+              {% elif inv.status == 'accepted' %}<span class="tag off">χρησιμοποιήθηκε</span>
+              {% elif inv.status == 'revoked' %}<span class="tag off">ακυρώθηκε</span>
+              {% else %}<span class="tag warn">έληξε</span>{% endif %}
+            </td>
+            <td class="rt">
+              {% if inv.status == 'open' %}
+                <form hx-post="{{ url_for('users.revoke', invite_id=inv.invite_id) }}"
+                      hx-target="#users-panel">
+                  <button class="ghost sm" type="submit">Ακύρωση</button>
+                </form>
+              {% endif %}
+            </td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  {% endif %}
+</div>

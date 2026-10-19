@@ -1,0 +1,123 @@
+{# Modal επεξεργασίας στοιχείων προσώπου. Κλείνει ΜΟΝΟ με «Αποθήκευση» ή
+   «Άκυρο». Επιτυχία -> αντικαθιστά το #person-card (με κενό modal-host).
+   Σε σφάλμα η όψη ξαναγεμίζει με τα δεδομένα του χρήστη (form). #}
+{% set f = form or {} %}
+{% set current_nationality = f.get('nationality_code', p.nationality_code or '048') %}
+{% set third_country_enabled = current_nationality and current_nationality not in eu_nationality_codes %}
+<div class="modal-backdrop">
+  <div class="modal">
+    <form data-eu-nationalities="{{ eu_nationality_codes|join(',') }}"
+          hx-post="{{ url_for('persons.correct', person_id=p.person_id) }}"
+          hx-target="#persons-panel" hx-swap="outerHTML">
+      <div class="mhead">
+        <h3>Επεξεργασία στοιχείων — {{ p.full_name }}</h3>
+        <span class="muted" style="font-size:12.5px">
+          καταγράφεται ως PersonDetailsCorrected — τα παλιά events μένουν άθικτα</span>
+      </div>
+
+      <div class="mbody">
+        <input class="tabradio" type="radio" name="_tab" id="tab-general" checked>
+        <input class="tabradio" type="radio" name="_tab" id="tab-foreign"
+               data-third-country-radio {{ 'disabled' if not third_country_enabled }}>
+        <div class="tabbar">
+          <label for="tab-general">① Γενικά στοιχεία</label>
+          <label for="tab-foreign" data-third-country-label
+                 aria-disabled="{{ 'false' if third_country_enabled else 'true' }}"
+                 class="{{ 'is-disabled' if not third_country_enabled }}">② Πολίτες τρίτων χωρών</label>
+        </div>
+        <div class="tabpane tp-general">
+          <div class="frm cols">
+          <label>Επώνυμο<input name="last_name"
+            value="{{ f.get('last_name', p.last_name) }}"></label>
+          <label>Όνομα<input name="first_name"
+            value="{{ f.get('first_name', p.first_name) }}"></label>
+          <label>Πατρώνυμο<input name="father_name"
+            value="{{ f.get('father_name', p.father_name) }}"></label>
+          <label>Μητρώνυμο<input name="mother_name"
+            value="{{ f.get('mother_name', p.mother_name) }}"></label>
+          <label>ΑΦΜ<input name="afm" maxlength="9"
+            value="{{ f.get('afm', p.afm) }}"></label>
+          <label>ΑΜΚΑ<input name="amka" maxlength="11"
+            value="{{ f.get('amka', p.amka) }}"></label>
+          <label>ΑΜΑ<input name="ama" maxlength="9"
+            value="{{ f.get('ama', p.ama) }}"></label>
+          <label>Φύλο
+            <select name="sex" required>
+              {% set sex = f.get('sex', p.sex) %}
+              <option value="">— Επιλογή —</option>
+              <option value="0" {{ 'selected' if sex == '0' }}>Άνδρας</option>
+              <option value="1" {{ 'selected' if sex == '1' }}>Γυναίκα</option>
+            </select></label>
+          <label>Οικογ. Κάτ.
+            {% set marital = f.get('marital_status', p.marital_status) %}
+            <select name="marital_status" required>
+              <option value="0" {{ 'selected' if marital == '0' }}>0 — Άγαμος</option>
+              <option value="1" {{ 'selected' if marital == '1' }}>1 — Έγγαμος</option>
+              <option value="2" {{ 'selected' if marital == '2' }}>2 — Διαζευγμένος</option>
+              <option value="3" {{ 'selected' if marital == '3' }}>3 — Χήρος</option>
+            </select></label>
+          {% set education = f.get('education_level', p.education_level) %}
+          <label>Επίπεδο Μόρφωσης
+            <select name="education_level" required>
+              <option value="">— Επιλογή —</option>
+              {% for row in education_levels %}
+                <option value="{{ row.code }}"
+                  {{ 'selected' if education == row.code }}>
+                  {{ row.code }} — {{ row.description }}</option>
+              {% endfor %}
+            </select></label>
+          {% set nationality = current_nationality %}
+          <label>Υπηκοότητα
+            <select name="nationality_code" data-nationality-select required>
+              <option value="">— Επιλογή —</option>
+              {% for row in nationalities %}
+                <option value="{{ row.code }}"
+                  {{ 'selected' if nationality == row.code }}>
+                  {{ row.code }} — {{ row.description }}</option>
+              {% endfor %}
+            </select></label>
+          {% set id_type = f.get('identity_type', p.identity_type) %}
+          <label>Τύπος ταυτότητας
+            <select name="identity_type" required>
+              <option value="">— Επιλογή —</option>
+              {% for row in identity_types %}
+                <option value="{{ row.code }}"
+                  {{ 'selected' if id_type == row.code }}>
+                  {{ row.code }} — {{ row.description }}</option>
+              {% endfor %}
+            </select></label>
+          <label>Αριθμός ταυτότητας<input name="identity_number" maxlength="20"
+            value="{{ f.get('identity_number', p.identity_number) }}" required></label>
+          <label>Εκδούσα αρχή<input name="identity_issuer" maxlength="50"
+            value="{{ f.get('identity_issuer', p.identity_issuer) }}"></label>
+          <label>Ημερομηνία έκδοσης
+            <input type="date" name="identity_issue_date"
+            value="{{ f.get('identity_issue_date') or
+                       (p.identity_issue_date.isoformat() if p.identity_issue_date else '') }}"></label>
+          <label>Ημερομηνία λήξης ισχύος
+            <input type="date" name="identity_expiry_date"
+            value="{{ f.get('identity_expiry_date') or
+                       (p.identity_expiry_date.isoformat() if p.identity_expiry_date else '') }}"></label>
+          <label>Τέκνα<input type="number" name="children" min="0"
+            value="{{ f.get('children', p.children) }}"></label>
+          <label>Email<input type="email" name="email" placeholder="name@example.com"
+            value="{{ f.get('email', p.email) }}"></label>
+          <label>Ημ. γέννησης<input value="{{ p.birth_date|date_gr }}" disabled></label>
+          </div>
+        </div>
+        <div class="tabpane tp-foreign">
+          {% set fv = f %}
+          {% set person = p %}
+          {% include "partials/_third_country_tab.html" %}
+        </div>
+      </div>
+
+      <div class="mfoot">
+        <button type="button" class="ghost"
+                hx-get="{{ url_for('persons.modal_close') }}"
+                hx-target="#modal-host" hx-swap="innerHTML">Άκυρο</button>
+        <button class="run" type="submit">Αποθήκευση στοιχείων</button>
+      </div>
+    </form>
+  </div>
+</div>

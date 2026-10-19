@@ -1,0 +1,145 @@
+{# Προεπισκόπηση αποχώρησης: ΤΙ θα υπολογιστεί, χωρίς κανένα event.
+   ΜΙΑ πηγή αλήθειας: svc.termination_preview (ίδιοι κανόνες με την
+   εκκαθάριση της `terminate`). Το fragment ξαναφορτώνεται με htmx όποτε
+   αλλάξει η ημερομηνία ή η αιτία. #}
+<div id="term-preview">
+  {% if preview_error %}
+    <div class="warnbox">⚠️ {{ preview_error }}</div>
+  {% elif preview %}
+    <div class="muted" style="font-size:12.5px;margin-bottom:6px">
+      Θα υπολογιστούν ΑΥΤΟΜΑΤΑ με την επιβεβαίωση
+      (λήξη {{ preview.termination_date|date_gr }}):</div>
+
+    <table class="tbl">
+      <thead><tr>
+        <th>Τι υπολογίζεται</th>
+        <th class="num">Μικτά</th>
+        <th class="num">Εισφορές</th>
+        <th class="num">ΦΜΥ</th>
+        <th class="num">Καθαρά</th>
+      </tr></thead>
+      <tbody>
+        {# Μισθοδοσία του μήνα αποχώρησης — ΜΟΝΟ γι' αυτόν τον εργαζόμενο #}
+        {% if preview.payroll %}
+          {% set p = preview.payroll.result %}
+          <tr>
+            <td>Μισθοδοσία {{ months_gen[preview.payroll_month] }}
+              {{ preview.payroll_year }}
+              <span class="muted">— {{ preview.payroll.efka_days }} ημέρες ΕΦΚΑ,
+                μόνο γι' αυτόν τον εργαζόμενο</span></td>
+            <td class="num">{{ p.gross|money }}€</td>
+            <td class="num">{{ p.efka_employee|money }}€</td>
+            <td class="num">{{ p.fmy|money }}€</td>
+            <td class="num"><b>{{ p.net|money }}€</b></td>
+          </tr>
+        {% elif preview.payroll_done %}
+          <tr class="muted"><td colspan="5">Μισθοδοσία
+            {{ months_gen[preview.payroll_month] }} {{ preview.payroll_year }} —
+            έχει ήδη υπολογιστεί</td></tr>
+        {% else %}
+          <tr class="muted"><td colspan="5">Μισθοδοσία
+            {{ months_gen[preview.payroll_month] }} {{ preview.payroll_year }} —
+            <b>ΔΕΝ θα υπολογιστεί τώρα</b>: {{ preview.payroll_blocked }}</td></tr>
+        {% endif %}
+
+        {% if preview.allowance %}
+          <tr>
+            <td>Επίδομα Αδείας {{ preview.year }} <span class="muted">— pro-rata
+              έως τη λήξη</span></td>
+            <td class="num">{{ preview.allowance.gross|money }}€</td>
+            <td class="num">{{ preview.allowance.efka_employee|money }}€</td>
+            <td class="num">{{ preview.allowance.fmy|money }}€</td>
+            <td class="num"><b>{{ preview.allowance.net|money }}€</b></td>
+          </tr>
+        {% elif preview.allowance_done %}
+          <tr class="muted"><td colspan="5">Επίδομα Αδείας {{ preview.year }} —
+            έχει ήδη υπολογιστεί, δεν θα ξαναϋπολογιστεί</td></tr>
+        {% else %}
+          <tr class="muted"><td colspan="5">Επίδομα Αδείας {{ preview.year }} —
+            δεν αναλογεί ποσό</td></tr>
+        {% endif %}
+
+        {# Αποζημίωση μη ληφθείσας αδείας — ΜΟΝΟ ΦΜΥ, καμία ασφαλιστική #}
+        {% if preview.leave_comp %}
+          <tr>
+            <td>Αποζημίωση μη ληφθείσας Αδείας
+              <span class="muted">— υπόλοιπο
+                {{ preview.leave_comp.leave_days }} ημέρες → (×1,2)
+                {{ preview.leave_comp.comp_days|money }} ×
+                {{ preview.leave_comp.daily|money }}€</span></td>
+            <td class="num">{{ preview.leave_comp.gross|money }}€</td>
+            <td class="num">—</td>
+            <td class="num">{{ preview.leave_comp.fmy|money }}€</td>
+            <td class="num"><b>{{ preview.leave_comp.net|money }}€</b></td>
+          </tr>
+        {% elif preview.leave_comp_done %}
+          <tr class="muted"><td colspan="5">Αποζημίωση μη ληφθείσας Αδείας —
+            έχει ήδη υπολογιστεί</td></tr>
+        {% else %}
+          <tr class="muted"><td colspan="5">Αποζημίωση μη ληφθείσας Αδείας —
+            κανένα υπόλοιπο αδείας, δεν οφείλεται</td></tr>
+        {% endif %}
+
+        {# Αποζημίωση απόλυσης — ΜΟΝΟ σε καταγγελία σύμβασης #}
+        {% if preview.is_dismissal %}
+          {% if preview.severance %}
+            <tr>
+              <td>Αποζημίωση Απόλυσης
+                <span class="muted">— {{ '%g'|format(preview.severance.months) }}
+                  μήνες {{ 'με' if preview.with_notice else 'χωρίς' }}
+                  προειδοποίηση × {{ preview.severance.monthly_salary|money }}€
+                  × 7/6 (υπηρεσία {{ preview.severance.service_years }} έτη)</span></td>
+              <td class="num">{{ preview.severance.gross|money }}€</td>
+              <td class="num">—</td>
+              <td class="num">{{ preview.severance.fmy|money }}€</td>
+              <td class="num"><b>{{ preview.severance.net|money }}€</b></td>
+            </tr>
+          {% elif preview.severance_done %}
+            <tr class="muted"><td colspan="5">Αποζημίωση Απόλυσης —
+              έχει ήδη υπολογιστεί</td></tr>
+          {% else %}
+            <tr class="muted"><td colspan="5">Αποζημίωση Απόλυσης —
+              υπηρεσία στον εργοδότη &lt; 1 έτος, δεν οφείλεται</td></tr>
+          {% endif %}
+        {% endif %}
+      </tbody>
+      {% if preview.total.gross %}
+        <tfoot><tr class="tot">
+          <td>Καταβλητέο στην αποχώρηση
+            ({{ preview.termination_date|date_gr }})</td>
+          <td class="num">{{ preview.total.gross|money }}€</td>
+          <td class="num">{{ preview.total.efka|money }}€</td>
+          <td class="num">{{ preview.total.fmy|money }}€</td>
+          <td class="num"><b>{{ preview.total.net|money }}€</b></td>
+        </tr></tfoot>
+      {% endif %}
+    </table>
+
+    {# ΤΟ ΔΩΡΟ ΔΕΝ ΚΑΤΑΒΑΛΛΕΤΑΙ ΤΩΡΑ: υπολογίζεται με την αποχώρηση αλλά
+       πληρώνεται στη δική του ημερομηνία — γι' αυτό ΕΞΩ από το σύνολο. #}
+    {% set gift_label = 'Δώρο Πάσχα' if preview.gift_type == 'easter'
+                        else 'Δώρο Χριστουγέννων' %}
+    <h3 class="sec">{{ gift_label }} {{ preview.year }} — χωριστή καταβολή</h3>
+    {% if preview.gift %}
+      <div class="box" style="font-size:13px">
+        Μικτά <b>{{ preview.gift.gross|money }}€</b> · εισφορές
+        {{ preview.gift.efka_employee|money }}€ · ΦΜΥ
+        {{ preview.gift.fmy|money }}€ · καθαρά
+        <b>{{ preview.gift.net|money }}€</b>
+        <span class="muted" style="font-size:12px">— pro-rata έως τη λήξη·
+          καταβάλλεται στις {{ preview.gift_pay_date|date_gr }}, ΟΧΙ στην
+          αποχώρηση</span>
+      </div>
+    {% elif preview.gift_done %}
+      <div class="muted" style="font-size:12.5px">
+        Έχει ήδη υπολογιστεί — δεν θα ξαναϋπολογιστεί.</div>
+    {% else %}
+      <div class="muted" style="font-size:12.5px">Δεν αναλογεί ποσό.</div>
+    {% endif %}
+
+    {% if preview.ergani %}
+      <div class="muted" style="font-size:12.5px;margin-top:6px">
+        Θα υποβληθεί επίσης <b>Ψηφιακή Αναγγελία Λήξης</b> στο ΕΡΓΑΝΗ.</div>
+    {% endif %}
+  {% endif %}
+</div>

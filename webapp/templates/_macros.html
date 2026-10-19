@@ -1,0 +1,88 @@
+{# Κοινά macros #}
+
+{# Πίνακας από λίστα dicts (τα κλειδιά γίνονται στήλες) + γραμμή συνόλων.
+   Τα αριθμητικά κελιά μορφοποιούνται ως ποσά, εκτός των NUM_COLS. #}
+{% macro rows_table(rows, totals={}, plain_cols=['Ημέρες']) %}
+  {% if rows %}
+    {% set cols = rows[0].keys()|list %}
+    <table class="tbl">
+      <thead><tr>
+        {% for c in cols %}
+          <th {{ 'style=text-align:right' if c not in cols[:1] else '' }}>{{ c }}</th>
+        {% endfor %}
+      </tr></thead>
+      <tbody>
+        {% for r in rows %}
+          <tr>
+            {% for c in cols %}
+              {% if loop.first %}
+                <td>{{ r[c] }}</td>
+              {% elif c in plain_cols %}
+                <td class="num">{{ r[c] }}</td>
+              {% else %}
+                <td class="num">{{ r[c]|money }}</td>
+              {% endif %}
+            {% endfor %}
+          </tr>
+        {% endfor %}
+        {% if totals %}
+          <tr class="tot">
+            {% for c in cols %}
+              {% if loop.first %}
+                <td>Σύνολο ({{ rows|length }})</td>
+              {% elif c in totals %}
+                <td class="num">
+                  {{ totals[c] if c in plain_cols else totals[c]|money }}</td>
+              {% else %}
+                <td></td>
+              {% endif %}
+            {% endfor %}
+          </tr>
+        {% endif %}
+      </tbody>
+    </table>
+  {% else %}
+    <div class="empty">Καμία εγγραφή.</div>
+  {% endif %}
+{% endmacro %}
+
+{# Πεδίο φόρμας #}
+{% macro field(name, label, type='text', value='', extra='') %}
+  <label>{{ label }}
+    <input name="{{ name }}" type="{{ type }}" value="{{ value if value is not none else '' }}" {{ extra|safe }}>
+  </label>
+{% endmacro %}
+
+{# Ετικέτα κατάστασης απασχόλησης — ΜΙΑ πηγή: `EmploymentState.lifecycle`
+   (pending = εκκρεμεί η αναγγελία Ε3, άρα ΟΧΙ «Ενεργή»). #}
+{% macro emp_status(e) %}
+  {% set st = EMP_LIFECYCLE[e.lifecycle] %}
+  {% if e.lifecycle == 'terminated' %}
+    <span class="tag off">{{ st[0] }} {{ e.termination_date|date_gr }}</span>
+  {% else %}
+    <span class="tag {{ st[1] }}"
+          {% if e.lifecycle == 'pending' %}
+            title="Δεν έχει υποβληθεί η αναγγελία πρόσληψης (Ε3) στο ΕΡΓΑΝΗ"
+          {% endif %}>{{ st[0] }}</span>
+  {% endif %}
+  {% if e.insurance_profile and e.insurance_profile.teka_member %}
+    <span class="tag teka">ΤΕΚΑ</span>
+  {% endif %}
+  {% if e.part_time %}<span class="tag">Μερική {{ e.weekly_hours }}ω</span>{% endif %}
+{% endmacro %}
+
+{# Σύντομη κατάσταση για τα grids (Πρόγραμμα/Άδειες): «Ενεργή» ΜΟΝΟ όταν η
+   πρόσληψη έχει ολοκληρωθεί — αλλιώς «Εκκρεμής πρόσληψη». #}
+{% macro emp_state_short(e) %}
+  {%- if e.lifecycle == 'terminated' -%}
+    Έως {{ e.termination_date|date_gr }}
+  {%- else -%}
+    {{ EMP_LIFECYCLE[e.lifecycle][0] }}
+  {%- endif -%}
+{% endmacro %}
+
+{# Αμοιβή απασχόλησης #}
+{% macro emp_pay(e) %}
+  {% if e.pay_type == 'daily' %}{{ e.daily_wage|money }} €/ημέρα
+  {% else %}{{ e.monthly_gross|money }} €/μήνα{% endif %}
+{% endmacro %}

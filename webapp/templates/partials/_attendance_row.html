@@ -1,0 +1,38 @@
+{# Μία απασχόληση στον read-only πίνακα παρουσιών: γραμμή περίληψης + ΚΡΥΦΑ
+   inputs με τις τρέχουσες τιμές (υποβάλλονται με την «Έγκριση»). Στο staging
+   επιστρέφεται με hx-swap-oob για να ενημερωθεί επιτόπου (div -> ασφαλές OOB). #}
+<div id="emp-{{ r.eid }}" class="atbl-row"{% if oob|default(false) %} hx-swap-oob="true"{% endif %}>
+  <div>
+    <div class="nm">{{ r.name }}</div>
+    <div class="sub">
+      {{ 'Ημερομίσθιος' if r.pay_type == 'daily' else 'Μισθωτός' }}
+      · {{ '%.2f'|format(r.hourly_rate) }}€/ω
+      · {{ sources.get(r.source, r.source) }}</div>
+    {# ό,τι θα υποβληθεί με την Έγκριση (και δίνεται στο modal via hx-include) #}
+    <input type="hidden" name="eid" value="{{ r.eid }}">
+    {% for name, key, cast in inputs %}
+      <input type="hidden" name="{{ name }}_{{ r.eid }}" value="{{ r[key] }}">
+    {% endfor %}
+  </div>
+  <div class="rt"><b>{{ r.efka_days }}</b></div>
+  <div class="rt {{ 'zero' if not r.worked }}">{{ r.worked or '—' }}</div>
+  <div class="rt {{ 'zero' if not r.unpaid }}">{{ r.unpaid or '—' }}</div>
+  <div class="rt {{ 'zero' if not r.leave }}">{{ r.leave or '—' }}</div>
+  <div class="rt {{ 'zero' if not r.sick_days }}">
+    {% if r.sick_days %}{{ r.sick_days }}{% if r.sick_benefit %}
+      <span class="muted" style="font-size:11px">·{{ '%.0f'|format(r.sick_benefit) }}€</span>{% endif %}
+    {% else %}—{% endif %}</div>
+  <div class="rt {{ 'zero' if not r.premium }}">
+    {% if r.premium %}
+      <button type="button" class="lnkbtn" title="Ανάλυση προσαυξήσεων"
+              hx-get="{{ url_for('attendance.premium_modal', eid=r.eid, y=y, m=m) }}"
+              hx-include="#emp-{{ r.eid }}"
+              hx-target="#modal-host" hx-swap="innerHTML">{{ '%.2f'|format(r.premium) }}€</button>
+    {% else %}—{% endif %}</div>
+  <div class="rt">
+    <button type="button" class="ghost"
+            hx-get="{{ url_for('attendance.edit_modal', eid=r.eid, y=y, m=m) }}"
+            hx-include="#emp-{{ r.eid }}"
+            hx-target="#modal-host" hx-swap="innerHTML">✏️</button>
+  </div>
+</div>

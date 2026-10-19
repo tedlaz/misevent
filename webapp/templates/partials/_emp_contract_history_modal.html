@@ -1,0 +1,62 @@
+<div class="modal-backdrop">
+  <div class="modal wide contract-history-modal">
+    <div class="mhead">
+      <h3>📜 Ιστορικό συμβάσεων — {{ e.full_name }}</h3>
+      <span class="muted" style="font-size:12.5px">
+        αρχική σύμβαση και όλες οι μεταβολές, κατά ημερομηνία ισχύος</span>
+    </div>
+    <div class="mbody">
+      <div class="contract-history-wrap">
+        <table class="tbl contract-history-table">
+          <thead>
+            <tr>
+              <th>Ισχύς από</th><th>Έκδοση</th><th>Τύπος αμοιβής</th>
+              <th class="rt">Μικτές αποδοχές</th>
+              <th>Σχέση απασχόλησης</th>
+              <th class="rt">Ώρες/εβδ.</th><th>Σύστημα</th>
+              <th>Σχόλια</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for contract in contracts %}
+              <tr class="{{ 'current' if contract.is_current }}">
+                <td class="mono"><b>{{ contract.effective_from|date_gr }}</b></td>
+                <td>
+                  {{ contract.kind }}
+                  {% if contract.is_current %}<span class="tag ok">Τρέχουσα</span>{% endif %}
+                </td>
+                <td>{{ 'Ημερομίσθιο' if contract.pay_type == 'daily'
+                       else 'Μηνιαίος μισθός' }}</td>
+                <td class="num"><b>
+                  {{ (contract.daily_wage if contract.pay_type == 'daily'
+                      else contract.monthly_gross)|money }} €
+                  {% if contract.pay_type == 'daily' %}<small>/ημέρα</small>{% endif %}
+                </b></td>
+                <td>
+                  {% if contract.employment_relationship == '1' %}
+                    Ορισμένου χρόνου
+                    <small class="mono">{{ contract.fixed_term_from|date_gr }}–{{ contract.fixed_term_to|date_gr }}</small>
+                  {% else %}Αορίστου χρόνου{% endif %}
+                </td>
+                <td class="num mono">{{ '%g'|format(contract.weekly_hours) }}</td>
+                <td>
+                  {% if contract.weekly_system == 6 %}Εξαήμερο
+                  {% elif contract.weekly_system == 5 %}Πενθήμερο
+                  {% else %}—{% endif %}
+                </td>
+                {# Τι ΑΚΡΙΒΩΣ άλλαξε: αιτία του event (ΓΣΣΕ/τριετία) ή διαφορά
+                   των όρων — μία πηγή, `employments._contract_note`. #}
+                <td class="soft">{{ contract.note or '—' }}</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+    <div class="mfoot">
+      <button type="button" class="ghost"
+              hx-get="{{ url_for('employments.modal_close') }}"
+              hx-target="#modal-host" hx-swap="innerHTML">Κλείσιμο</button>
+    </div>
+  </div>
+</div>

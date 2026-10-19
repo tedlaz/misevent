@@ -1,0 +1,17 @@
+{# Αποτελέσματα αναζήτησης ΤΟΠΙΚ. Κάθε γραμμή συμπληρώνει ΚΑΙ ΤΑ ΔΥΟ πεδία
+   (κωδικό + ονομασία) μέσω OOB και κλείνει το modal. #}
+<div id="topik-results" class="picklist">
+  {% if rows %}
+    {% for r in rows %}
+      <button type="button" class="pick"
+              hx-get="{{ url_for('company.topik_pick', code=r.code) }}"
+              hx-target="#employer-modal-host" hx-swap="innerHTML">
+        <b class="mono">{{ r.code }}</b>
+        <span>{{ r.per }}</span>
+        {% if r.oldCode %}<span class="tag">παλαιός {{ r.oldCode }}</span>{% endif %}
+      </button>
+    {% endfor %}
+  {% else %}
+    <div class="empty">Καμία τοπική διεύθυνση με αυτά τα κριτήρια.</div>
+  {% endif %}
+</div>

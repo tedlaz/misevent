@@ -1,0 +1,79 @@
+{# Ειδικότητες (θέσεις εργασίας) της εταιρείας. Κάθε ειδικότητα κουβαλά την
+   ασφαλιστική τριάδα ΕΦΚΑ και, αν προβλέπεται, την τριάδα ΤΕΚΑ — στην
+   πρόσληψη επιλέγεται μόνο η ειδικότητα + οι επικουρικές του εργαζομένου.
+   Το #modal-host είναι ΜΕΣΑ στο panel: επιτυχής καταχώρηση (που αντικαθιστά
+   όλο το panel) κλείνει αυτόματα το modal.
+   ΕΝΑ fragment, ΔΥΟ tabs της σελίδας Εταιρεία (ειδικότητες + ΚΠΚ): τα radios
+   που τα οδηγούν ζουν στο company.html, έξω από αυτό το swap target. #}
+<div id="spec-panel">
+  <div class="card tabpane tp-specialties">
+    <h2 class="bar"><span>Ειδικότητες (θέσεις εργασίας)</span>
+      <span class="norm">— η ασφαλιστική τριάδα ΕΦΚΑ/ΤΕΚΑ ορίζεται ΕΔΩ,
+        η πρόσληψη απλώς διαλέγει ειδικότητα</span>
+      <span class="acts">
+        {# Η μαζική εισαγωγή έφυγε από εδώ: ΕΝΑ αρχείο JSON για όλα τα tabs,
+           στο tab ① «Στοιχεία εργοδότη». #}
+        <button class="run"
+                hx-get="{{ url_for('company.specialty_modal') }}"
+                hx-target="#modal-host" hx-swap="innerHTML">➕ Νέα ειδικότητα</button>
+      </span>
+    </h2>
+
+    {% if specialties %}
+      <table class="tbl">
+        <thead><tr><th>Ειδικότητα</th><th>Ειδικότητα ΕΡΓΑΝΗ</th>
+          <th>Επικουρική</th><th>Πρόνοια</th>
+          <th>Πακέτα (ρόλος · ΚΑΔ · Ειδικότητα · ΚΠΚ)</th><th></th></tr></thead>
+        <tbody>
+          {% for sp in specialties %}
+            {% set pr = sp.pron_settings %}
+            <tr>
+              <td><b>{{ sp.name }}</b></td>
+              <td><span class="mono">{{ sp.ergani_specialty_code or '—' }}</span>
+                {% if sp.ergani_specialty_description %}
+                  <div class="muted" style="font-size:11.5px">
+                    {{ sp.ergani_specialty_description }}</div>
+                {% endif %}
+              </td>
+              <td>{% for c in sp.epik_carriers %}
+                    <span class="cov {{ c }}"><i>{{ config.CARRIERS[c] }}</i></span>
+                  {% else %}<span class="muted">—</span>{% endfor %}</td>
+              <td>{% if pr.enabled %}
+                    {{ pr.name or 'ναι' }}
+                    <div class="muted" style="font-size:11.5px">
+                      {{ 'νέοι/παλαιοί' if pr.differentiated else 'ενιαία' }}{{
+                      '' if pr.mandatory else ' · προαιρετική' }}</div>
+                  {% else %}<span class="muted">όχι</span>{% endif %}</td>
+              <td>
+                <div class="covs">
+                  {% for c in sp.coverages %}
+                    <span class="cov {{ c.fund }}">
+                      <i>{{ c.label }}</i>
+                      <span class="mono">{{ c.kad }} · {{ c.specialty_code }}
+                        · {{ c.kpk }}</span>
+                    </span>
+                  {% endfor %}
+                </div>
+              </td>
+              <td style="text-align:right">
+                <button class="ghost sm"
+                        hx-get="{{ url_for('company.specialty_modal', name=sp.name) }}"
+                        hx-target="#modal-host" hx-swap="innerHTML">✏️ Επεξεργασία</button>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    {% else %}
+      <div class="empty">Καμία ειδικότητα — χωρίς ειδικότητες δεν μπορεί να
+        γίνει πρόσληψη (η φόρμα πρόσληψης διαλέγει από εδώ). Καταχωρήστε
+        χειροκίνητα («➕ Νέα ειδικότητα») ή φορτώστε αρχείο εξαγωγής JSON από
+        το tab «① Στοιχεία εργοδότη».
+        Ρόλοι: {{ config.SPECIALTY_ROLES.keys()|join(', ') }}.
+        Τα ΚΠΚ πρέπει να είναι ήδη δηλωμένα στο Μητρώο ΚΠΚ (σελίδα «Παράμετροι»).</div>
+    {% endif %}
+  </div>
+
+
+  <div id="modal-host"></div>
+</div>

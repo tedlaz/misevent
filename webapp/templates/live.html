@@ -1,0 +1,103 @@
+{% extends "base.html" %}
+{% block title %}Ζωντανά — misevent{% endblock %}
+{% block heading %}Ζωντανή εικόνα ημέρας{% endblock %}
+{% block subheading %}
+  {{ day|date_gr }} · πρόγραμμα εργασίας και χτυπήματα κάρτας σε πραγματικό χρόνο
+{% endblock %}
+
+{% block content %}
+{# Ολόκληρο το widget: ΜΙΑ γραμμή ανά ενεργή απασχόληση, κάθετη γραμμή «τώρα»
+   στο κέντρο, ομαλή κύλιση από δεξιά προς αριστερά (static/live-board.js). #}
+<section class="card lboard {{ 'nolive' if not live }}" id="lboard"
+         data-live="{{ 1 if live else 0 }}" data-day="{{ day.isoformat() }}"
+         data-rows-url="{{ url_for('live.rows') }}"
+         {# ΣΦΥΓΜΟΣ ψηφιακής κάρτας: ένας αριθμός που αλλάζει σε κάθε νέα
+            διέλευση — το JS τον ρωτά και ξαναζητά γραμμές ΜΟΝΟ όταν άλλαξε #}
+         data-pulse-url="{{ url_for('live.pulse') }}">
+
+  <div class="lb-top">
+    <div class="lb-clock">
+      <b id="lb-time">--:--</b>
+      <span id="lb-at">{{ day|date_gr }}{% if not live %} · ιστορική ημέρα{% endif %}</span>
+    </div>
+    <div class="lb-tally" id="lb-tally">
+      <span class="lb-t t-on"><b>0</b> σε εργασία</span>
+      <span class="lb-t t-off"><b>0</b> εκτός ωραρίου</span>
+      <span class="lb-t t-leave"><b>0</b> σε άδεια</span>
+      <span class="lb-t t-miss"><b>0</b> ασυμφωνία με κάρτα</span>
+    </div>
+    <span class="grow"></span>
+    {# Η ΜΟΝΗ ΕΝΤΟΛΗ αυτής της οθόνης: χειροκίνητη καταχώρηση διέλευσης
+       ψηφιακής κάρτας. Ό,τι καταγραφεί εμφανίζεται ΑΜΕΣΩΣ στο grid
+       (HX-Trigger `lb-refresh` -> live-board.js). #}
+    <button type="button" class="ghost" id="lb-punch"
+            hx-get="{{ url_for('live.punch_modal') }}"
+            hx-vals='{"pdate": "{{ day.isoformat() }}"}'
+            hx-target="#modal-host" hx-swap="innerHTML"
+            title="Καταχώρηση εισόδου/εξόδου ψηφιακής κάρτας">🕘 Κάρτα</button>
+    {# Μετακίνηση σε προηγούμενη/επόμενη ημέρα με ομαλό animation #}
+    <div class="lb-nav">
+      <button type="button" class="ghost" id="lb-prev"
+              title="Προηγούμενη ημέρα">◀</button>
+      <button type="button" class="ghost" id="lb-next"
+              title="Επόμενη ημέρα">▶</button>
+    </div>
+    {# Ξεκλείδωμα προβολής: παγώνει η αυτόματη κύλιση και το grid σέρνεται
+       ελεύθερα με το ποντίκι· δεύτερο πάτημα = επιστροφή στο «τώρα». #}
+    <button type="button" class="ghost" id="lb-lock" aria-pressed="false"
+            title="Πάγωμα της αυτόματης κύλισης και ελεύθερη μετακίνηση με σύρσιμο (ή Shift + ρόδα ποντικιού)">
+      🔓</button>
+    {# Εύρος προβολής: ημέρα · εβδομάδα · μήνας. Κάθε επίπεδο ζητά και δικό
+       του παράθυρο δεδομένων (βλ. SPANS στο live-board.js) #}
+    <div class="lb-zoom" id="lb-zoom" role="group" aria-label="Εύρος προβολής">
+      {% for h, lbl in [(24, 'Ημέρα'), (168, 'Εβδομάδα'), (720, 'Μήνας'),
+                        (8760, 'Έτος')] %}
+        <button type="button" class="ghost" data-span="{{ h }}">{{ lbl }}</button>
+      {% endfor %}
+    </div>
+  </div>
+
+  {% if not live %}
+    <div class="lb-note">
+      Η ημερομηνία αναφοράς δεν είναι η σημερινή — η προβολή είναι ιστορική
+      και ο δείκτης τρέχουσας ώρας δεν ενημερώνεται.
+    </div>
+  {% endif %}
+
+  <div class="lb-grid">
+    {# Η ανανέωση (κάθε λεπτό) ΔΕΝ γίνεται με hx-trigger: το παράθυρο ημερών
+       αλλάζει καθώς μετακινείται ο χρήστης, οπότε το ίδιο fetch που
+       μετακυλά το παράθυρο κάνει και την ανανέωση — μία διαδρομή, καμία
+       απώλεια θέσης (live-board.js). #}
+    <div id="lb-rows">
+      {% include "partials/_live_rows.html" %}
+    </div>
+
+    {# ΓΚΡΙΖΑ γραμμή: το ΚΕΝΤΡΟ της προβολής — σταθερή πάντα, ώστε να ξέρεις
+       πού «κοιτάς» ακόμη κι όταν η τρέχουσα ώρα είναι αλλού #}
+    <div class="lb-centerline" aria-hidden="true"></div>
+    {# ΚΟΚΚΙΝΗ γραμμή: η τρέχουσα ώρα — στο κέντρο όσο η προβολή είναι
+       κλειδωμένη, αλλιώς στη θέση της πραγματικής ώρας (--nowx) #}
+    <div class="lb-nowline" aria-hidden="true"></div>
+  </div>
+
+  <div class="lb-legend">
+    <span><i class="k-plan"></i> Πρόγραμμα</span>
+    <span><i class="k-tele"></i> Τηλεεργασία</span>
+    <span><i class="k-act"></i> Πραγματική παρουσία (κάρτα)</span>
+    <span><i class="k-punch"></i> Χτύπημα στην ώρα του</span>
+    <span><i class="k-punch warn"></i> Αργοπορία / πρόωρη αποχώρηση</span>
+    <span><i class="k-miss"></i> Χωρίς χτύπημα / ασυμφωνία με κάρτα</span>
+    <span><i class="k-open"></i> Ανοιχτή βάρδια (χωρίς έξοδο)</span>
+    <span><i class="k-leave"></i> Άδεια (χρώμα ανά τύπο, όπως στις Άδειες)</span>
+  </div>
+
+  {# Μοτίβο MODAL (§9): ο host ζει ΜΕΣΑ στην κάρτα και το κενό περιεχόμενο
+     είναι το «κλειστό» modal #}
+  <div id="modal-host"></div>
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='live-board.js') }}" defer></script>
+{% endblock %}

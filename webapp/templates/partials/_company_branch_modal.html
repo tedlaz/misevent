@@ -1,0 +1,16 @@
+<div class="modal-backdrop">
+  <div class="modal wide">
+    <div class="mhead">
+      <h3>{{ 'Διόρθωση παραρτήματος ' ~ branch.code if branch else 'Νέο παράρτημα' }}</h3>
+    </div>
+    <div class="mbody">
+      {% set first_branch = false %}
+      {% include "partials/_company_branch_form.html" %}
+    </div>
+    <div class="mfoot">
+      <button class="ghost" type="button"
+              hx-get="{{ url_for('company.branch_modal_close') }}"
+              hx-target="#branch-modal-host" hx-swap="innerHTML">Άκυρο</button>
+    </div>
+  </div>
+</div>

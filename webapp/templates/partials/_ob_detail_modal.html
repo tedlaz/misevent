@@ -1,0 +1,143 @@
+{# ΛΕΠΤΟΜΕΡΕΙΕΣ ΕΝΕΡΓΕΙΑΣ σε MODAL (μοτίβο §9: host μέσα στο panel, κλείνει
+   ΜΟΝΟ με κουμπί — το backdrop δεν έχει handler).
+
+   Ενεργοποίηση/παράταση κάνουν swap ΟΛΟ το #ob-panel: το φρέσκο panel έχει
+   κενό #modal-host, άρα το modal κλείνει μόνο του και το χρονολόγιο δείχνει
+   ό,τι ξεκλείδωσε. #}
+{% from "_macros.html" import rows_table %}
+<div class="modal-backdrop">
+  <div class="modal wide detail">
+    <div class="mhead">
+      <h3><span class="ic">{{ detail.icon }}</span>
+        {{ detail.label }} {{ detail.period }}</h3>
+      <span class="muted" style="font-size:12.5px">
+        <span class="mode {{ 'did' if detail.done else 'will' }}">
+          {{ 'Έγινε' if detail.done else 'Θα γίνει' }}</span>
+        &ensp;προθεσμία {{ detail.due|date_gr }}</span>
+    </div>
+
+    <div class="mbody">
+      {% if detail.reason %}
+        <div class="warnbox">{{ detail.reason }}</div>
+      {% elif detail.late %}
+        <div class="warnbox">
+          ⚠️ <b>Εκπρόθεσμη κατά {{ detail.late }} ημέρες</b> — η προθεσμία ήταν
+          {{ detail.due|date_gr }}. Μπορεί να υποβληθεί, αλλά ενδέχεται να
+          επιβληθούν πρόστιμα/προσαυξήσεις από τον φορέα.
+        </div>
+      {% endif %}
+
+      {% if detail.deps or detail.unlocks %}
+        <div class="chain">
+          {% if detail.deps %}
+            <span class="ct">Προαπαιτεί</span>
+            {% for d in detail.deps %}
+              <span class="dep {{ 'ok' if d.done else 'no' }}">{{ d.label }}</span>
+            {% endfor %}
+          {% endif %}
+          {% if detail.unlocks %}
+            <span class="ct">Ξεκλειδώνει</span>
+            {% for d in detail.unlocks %}
+              <span class="dep {{ 'ok' if d.done else 'next' }}">{{ d.label }}</span>
+            {% endfor %}
+          {% endif %}
+        </div>
+      {% endif %}
+
+      {% for s in detail.steps %}<div class="step">{{ s }}</div>{% endfor %}
+
+      {% for k, v in detail.facts %}
+        <div class="fact"><span>{{ k }}</span><b>{{ v }}</b></div>
+      {% endfor %}
+
+      {% if detail.rows %}
+        {{ rows_table(detail.rows, detail.totals) }}
+      {% endif %}
+
+      {% if detail.extended %}
+        <div class="muted" style="font-size:12.5px;margin-top:8px">
+          🕓 Η προθεσμία έχει παραταθεί
+          {% if detail.original_due %}(αρχική: {{ detail.original_due|date_gr }}){% endif %}
+        </div>
+      {% endif %}
+
+      {# ─── ΔΙΟΡΘΩΣΗ ΜΕΤΑ ΤΗΝ ΟΛΟΚΛΗΡΩΣΗ ────────────────────────────────
+         Μέχρι να υποβληθούν τα αρχεία, ένα λάθος πρέπει να διορθώνεται· και
+         επειδή το αρχείο ανεβαίνει ΧΕΙΡΟΚΙΝΗΤΑ στον φορέα, η υποβολή είναι
+         δήλωση του χρήστη — άρα ανακαλείται. #}
+      {% if detail.can_reopen %}
+        <form class="btnrow" style="margin-top:10px"
+              hx-post="{{ url_for('obligations.reopen', ob_id=detail.id) }}"
+              hx-target="#ob-panel" hx-swap="outerHTML"
+              hx-confirm="Η μισθοδοσία θα ανοίξει ξανά για διόρθωση. Θα
+                          χρειαστεί να την ξαναϋπολογίσεις. Συνέχεια;">
+          <input name="reason" placeholder="αιτιολογία (προαιρετικό)"
+                 style="max-width:260px">
+          <button class="ghost" type="submit">🔓 Άνοιγμα για διόρθωση</button>
+        </form>
+      {% endif %}
+      {% if detail.reopen_note %}
+        <div class="muted" style="font-size:12px;line-height:1.5;margin-top:6px">
+          {{ detail.reopen_note }}</div>
+      {% endif %}
+
+      {% if detail.can_withdraw %}
+        <form class="btnrow" style="margin-top:10px"
+              hx-post="{{ url_for('obligations.withdraw', ob_id=detail.id) }}"
+              hx-target="#ob-panel" hx-swap="outerHTML"
+              hx-confirm="Δηλώνεις ότι η υποβολή ΔΕΝ ίσχυσε (π.χ. απορρίφθηκε).
+                          Η υποχρέωση θα ξαναγίνει εκκρεμής. Συνέχεια;">
+          <input name="reason" required style="max-width:260px"
+                 placeholder="αιτιολογία (π.χ. απορρίφθηκε από ΕΦΚΑ)">
+          <button class="ghost" type="submit">↩️ Δήλωση λανθασμένης υποβολής</button>
+        </form>
+        <div class="muted" style="font-size:12px;line-height:1.5;margin-top:6px">
+          Το αρχείο ανεβαίνει χειροκίνητα στον φορέα — αν δεν έγινε δεκτό,
+          δήλωσέ το εδώ για να ξανανοίξει η μισθοδοσία. Δεν είναι
+          συμπληρωματική δήλωση: λέει ότι η προηγούμενη υποβολή δεν ίσχυσε.
+        </div>
+      {% endif %}
+
+      {% if detail.can_extend %}
+        <form class="btnrow" style="margin-top:10px"
+              hx-post="{{ url_for('obligations.extend', ob_id=detail.id) }}"
+              hx-target="#ob-panel" hx-swap="outerHTML">
+          <label class="muted" style="font-size:12.5px">🕓 Παράταση έως
+            <input type="date" name="new_due" required
+                   min="{{ detail.due.isoformat() }}"
+                   {% if detail.extend_max %}max="{{ detail.extend_max.isoformat() }}"{% endif %}>
+          </label>
+          <input name="reason" placeholder="αιτιολογία (προαιρετικό)"
+                 style="max-width:200px">
+          <button class="ghost" type="submit">Παράταση</button>
+          {% if detail.extend_max %}
+            <span class="muted" style="font-size:12px">
+              έως {{ detail.extend_max|date_gr }}</span>
+          {% endif %}
+        </form>
+        {% if detail.extend_note %}
+          <div class="muted" style="font-size:12px;line-height:1.5;margin-top:6px">
+            {{ detail.extend_note }}</div>
+        {% endif %}
+      {% endif %}
+    </div>
+
+    <div class="mfoot">
+      <button type="button" class="ghost"
+              hx-get="{{ url_for('obligations.modal_close') }}"
+              hx-target="#modal-host" hx-swap="innerHTML">Κλείσιμο</button>
+      {% if not detail.done %}
+        {# Εκπρόθεσμη: ΕΠΙΤΡΕΠΕΤΑΙ, με κόκκινο κουμπί + προειδοποίηση.
+           Μπλοκαρισμένη (reason): παραμένει ανενεργό. #}
+        <button class="run {{ 'danger' if detail.late and not detail.reason }}"
+                hx-post="{{ url_for('obligations.run', ob_id=detail.id) }}"
+                hx-target="#ob-panel" hx-swap="outerHTML"
+                {{ 'disabled' if detail.reason else '' }}>
+          {% if detail.late and not detail.reason %}
+            ⚠️ Εκπρόθεσμη ενεργοποίηση
+          {% else %}Ενεργοποίηση{% endif %}
+        </button>
+      {% endif %}
+    </div>
+  </div>
+</div>

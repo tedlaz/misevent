@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+{% block title %}Εταιρεία{% endblock %}
+{% block heading %}Εταιρεία{% endblock %}
+{% block subheading %}στοιχεία εργοδότη (Μητρώο Εργοδοτών e-ΕΦΚΑ){% endblock %}
+
+{% block content %}
+{# TABS (CSS-only, χωρίς JS — ίδιο μοτίβο με τη φόρμα πρόσληψης). Τα radios
+   ζουν ΕΞΩ από τα htmx targets (#company-form, #spec-panel), ώστε το ενεργό
+   tab να επιβιώνει κάθε swap (π.χ. μετά από εισαγωγή CSV ή αποθήκευση). #}
+<div class="tabs">
+  <input class="tabradio" type="radio" name="_tab" id="tab-employer" checked>
+  <input class="tabradio" type="radio" name="_tab" id="tab-specialties">
+  <input class="tabradio" type="radio" name="_tab" id="tab-branches">
+  <div class="tabbar">
+    <label for="tab-employer">① Στοιχεία εργοδότη</label>
+    <label for="tab-branches">② Παραρτήματα</label>
+    <label for="tab-specialties">③ Ειδικότητες (θέσεις εργασίας)</label>
+  </div>
+
+  <div class="card tabpane tp-branches">
+    <h2>Παραρτήματα</h2>
+    {% include "partials/_company_branches.html" %}
+  </div>
+
+  {# ───────────────────────── TAB 1: Στοιχεία εργοδότη ───────────────────── #}
+  <div class="card tabpane tp-employer">
+    {# Η εξαγωγή/εισαγωγή αφορά ΟΛΑ τα tabs (εργοδότης, παραρτήματα,
+       ειδικότητες, και το κοινό μητρώο ΚΠΚ) — ΕΝΑ αρχείο JSON. Η εξαγωγή
+       είναι απλό κατέβασμα
+       (ο browser ρωτά πού θα αποθηκευτεί)· η εισαγωγή περνά από τα κανονικά
+       commands και ανανεώνει ΚΑΙ τα άλλα tabs (OOB swaps). #}
+    <h2 class="bar"><span>Στοιχεία εργοδότη</span>
+      <span class="acts">
+        <a class="ghost" href="{{ url_for('company.export_json') }}"
+           download>⬇️ Εξαγωγή αρχείου</a>
+        <form hx-post="{{ url_for('company.import_json') }}"
+              hx-target="#spec-panel" hx-swap="outerHTML"
+              hx-encoding="multipart/form-data" class="btnrow">
+          <input type="file" name="file" accept=".json,application/json" required
+                 style="font-size:12px;max-width:210px">
+          <button class="ghost" type="submit">⬆️ Εισαγωγή αρχείου</button>
+        </form>
+      </span>
+    </h2>
+    {% include "partials/_company_form.html" %}
+    {# Host του lookup ΤΟΠΙΚ: ΕΞΩ από το #company-form (το modal έχει δικό του
+       input αναζήτησης — απαγορεύεται φωλιασμένο <form>) και έξω από το swap
+       target, ώστε να επιβιώνει της αποθήκευσης. Ξεχωριστό id από το
+       #modal-host των ειδικοτήτων. #}
+    <div id="employer-modal-host"></div>
+  </div>
+
+  {# Το tab των ειδικοτήτων ζει στο htmx fragment #spec-panel #}
+  {% include "partials/_company_specialties.html" %}
+</div>
+{% endblock %}
