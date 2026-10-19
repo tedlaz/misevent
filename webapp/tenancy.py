@@ -134,6 +134,19 @@ class Registry:
         self.auth_svc.bootstrap_admin()
         self._ensure_default_company()
 
+    def is_fresh(self) -> bool:
+        """Πρώτη εκκίνηση: μόνο ο αρχικός admin με τον ΠΡΟΣΩΡΙΝΟ κωδικό και
+        καμία εταιρεία με δεδομένα. Μόνο τότε επιτρέπεται restore ΧΩΡΙΣ
+        σύνδεση — ο προσωρινός κωδικός είναι ούτως ή άλλως γνωστός, οπότε
+        δεν ανοίγει τίποτα που δεν ήταν ήδη ανοιχτό."""
+        users = list(self.auth.users.values())
+        return (
+            len(users) == 1
+            and users[0].must_change_password
+            and all(self.tenant(c.company_id).event_count == 0
+                    for c in self.auth.active_companies())
+        )
+
     # ------------------------------------------------------------ εταιρείες
     def store_name(self, company_id: str) -> str:
         return company_store(company_id)

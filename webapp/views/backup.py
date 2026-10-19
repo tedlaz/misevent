@@ -11,7 +11,15 @@ Backup / restore ΟΛΟΥ του συστήματος — ΜΟΝΟ για admin.
 from datetime import UTC, datetime
 from io import BytesIO
 
-from flask import Blueprint, redirect, render_template, request, send_file, url_for
+from flask import (
+    Blueprint,
+    redirect,
+    render_template,
+    request,
+    send_file,
+    session,
+    url_for,
+)
 
 from ..system import lock, registry
 from ..tenancy import data_dir
@@ -28,12 +36,7 @@ def _stamp() -> str:
 
 @bp.get("/")
 def index():
-    return render_template(
-        "backup.html",
-        restored=request.args.get("restored", type=int),
-        safety=request.args.get("safety") or "",
-        error=request.args.get("error") or "",
-    )
+    return render_template("backup.html", error=request.args.get("error") or "")
 
 
 @bp.get("/download")
@@ -48,33 +51,55 @@ def download():
     )
 
 
-@bp.post("/restore")
-def restore():
+def _restore_upload(first_run: bool = False):
+    """Έλεγχος, αντίγραφο ασφαλείας, αντικατάσταση, replay. Πετά ValueError
+    με μήνυμα για τον χρήστη."""
     upload = request.files.get("backup")
     if upload is None or not upload.filename:
-        return redirect(url_for("backup.index", error="Επίλεξε αρχείο backup"))
+        raise ValueError("Επίλεξε αρχείο backup")
     data = upload.stream.read(MAX_BACKUP_BYTES + 1)
     if len(data) > MAX_BACKUP_BYTES:
-        return redirect(url_for("backup.index", error="Το backup ξεπερνά τα 500 MB"))
+        raise ValueError("Το backup ξεπερνά τα 500 MB")
 
     with lock:
+        if first_run and not registry.is_fresh():
+            raise ValueError("Το σύστημα έχει ήδη δεδομένα· restore μόνο από διαχειριστή")
         current = registry.db.snapshot()
         SAFETY_BACKUP_DIR.mkdir(parents=True, exist_ok=True)
         safety = SAFETY_BACKUP_DIR / f"before-restore-{_stamp()}.db"
         safety.write_bytes(current)
-        try:
-            restored = registry.db.restore_snapshot(data)
-        except ValueError as exc:
-            return redirect(url_for("backup.index", error=str(exc)))
+        registry.db.restore_snapshot(data)
         try:
             registry.reload()
         except Exception:
             # Τα events μπήκαν αλλά δεν ξαναπαίζονται: πίσω στην προηγούμενη.
             registry.db.restore_snapshot(current)
             registry.reload()
-            return redirect(url_for(
-                "backup.index",
-                error="Το backup δεν φορτώθηκε· επανήλθε η προηγούμενη κατάσταση",
-            ))
+            raise ValueError(
+                "Το backup δεν φορτώθηκε· επανήλθε η προηγούμενη κατάσταση"
+            ) from None
 
-    return redirect(url_for("backup.index", restored=restored, safety=safety.name))
+
+def _to_login():
+    """Μετά από restore οι χρήστες είναι αυτοί του backup: νέα σύνδεση."""
+    session.clear()
+    return redirect(url_for("auth.login", restored=1))
+
+
+@bp.post("/restore")
+def restore():
+    try:
+        _restore_upload()
+    except ValueError as exc:
+        return redirect(url_for("backup.index", error=str(exc)))
+    return _to_login()
+
+
+@bp.post("/first-run")
+def first_run():
+    """Restore από τη σελίδα σύνδεσης, ΜΟΝΟ σε πρώτη εκκίνηση (`is_fresh`)."""
+    try:
+        _restore_upload(first_run=True)
+    except ValueError as exc:
+        return redirect(url_for("auth.login", restore_error=str(exc)))
+    return _to_login()

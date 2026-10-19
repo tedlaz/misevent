@@ -16,7 +16,7 @@ from flask import (
     url_for,
 )
 
-from ..system import auth, auth_svc, lock
+from ..system import auth, auth_svc, lock, registry
 
 bp = Blueprint("auth", __name__)
 
@@ -32,6 +32,7 @@ PUBLIC_ENDPOINTS = {
     "auth.invite_post",
     "auth.reset",
     "auth.reset_post",
+    "backup.first_run",  # μόνο σε πρώτη εκκίνηση — ελέγχει μόνο του το `is_fresh`
     "static",
 }
 
@@ -54,11 +55,22 @@ def login_user(user):
 
 
 # ------------------------------------------------------------------ σύνδεση
+def _login_page(**context):
+    """Σε πρώτη εκκίνηση η σελίδα προσφέρει και restore από backup."""
+    with lock:
+        fresh = registry.is_fresh()
+    return render_template("login.html", fresh=fresh, **context)
+
+
 @bp.get("/login")
 def login():
     if current_user():
         return redirect(url_for("dashboard.index"))
-    return render_template("login.html", email=request.args.get("email", ""))
+    return _login_page(
+        email=request.args.get("email", ""),
+        restored=request.args.get("restored"),
+        restore_error=request.args.get("restore_error", ""),
+    )
 
 
 @bp.post("/login")
@@ -67,7 +79,7 @@ def login_post():
     try:
         user = auth_svc.authenticate(email, request.form.get("password", ""))
     except ValueError as exc:
-        return render_template("login.html", email=email, error=str(exc)), 401
+        return _login_page(email=email, error=str(exc)), 401
     login_user(user)
     if user.must_change_password:
         return redirect(url_for("auth.password"))

@@ -5,13 +5,7 @@
 
 {% block content %}
 <div class="card">
-  {% if restored is not none %}
-    <div class="audit-result ok">
-      Έγινε restore <b>{{ restored }} events</b> και πλήρες replay όλων των εταιρειών.
-      Αντίγραφο της προηγούμενης κατάστασης: <span class="mono">backups/system/{{ safety }}</span>.
-      Αν άλλαξαν οι χρήστες, ίσως χρειαστεί νέα σύνδεση.
-    </div>
-  {% elif error %}
+  {% if error %}
     <div class="audit-result err">{{ error }}</div>
   {% endif %}
 
@@ -23,7 +17,7 @@
     <a class="ghost" href="{{ url_for('backup.download') }}">⬇ Λήψη backup</a>
     <form method="post" enctype="multipart/form-data"
           action="{{ url_for('backup.restore') }}"
-          onsubmit="return confirm('Να αντικατασταθούν ΟΛΑ τα δεδομένα (όλες οι εταιρείες, χρήστες, παράμετροι) από αυτό το backup; Θα κρατηθεί αυτόματα αντίγραφο της τρέχουσας κατάστασης.');">
+          onsubmit="return confirm('Να αντικατασταθούν ΟΛΑ τα δεδομένα (όλες οι εταιρείες, χρήστες, παράμετροι) από αυτό το backup; Θα κρατηθεί αυτόματα αντίγραφο της τρέχουσας κατάστασης και θα χρειαστεί νέα σύνδεση.');">
       <label class="restore-file">
         <span>Αρχείο backup</span>
         <input type="file" name="backup" accept=".db" required>

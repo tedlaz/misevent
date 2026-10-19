@@ -4,6 +4,11 @@
 {% block subheading %}με email και κωδικό{% endblock %}
 
 {% block content %}
+{% if restored %}
+  <div class="audit-result ok">Η επαναφορά από το backup ολοκληρώθηκε. Συνδέσου
+    με το email και τον κωδικό ενός χρήστη του backup. Αντίγραφο της
+    προηγούμενης κατάστασης κρατήθηκε στο <span class="mono">backups/system/</span>.</div>
+{% endif %}
 <form class="frm" method="post" action="{{ url_for('auth.login') }}">
   <input type="hidden" name="next" value="{{ request.args.get('next', '') }}">
   <label>Email
@@ -15,4 +20,22 @@
     <a class="ghost" href="{{ url_for('auth.forgot') }}">Ξέχασα τον κωδικό</a>
   </div>
 </form>
+
+{% if fresh %}
+{# Πρώτη εκκίνηση (registry.is_fresh): μεταφορά από άλλον υπολογιστή ή
+   επαναφορά μετά από επανεγκατάσταση, πριν στηθεί οτιδήποτε. #}
+<form class="frm" method="post" enctype="multipart/form-data"
+      action="{{ url_for('backup.first_run') }}"
+      onsubmit="return confirm('Να φορτωθούν όλα τα δεδομένα από αυτό το backup;');">
+  <h3>Πρώτη εκκίνηση; Επαναφορά από backup</h3>
+  <div class="muted">Αρχείο <span class="mono">.db</span> από «Σύστημα → Backup»
+    ή το <span class="mono">misevent.db</span> άλλης εγκατάστασης.</div>
+  {% if restore_error %}<div class="warnbox">{{ restore_error }}</div>{% endif %}
+  <label>Αρχείο backup
+    <input type="file" name="backup" accept=".db" required></label>
+  <div class="btnrow">
+    <button class="run" type="submit">⬆ Restore</button>
+  </div>
+</form>
+{% endif %}
 {% endblock %}
