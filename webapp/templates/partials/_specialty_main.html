@@ -1,0 +1,110 @@
+{# ① Κύρια + ② Επικουρική μιας ειδικότητας (id="spec-main").
+
+   Η κύρια είναι ΠΑΝΤΑ ΕΦΚΑ, με ΕΝΑ ΚΑΔ + ΜΙΑ ειδικότητα από τον Ο.Σ.Υ.Κ.
+   (osyk_29.zip). Από αυτά ΠΑΡΑΓΟΝΤΑΙ οι δύο εναλλακτικές, ανάλογα με το πού
+   έχει επικουρική ο εργαζόμενος (`kpkreg.main_special_case`, dn_spc.txt):
+     ΕΦΚΑ -> ειδική περίπτωση 10 (ή 00 αν το ΚΠΚ του συνδυασμού έχει ήδη
+             επικουρική), π.χ. 5242/532030: 103 -> 101
+     ΤΕΚΑ -> ειδική περίπτωση 09, π.χ. 103 μένει 103 — συν τη σταθερή
+             γραμμή ΤΕΚΑ (config.TEKA_PACKAGE)
+   Το ΚΠΚ κάθε εναλλακτικής επιλέγεται από το Μητρώο ΚΠΚ· προεπιλέγεται το
+   πρώτο προτεινόμενο που υπάρχει εκεί. Αλλαγή ΚΑΔ/ειδικότητας (ή πρόνοιας)
+   ξαναφέρνει ΜΟΝΟ αυτό το μπλοκ (`company.specialty_main`), χωρίς τα ΚΠΚ,
+   ώστε να ξαναπροταθούν. #}
+{% set f = form or {} %}
+{% set first = (sp.package('MAIN_EPIK') or sp.package('MAIN')) if sp else None %}
+{% set kad_val = f.get('main_kad', first.kad if first else '') %}
+{% set code_val = f.get('main_code', first.specialty_code if first else '') %}
+{% set carriers = f.getlist('epik_carriers') if form
+                  else (sp.epik_carriers if sp else ['efka']) %}
+{% set pron_on = (f.get('pron_enabled') is not none) if form
+                 else (sp.pron_settings.enabled if sp else false) %}
+{% set eids = kpkreg.specialties_for(kad_val) if kad_val else [] %}
+{% set refresh %}hx-get="{{ url_for('company.specialty_main') }}"
+  hx-include="[name='main_kad'],[name='main_code'],[name='epik_carriers'],[name='MAIN_EPIK_kpk'],[name='MAIN_kpk'],[name='pron_enabled']"
+  hx-target="#spec-main" hx-swap="outerHTML"{% endset %}
+<div id="spec-main">
+  <div class="fsec fs-id">
+    <div class="fs-h"><span class="fs-ic">1️⃣</span><b>Κύρια ασφάλιση — ΕΦΚΑ</b>
+      <span class="fs-hint">ΚΑΔ & ειδικότητα από τον Ο.Σ.Υ.Κ.</span></div>
+    <div class="frm cols">
+      <label>ΚΑΔ
+        <input name="main_kad" maxlength="4" class="mono" list="kpk-kad-list"
+          autocomplete="off" placeholder="κωδικός ή λέξη…" value="{{ kad_val }}" {{ refresh }}>
+        <span class="muted" style="font-size:11.5px">{{ kpkreg.kad_description(kad_val)
+          or ('Ο ΚΑΔ δεν υπάρχει στον Ο.Σ.Υ.Κ.' if kad_val else '') }}</span>
+      </label>
+      <label class="wide">Ειδικότητα
+        <input name="main_code" maxlength="6" class="mono" list="eid-list-main"
+          autocomplete="off" value="{{ code_val }}" {{ refresh }}
+          placeholder="{{ 'κωδικός ή λέξη…' if eids else 'πρώτα ΚΑΔ' }}">
+        <datalist id="eid-list-main">
+          {% for e in eids %}
+            <option value="{{ e.code }}">{{ e.code }} — {{ e.description }}</option>
+          {% endfor %}
+        </datalist>
+        <span class="muted" style="font-size:11.5px">{% if code_val %}{{
+          kpkreg.eid_description(code_val) if code_val in eids|map(attribute='code')
+          else 'Η ειδικότητα δεν ισχύει για αυτό το ΚΑΔ' }}{% endif %}</span>
+      </label>
+    </div>
+  </div>
+
+  <div class="fsec fs-ins">
+    <div class="fs-h"><span class="fs-ic">2️⃣</span><b>Επικουρική ασφάλιση</b>
+      <span class="fs-hint">επιτρεπτοί φορείς — η πρόσληψη διαλέγει έναν</span></div>
+    {% for carrier, role, title, tag in [
+         ('efka', 'MAIN_EPIK', 'Α · Κύρια + Επικουρική ΕΦΚΑ', 'ένα ΚΠΚ'),
+         ('teka', 'MAIN', 'Β · Κύρια ΕΦΚΑ + Επικουρική ΤΕΚΑ', 'δύο γραμμές ΑΠΔ')] %}
+      {% set spec_role = config.SPECIALTY_ROLES[role] %}
+      {% set pkg = sp.package(role) if sp else None %}
+      {% set options = kpks_by_tier[spec_role.tier] %}
+      {% set known = options|map(attribute='kpk')|list %}
+      {% set special = kpkreg.main_special_case(carrier, kad_val, code_val, pron_on) %}
+      {% set sugg = kpkreg.suggested_kpks(kad_val, code_val, special) %}
+      {% set kpk_val = f.get(role ~ '_kpk') if form else (pkg.kpk if pkg else '') %}
+      {% set kpk_val = kpk_val or (sugg|select('in', known)|first) or '' %}
+      <div class="opt {{ 'sel' if carrier in carriers }}">
+        <label class="chk"><input type="checkbox" name="epik_carriers"
+          value="{{ carrier }}" {{ 'checked' if carrier in carriers }}>
+          <b>{{ title }}</b> <span class="tag">{{ tag }}</span></label>
+        <div class="frm cols pkg-row">
+          <label>Ειδική περίπτωση (No 36)
+            <span><b class="mono">{{ special }}</b>
+              <span class="muted" style="font-size:11.5px">{{ 'καμία' if special == '00'
+                else kpkreg.special_case_description(special) }}</span></span>
+          </label>
+          <label class="wide">ΚΠΚ · {{ config.TIERS[spec_role.tier] }}
+            <select name="{{ role }}_kpk">
+              <option value="">— επιλογή ΚΠΚ —</option>
+              {% for k in options %}
+                <option value="{{ k.kpk }}" {{ 'selected' if kpk_val == k.kpk }}>
+                  {{ config.CARRIERS[k.carrier] }} · {{ k.kpk }} — {{ k.name }}</option>
+              {% endfor %}
+            </select>
+            {% if sugg %}
+              <span class="muted" style="font-size:11.5px">Κατά τον Ο.Σ.Υ.Κ.: ΚΠΚ
+                {% for k in sugg %}<b class="mono">{{ k }}</b>{{ '' if k in known else '*' }}{{ ', ' if not loop.last }}{% endfor %}
+                {% if sugg|reject('in', known)|list %}<br>* δεν υπάρχει στο Μητρώο ΚΠΚ αυτής της βαθμίδας{% endif %}</span>
+            {% elif not options %}
+              <span class="muted" style="font-size:11.5px">Κανένα ΚΠΚ βαθμίδας
+                «{{ config.TIERS[spec_role.tier] }}» — δηλώστε το πρώτα στο Μητρώο ΚΠΚ
+                (σελίδα «Παράμετροι»).</span>
+            {% endif %}
+          </label>
+        </div>
+        {% if carrier == 'teka' %}
+          {% set tp = config.TEKA_PACKAGE %}
+          <div class="lockbox">🔒 Γραμμή ΤΕΚΑ: ΚΑΔ <b class="mono">{{ tp.kad }}</b> ·
+            Ειδικότητα <b class="mono">{{ tp.specialty_code }}</b> ·
+            ΚΠΚ <b class="mono">{{ tp.kpk }}</b> — ίδια για κάθε ειδικότητα.
+            {% if tp.kpk not in kpks_by_tier['auxiliary']|map(attribute='kpk') %}
+              <span class="muted">Το ΚΠΚ {{ tp.kpk }} δεν υπάρχει ακόμη στο Μητρώο ΚΠΚ.</span>
+            {% endif %}
+          </div>
+        {% endif %}
+      </div>
+      {% if loop.first %}<div class="alt-or">ή</div>{% endif %}
+    {% endfor %}
+  </div>
+</div>

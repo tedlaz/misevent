@@ -81,3 +81,40 @@ def test_first_run_restore_from_login_page(fresh_system):
     assert "restored=1" in r.headers["Location"]
     r = anon.post("/login", data={"email": BOOTSTRAP_EMAIL, "password": TEST_PASSWORD})
     assert r.status_code == 302 and r.headers["Location"] != "/password"
+
+
+def test_safety_backups_page(fresh_system):
+    from _bootstrap import ui_client
+
+    from webapp import create_app
+
+    app = create_app()
+    client = ui_client(app)
+    assert "Κανένα αυτόματο αντίγραφο" in client.get("/backup/").get_data(as_text=True)
+
+    snapshot = client.get("/backup/download").data
+    client.post("/backup/restore", data={"backup": (BytesIO(snapshot), "b.db")})
+    client = ui_client(app)  # το restore αποσυνδέει
+
+    (safety,) = (fresh_system / "backups" / "system").glob("before-restore-*.db")
+    base = f"/backup/safety/system/{safety.name}"
+    assert safety.name in client.get("/backup/").get_data(as_text=True)
+
+    r = client.get(base)
+    assert r.status_code == 200 and r.data.startswith(b"SQLite format 3")
+
+    r = client.post(base + "/restore")
+    assert "/login?restored=1" in r.headers["Location"]
+    client = ui_client(app)
+    # Η επαναφορά κράτησε ΝΕΟ αντίγραφο· το αρχικό μένει.
+    assert len(list(safety.parent.glob("before-restore-*.db"))) == 2
+
+    r = client.post(base + "/delete")
+    assert r.status_code == 302 and not safety.exists()
+    assert client.get(base).status_code == 404
+
+    # Μόνο αρχεία αντιγράφων, μόνο μέσα στο backups/.
+    assert client.get("/backup/safety/system/..%2F..%2Fsecret.key").status_code == 404
+    assert client.get("/backup/safety/..%2F..%2Fsecret.key").status_code == 404
+    assert client.get("/backup/safety/nope/before-restore-x.db").status_code == 404
+    assert client.post("/backup/safety/system/secret.key/delete").status_code == 404

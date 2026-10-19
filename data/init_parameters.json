@@ -1,8 +1,10 @@
 {
   "schema": "misevent.parameters",
   "version": 1,
+  "exported_at": "2026-10-19",
   "families": {
     "minimum_wage": {
+      "source": "events",
       "entries": [
         {
           "valid_from": "2024-04-01",
@@ -31,6 +33,7 @@
       ]
     },
     "efka": {
+      "source": "events",
       "entries": [
         {
           "valid_from": "2025-01-01",
@@ -42,6 +45,7 @@
       ]
     },
     "tax": {
+      "source": "events",
       "entries": [
         {
           "valid_from": "2025-01-01",
@@ -49,19 +53,19 @@
           "model": "standard",
           "brackets": [
             {
-              "up_to": 10000,
+              "up_to": 10000.0,
               "rate": 0.09
             },
             {
-              "up_to": 20000,
+              "up_to": 20000.0,
               "rate": 0.22
             },
             {
-              "up_to": 30000,
+              "up_to": 30000.0,
               "rate": 0.28
             },
             {
-              "up_to": 40000,
+              "up_to": 40000.0,
               "rate": 0.36
             },
             {
@@ -87,23 +91,23 @@
           "model": "youth2026",
           "brackets": [
             {
-              "up_to": 10000,
+              "up_to": 10000.0,
               "rate": 0.09
             },
             {
-              "up_to": 20000,
+              "up_to": 20000.0,
               "rate": 0.2
             },
             {
-              "up_to": 30000,
+              "up_to": 30000.0,
               "rate": 0.26
             },
             {
-              "up_to": 40000,
+              "up_to": 40000.0,
               "rate": 0.34
             },
             {
-              "up_to": 60000,
+              "up_to": 60000.0,
               "rate": 0.39
             },
             {
@@ -156,6 +160,7 @@
       ]
     },
     "sick_leave": {
+      "source": "events",
       "entries": [
         {
           "valid_from": "2024-01-01",
@@ -169,6 +174,7 @@
       ]
     },
     "allowance": {
+      "source": "events",
       "entries": [
         {
           "valid_from": "2024-01-01",
@@ -184,6 +190,7 @@
       ]
     },
     "severance": {
+      "source": "events",
       "entries": [
         {
           "valid_from": "2022-01-01",
@@ -257,6 +264,7 @@
       ]
     },
     "work_hours": {
+      "source": "events",
       "entries": [
         {
           "valid_from": "2024-01-01",
@@ -291,7 +299,8 @@
       ],
       "extension": {
         "allowed": false
-      }
+      },
+      "overridden": true
     },
     {
       "code": "MONTHLY_PAYROLL",
@@ -301,7 +310,8 @@
       ],
       "extension": {
         "allowed": false
-      }
+      },
+      "overridden": false
     },
     {
       "code": "SALARY_PAYMENT",
@@ -311,7 +321,8 @@
       ],
       "extension": {
         "allowed": false
-      }
+      },
+      "overridden": false
     },
     {
       "code": "APD_SUBMISSION",
@@ -321,7 +332,8 @@
       ],
       "extension": {
         "allowed": false
-      }
+      },
+      "overridden": false
     },
     {
       "code": "EFKA_PAYMENT",
@@ -331,7 +343,8 @@
       ],
       "extension": {
         "allowed": false
-      }
+      },
+      "overridden": false
     },
     {
       "code": "APD_TEKA_SUBMISSION",
@@ -341,7 +354,8 @@
       ],
       "extension": {
         "allowed": false
-      }
+      },
+      "overridden": false
     },
     {
       "code": "TEKA_PAYMENT",
@@ -351,7 +365,8 @@
       ],
       "extension": {
         "allowed": false
-      }
+      },
+      "overridden": false
     },
     {
       "code": "FMY_SUBMISSION",
@@ -361,7 +376,8 @@
       ],
       "extension": {
         "allowed": false
-      }
+      },
+      "overridden": false
     },
     {
       "code": "FMY_PAYMENT",
@@ -371,7 +387,8 @@
       ],
       "extension": {
         "allowed": false
-      }
+      },
+      "overridden": false
     },
     {
       "code": "EASTER_GIFT",
@@ -381,7 +398,8 @@
       ],
       "extension": {
         "allowed": false
-      }
+      },
+      "overridden": false
     },
     {
       "code": "CHRISTMAS_GIFT",
@@ -392,7 +410,8 @@
       ],
       "extension": {
         "allowed": false
-      }
+      },
+      "overridden": false
     },
     {
       "code": "LEAVE_ALLOWANCE",
@@ -404,7 +423,8 @@
         "allowed": true,
         "max_days": 365,
         "within_period_year": true
-      }
+      },
+      "overridden": false
     },
     {
       "code": "WAGE_ADJUSTMENT",
@@ -414,7 +434,8 @@
       ],
       "extension": {
         "allowed": false
-      }
+      },
+      "overridden": false
     },
     {
       "code": "EASTER_GIFT_PAYMENT",
@@ -423,7 +444,8 @@
       ],
       "extension": {
         "allowed": false
-      }
+      },
+      "overridden": false
     },
     {
       "code": "CHRISTMAS_GIFT_PAYMENT",
@@ -432,7 +454,8 @@
       ],
       "extension": {
         "allowed": false
-      }
+      },
+      "overridden": false
     },
     {
       "code": "LEAVE_ALLOWANCE_PAYMENT",
@@ -441,9 +464,16 @@
       ],
       "extension": {
         "allowed": false
-      }
+      },
+      "overridden": false
     }
   ],
+  "misc": {
+    "save_zip": false,
+    "show_employer_cost": true,
+    "keep_wage_excess": false,
+    "auto_payments": false
+  },
   "kpks": [
     {
       "carrier": "efka",
@@ -551,6 +581,24 @@
       ]
     },
     {
+      "carrier": "efka",
+      "kpk": "0107",
+      "name": "ΙΚΑ ΒΑΡΕΑ (Κύρια)",
+      "tier": "main",
+      "rates": [
+        {
+          "valid_from": "2025-01-01",
+          "employee": 0.1447,
+          "employer": 0.2304
+        },
+        {
+          "valid_from": "2026-01-01",
+          "employee": 0.1447,
+          "employer": 0.2304
+        }
+      ]
+    },
+    {
       "carrier": "teka",
       "kpk": "4169",
       "name": "ΤΕΚΑ Επικουρική",
@@ -578,12 +626,12 @@
       "rates": [
         {
           "valid_from": "2013-12-01",
-          "employee": 0.04,
+          "employee": 0.004,
           "employer": 0.0,
           "components": [
             {
               "branch": "welfare",
-              "employee": 0.04,
+              "employee": 0.004,
               "employer": 0.0
             }
           ]
@@ -598,13 +646,13 @@
       "rates": [
         {
           "valid_from": "2013-12-01",
-          "employee": 0.04,
-          "employer": 0.04,
+          "employee": 0.004,
+          "employer": 0.004,
           "components": [
             {
               "branch": "welfare",
-              "employee": 0.04,
-              "employer": 0.04
+              "employee": 0.004,
+              "employer": 0.004
             }
           ]
         }

@@ -30,4 +30,40 @@
     Το restore δεν ανακαλεί εξωτερικές υποβολές ή πληρωμές.
   </div>
 </div>
+
+<div class="card">
+  <h2>Αυτόματα αντίγραφα
+    <span class="norm">— η κατάσταση πριν από κάθε restore</span></h2>
+  {% if safety_files %}
+  <table>
+    <thead><tr><th>Ημερομηνία</th><th>Τι περιέχει</th><th>Μέγεθος</th><th></th></tr></thead>
+    <tbody>
+    {% for f in safety_files %}
+      <tr>
+        <td class="mono">{{ f.when.strftime('%d/%m/%Y %H:%M:%S') }}</td>
+        <td>{{ f.label }}</td>
+        <td class="mono">{{ '%.1f'|format(f.size / 1024) }} KB</td>
+        <td class="btnrow">
+          <a class="ghost" href="{{ url_for('backup.safety_download', scope=f.scope, name=f.name) }}">⬇ Λήψη</a>
+          {% if f.system %}
+          <form method="post" action="{{ url_for('backup.safety_restore', scope=f.scope, name=f.name) }}"
+                onsubmit="return confirm('Να αντικατασταθούν ΟΛΑ τα δεδομένα από αυτό το αντίγραφο; Θα κρατηθεί αντίγραφο της τρέχουσας κατάστασης και θα χρειαστεί νέα σύνδεση.');">
+            <button class="ghost" type="submit">⬆ Επαναφορά</button>
+          </form>
+          {% endif %}
+          <form method="post" action="{{ url_for('backup.safety_delete', scope=f.scope, name=f.name) }}"
+                onsubmit="return confirm('Να διαγραφεί οριστικά αυτό το αντίγραφο;');">
+            <button class="run danger" type="submit">🗑 Διαγραφή</button>
+          </form>
+        </td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  <div class="muted backup-note">Τα αντίγραφα μιας εταιρείας (.json) επαναφέρονται
+    από το Audit log της εταιρείας: Λήψη εδώ → «Restore events» εκεί.</div>
+  {% else %}
+  <div class="muted">Κανένα αυτόματο αντίγραφο.</div>
+  {% endif %}
+</div>
 {% endblock %}

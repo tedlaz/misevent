@@ -200,7 +200,11 @@ class ApdMixin:
             has_teka = any(config.fund_apd(c["fund"]) == "teka" for c in extra_covs)
             # No 36 της ΚΥΡΙΑΣ εγγραφής από το δηλωτικό μητρώο κανόνων:
             # ΤΕΚΑ επικουρική -> 09, πρόσθετη πρόνοια μέσα στον e-ΕΦΚΑ -> 10.
+            # Ο κανόνας (ΤΕΚΑ 09, πρόνοια ΕΦΚΑ 10) πρώτα· αλλιώς ό,τι κράτησε το
+            # πακέτο από τον Ο.Σ.Υ.Κ. (ΕΦΚΑ σε συνδυασμό χωρίς επικουρική -> 10).
             special_case = config.insurance_special_case(extra_covs)
+            if special_case == "00":
+                special_case = main_cov.get("special_case") or "00"
             info = InsuredInfo(
                 ama=emp.ama,
                 amka=emp.amka,

@@ -29,14 +29,15 @@ class EntitlementsMixin:
 
         Πηγή αλήθειας: οι **ημέρες ΕΦΚΑ** του εγκεκριμένου συγκεντρωτικού.
         Ο μισθωτός πληρώνεται `μισθός x ημέρες ΕΦΚΑ / συμβατική βάση` (25 σε
-        πλήρη απασχόληση, ο τύπος του `pe.monthly_insurance_days` σε μερική),
+        πλήρη απασχόληση, οι ημέρες προγράμματος του μήνα σε μερική —
+        `pe.monthly_insurance_days`),
         ο ημερομίσθιος `ημερομίσθιο x ημέρες ΕΦΚΑ`.
 
         """
         efka = int(line["efka_days"])
         if emp.pay_type == "daily":
             return 0, efka
-        base = pe.monthly_insurance_days(emp.weekly_hours)
+        base = pe.monthly_insurance_days(emp.weekly_hours, line.get("month_planned"))
         return max(base - efka, 0), efka
 
     @staticmethod

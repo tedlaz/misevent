@@ -119,7 +119,7 @@
                 {%- if b -%}
                   {{ b.base_formula }}
                   {%- if b.kind == 'monthly' %} · ημερήσιο: {{ b.daily_formula }}
-                    ({{ b.base_days }} συμβατικές ημέρες ΕΦΚΑ
+                    ({{ b.base_days }} ημέρες ΕΦΚΑ πλήρους μήνα
                     {{- ' — μερική απασχόληση' if not b.full_time }}){% endif -%}
                 {%- else -%}
                   μισθός/ημερομίσθιο × ημέρες, μείον άνευ αποδοχών

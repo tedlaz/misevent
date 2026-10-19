@@ -1,0 +1,72 @@
+{# ③ Κωδικοί πρόνοιας (id="spec-pron-codes"), μέσα στο `.pron-sec` του modal.
+
+   Η πρόνοια (κατά κανόνα στον ΕΦΚΑ) έχει ΔΙΚΗ της γραμμή στην ΑΠΔ: ΕΝΑ ΚΑΔ
+   για την ειδικότητα, και ΕΙΔ + ΚΠΚ ανά κατηγορία — ΝΕΟΙ/ΠΑΛΑΙΟΙ όταν είναι
+   διαφοροποιημένη (ο ΚΑΔ ίδιος, αλλάζουν ΕΙΔ και ΚΠΚ), αλλιώς ενιαία.
+   Π.χ. ΤΑΠΙΤ: 0013 · νέοι 000106/024 · παλαιοί 000108/026 (Ο.Σ.Υ.Κ.).
+   Επιλογή ειδικότητας προεπιλέγει το ΚΠΚ του συνδυασμού, αν υπάρχει στο
+   Μητρώο ΚΠΚ. Το CSS του `.pron-sec` κρύβει τις γραμμές που δεν ισχύουν. #}
+{% set f = form or {} %}
+{% set any_pkg = (sp.package('PRON_NEW') or sp.package('PRON_OLD') or sp.package('PRON_UNIFORM')) if sp else None %}
+{% set kad_val = f.get('pron_kad', any_pkg.kad if any_pkg else '') %}
+{% set eids = kpkreg.specialties_for(kad_val) if kad_val else [] %}
+{% set options = kpks_by_tier['welfare'] %}
+{% set known = options|map(attribute='kpk')|list %}
+{% set refresh %}hx-get="{{ url_for('company.specialty_pron') }}"
+  hx-include="[name='pron_kad'],[name^='PRON_']"
+  hx-target="#spec-pron-codes" hx-swap="outerHTML"{% endset %}
+{% macro pron_row(role, title, f, kad_val, eids, options, known, refresh) %}
+  {% set pkg = sp.package(role) if sp else None %}
+  {% set code_val = f.get(role ~ '_code', pkg.specialty_code if pkg else '') %}
+  {% set sugg = kpkreg.combination_kpks(kad_val, code_val) %}
+  {% set kpk_val = f.get(role ~ '_kpk') if form else (pkg.kpk if pkg else '') %}
+  {% set kpk_val = kpk_val or (sugg|select('in', known)|first) or '' %}
+  <div class="opt sel"><div class="alt-h">{{ title }}</div>
+  <div class="frm cols pkg-row">
+    <label class="wide">Ειδικότητα
+      <input name="{{ role }}_code" maxlength="6" class="mono" list="eid-list-pron"
+        autocomplete="off" value="{{ code_val }}" {{ refresh }}
+        placeholder="{{ 'κωδικός ή λέξη…' if eids else 'πρώτα ΚΑΔ πρόνοιας' }}">
+      <span class="muted" style="font-size:11.5px">{% if code_val %}{{
+        kpkreg.eid_description(code_val) if code_val in eids|map(attribute='code')
+        else 'Η ειδικότητα δεν ισχύει για αυτό το ΚΑΔ' }}{% endif %}</span>
+    </label>
+    <label>ΚΠΚ · {{ config.TIERS['welfare'] }}
+      <select name="{{ role }}_kpk">
+        <option value="">— επιλογή ΚΠΚ —</option>
+        {% for k in options %}
+          <option value="{{ k.kpk }}" {{ 'selected' if kpk_val == k.kpk }}>
+            {{ config.CARRIERS[k.carrier] }} · {{ k.kpk }} — {{ k.name }}</option>
+        {% endfor %}
+      </select>
+      {% if sugg %}
+        <span class="muted" style="font-size:11.5px">Κατά τον Ο.Σ.Υ.Κ.: ΚΠΚ
+          {% for k in sugg %}<b class="mono">{{ k }}</b>{{ '' if k in known else '*' }}{{ ', ' if not loop.last }}{% endfor %}
+          {% if sugg|reject('in', known)|list %}<br>* δεν υπάρχει στο Μητρώο ΚΠΚ{% endif %}</span>
+      {% endif %}
+    </label>
+  </div></div>
+{% endmacro %}
+<div id="spec-pron-codes">
+  <div class="frm cols">
+    <label>ΚΑΔ πρόνοιας
+      <input name="pron_kad" maxlength="4" class="mono" list="kpk-kad-list"
+        autocomplete="off" placeholder="π.χ. 0013" value="{{ kad_val }}" {{ refresh }}>
+      <span class="muted" style="font-size:11.5px">{{ kpkreg.kad_description(kad_val)
+        or ('Ο ΚΑΔ δεν υπάρχει στον Ο.Σ.Υ.Κ.' if kad_val else '') }}</span>
+    </label>
+  </div>
+  <datalist id="eid-list-pron">
+    {% for e in eids %}
+      <option value="{{ e.code }}">{{ e.code }} — {{ e.description }}</option>
+    {% endfor %}
+  </datalist>
+  <div class="pron-diff">
+    {{ pron_row('PRON_NEW', 'Πρόνοια Νέοι', f, kad_val, eids, options, known, refresh) }}
+    <div class="alt-or">ή</div>
+    {{ pron_row('PRON_OLD', 'Πρόνοια Παλαιοί', f, kad_val, eids, options, known, refresh) }}
+  </div>
+  <div class="pron-uniform">
+    {{ pron_row('PRON_UNIFORM', 'Πρόνοια ενιαία (όλοι)', f, kad_val, eids, options, known, refresh) }}
+  </div>
+</div>

@@ -176,20 +176,19 @@ def test_webapp(fresh_system):
           c.get("/company/specialties/modal?name=ΠΩΛΗΤΗΣ"), "PRON_NEW_kpk")
     r = c.post("/company/specialties", data={
         "name": "ΠΩΛΗΤΗΣ", "epik_carriers": ["efka", "teka"],
-        "MAIN_EPIK_kad": "5510", "MAIN_EPIK_code": "411200", "MAIN_EPIK_kpk": "0101",
-        "MAIN_kad": "5510", "MAIN_code": "411200", "MAIN_kpk": "0103",
-        # ΚΑΔ/ειδικότητα σε ΚΑΘΕ ρόλο — το ΚΠΚ δεν κουβαλά πια κωδικούς
-        "TEKA_kad": "0083", "TEKA_code": "000860", "TEKA_kpk": "4169",
+        # ΕΝΑ ΚΑΔ/ΕΙΔ κύριας για τις δύο εναλλακτικές· το ΤΕΚΑ είναι σταθερό
+        "main_kad": "0141", "main_code": "411200",
+        "MAIN_EPIK_kpk": "0101", "MAIN_kpk": "0103",
         "pron_enabled": "on", "pron_name": "ΤΑΠΙΤ", "pron_differentiated": "on",
-        "PRON_NEW_kad": "0013", "PRON_NEW_code": "000108",
-        "PRON_OLD_kad": "0013", "PRON_OLD_code": "000108",
-        "PRON_NEW_kpk": "0026", "PRON_OLD_kpk": "0026",
+        # Πρόνοια: ΕΝΑ ΚΑΔ, ΕΙΔ + ΚΠΚ ανά νέους/παλαιούς (Ο.Σ.Υ.Κ.)
+        "pron_kad": "0013", "PRON_NEW_code": "000106", "PRON_OLD_code": "000108",
+        "PRON_NEW_kpk": "0024", "PRON_OLD_kpk": "0026",
     })
     check("ειδικότητα με πρόνοια", r, "ΤΑΠΙΤ")
     # Ο ρόλος δέχεται ΜΟΝΟ ΚΠΚ της βαθμίδας του (0103 = κύρια, όχι κύρια+επικ.)
     r = c.post("/company/specialties", data={
         "name": "ΛΑΘΟΣ ΒΑΘΜΙΔΑ", "epik_carriers": ["efka"],
-        "MAIN_EPIK_kad": "5510", "MAIN_EPIK_code": "411200", "MAIN_EPIK_kpk": "0103",
+        "main_kad": "0141", "main_code": "411200", "MAIN_EPIK_kpk": "0103",
     })
     _msg = json.loads(r.headers.get("HX-Trigger", "{}")).get("flash", {}).get("msg", "")
     ok = "βαθμίδας" in _msg and "ΛΑΘΟΣ ΒΑΘΜΙΔΑ" not in proj.specialties

@@ -51,7 +51,11 @@
     <span><i class="work-key pending"></i>Αδήλωτο</span>
     <span><i class="work-key closed"></i>Κλεισμένη μισθοδοσία</span>
     <span><i class="work-key contract-end"></i>Λήξη σύμβασης ορισμένου χρόνου</span>
-    <small>Κλικ σε εβδομάδα = zoom · Ctrl/Shift + κλικ σε εβδομάδα = επιλογή για υποβολή</small>
+    <span class="leave-accrual-key" title="Προβλεπόμενο υπόλοιπο κανονικής άδειας στο τέλος κάθε μήνα">
+      <i></i> Μηνιαίο υπόλοιπο δικαιώματος
+    </span>
+    <small>Κλικ σε εβδομάδα = zoom · Ctrl/Shift + κλικ σε εβδομάδα = επιλογή για υποβολή
+      · Ctrl/Shift + κλικ σε ημέρες → «Άδεια…» = νέα άδεια · κλικ σε ημέρα άδειας = επεξεργασία</small>
   </div>
 
   {% if next_week %}
@@ -114,6 +118,12 @@
                   · Σύμβαση έως {{ row.employment.fixed_term_to|date_gr }}
                 {%- endif %}
                 {%- if row.telework_days %} · {{ row.telework_days }} τηλ.{% endif %}</small>
+              <div class="leave-balance-summary tone-{{ row.accrual.tone }}"
+                   title="Κανονική άδεια έως {{ row.accrual.reference_date|date_gr }}">
+                <span><em>Δικαίωμα</em><strong>{{ row.accrual.accrued }}</strong></span>
+                <span><em>Άδειες</em><strong>{{ row.accrual.taken }}</strong></span>
+                <span><em>Υπόλοιπο</em><strong>{{ row.accrual.balance }}</strong></span>
+              </div>
             </a>
             {% if row.pending_count or row.modified_count %}
               <button class="work-erg-btn" type="button"
@@ -132,6 +142,7 @@
                data-work-track
                data-employment-id="{{ row.employment.employment_id }}"
                data-modal-url="{{ url_for('work_schedules.day_modal', employment_id=row.employment.employment_id) }}"
+               data-leave-url="{{ url_for('leaves.new_leave_modal', employment_id=row.employment.employment_id) }}"
                data-active-from="{{ row.employment.hire_date.isoformat() if row.employment.hire_date else '' }}"
                data-active-to="{{ row.employment.termination_date.isoformat() if row.employment.termination_date else '' }}">
             {% for cell in row.cells %}
@@ -150,6 +161,7 @@
                    data-day-index="{{ cell.index }}"
                    data-active="{{ 1 if cell.active else 0 }}"
                    data-closed="{{ 1 if cell.closed else 0 }}"
+                   {% if cell.leave %}data-leave-modal-url="{{ url_for('leaves.leave_modal', employment_id=row.employment.employment_id, leave_id=cell.leave.leave_id, year=year, back='work') }}"{% endif %}
                    aria-label="{{ cell.title }}" title="Κλικ: {{ cell.title }}">
                 {% if cell.active %}
                   <span class="work-day-mark" aria-hidden="true"></span>
@@ -159,6 +171,17 @@
                 {% endif %}
               </div>
             {% endfor %}
+            {# Υπόλοιπο κανονικής άδειας ανά μήνα — όπως στο πλάνο αδειών #}
+            <div class="leave-accrual-strip" aria-label="Προβλεπόμενο υπόλοιπο κανονικής άδειας ανά μήνα">
+              {% for point in row.accrual.months %}
+                <div class="leave-accrual-month tone-{{ point.tone }}"
+                     style="flex:{{ point.days }} 0 0"
+                     title="{{ month_names[point.month-1] }} · Δικαίωμα {{ point.accrued }} · Άδειες {{ point.taken }} · Υπόλοιπο {{ point.balance }}">
+                  <i aria-hidden="true"></i>
+                  <span>{{ point.balance if point.active else '—' }}</span>
+                </div>
+              {% endfor %}
+            </div>
           </div>
         </div>
       {% else %}

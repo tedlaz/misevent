@@ -93,7 +93,7 @@ def test_old_and_new_tapit_select_their_configured_welfare_package():
     ]
     rates = svc.contribution_rates(proj.employments[eid].insurance_profile,
                                    date(2026, 1, 31))
-    assert (rates.employee, rates.employer) == pytest.approx((0.1737, 0.2579))
+    assert (rates.employee, rates.employer) == pytest.approx((0.1377, 0.2219))
 
     svc.approve_attendance(2026, 1)
     svc.run_monthly_payroll(2026, 1)
@@ -115,7 +115,7 @@ def test_old_and_new_tapit_select_their_configured_welfare_package():
         ("efka_main", "0101"), ("efka_welfare", "0024")
     ]
     new_rates = svc.contribution_rates(new_profile, date(2026, 1, 31))
-    assert (new_rates.employee, new_rates.employer) == pytest.approx((0.1737, 0.2179))
+    assert (new_rates.employee, new_rates.employer) == pytest.approx((0.1377, 0.2179))
 
 
 def test_component_totals_are_preserved():
@@ -187,7 +187,7 @@ def test_preview_lines_match_what_is_assigned():
     assert [(line["fund"], line["kpk"]) for line in preview["lines"]] == [
         ("efka_main", "0103"), ("teka", "4169"), ("efka_welfare", "0026")
     ]
-    assert preview["employee"] == pytest.approx(0.1737)
+    assert preview["employee"] == pytest.approx(0.1377)
     # ΚΑΔ/ειδικότητα επικουρικής/πρόνοιας ΑΠΟ ΤΟ ΚΠΚ (μία πηγή αλήθειας)
     teka_line = preview["lines"][1]
     assert (teka_line["kad"], teka_line["specialty_code"]) == ("0083", "000860")

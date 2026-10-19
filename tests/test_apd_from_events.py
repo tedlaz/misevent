@@ -57,9 +57,9 @@ def setup(monthly_gross=1500.0, hire=date(2026, 1, 5), teka=False):
                          "auxiliary=3/3")
     svc.define_specialty(
         "ΥΠΑΛΛΗΛΟΣ ΓΡΑΦΕΙΟΥ",
-        {"MAIN_EPIK": {"kad": "5510", "specialty_code": "411100",
+        {"MAIN_EPIK": {"kad": "0141", "specialty_code": "411100",
                        "kpk": "0101"},
-         "MAIN": {"kad": "5510", "specialty_code": "411100", "kpk": "0103"},
+         "MAIN": {"kad": "0141", "specialty_code": "411100", "kpk": "0103"},
          "TEKA": {"kad": "0083", "specialty_code": "000860", "kpk": "4169"}},
     )
     pid = svc.register_person(

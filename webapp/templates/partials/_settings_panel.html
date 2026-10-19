@@ -260,6 +260,15 @@
           μισθό. Αν ξετσεκαριστεί: <b>συμψηφισμός</b> (η διαφορά απορροφά την
           αύξηση· προεπιλογή)</span>
       </label>
+      <label class="chk">
+        <input type="checkbox" name="auto_payments" value="1"
+               {{ 'checked' if misc.auto_payments }}>
+        <b>Αυτόματη εξόφληση πληρωμών</b> — δεν εμφανίζονται στο χρονολόγιο
+        υποχρεώσεων
+        <span class="muted" style="font-size:12.5px">— κάθε πληρωμή (μισθοί,
+          εισφορές, ΦΜΥ, Δώρα) εξοφλείται μόλις ολοκληρωθεί το προαπαιτούμενό
+          της. Προεπιλογή: εμφανίζονται και εξοφλούνται χειροκίνητα</span>
+      </label>
       <div class="btnrow" style="margin-top:10px">
         <button class="run" type="submit">Αποθήκευση προτιμήσεων</button>
       </div>

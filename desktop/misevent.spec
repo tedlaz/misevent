@@ -17,6 +17,7 @@ datas = [
     (r("fonts"), "fonts"),
     (r("data/init_parameters.json"), "data"),
     (r("misevent/integrations/ergani_parameters.db"), "misevent/integrations"),
+    (r("misevent/integrations/osyk_29.zip"), "misevent/integrations"),
 ]
 
 a = Analysis(

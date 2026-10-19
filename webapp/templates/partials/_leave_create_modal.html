@@ -1,11 +1,11 @@
 {% set f = form or {} %}
 <div class="modal-backdrop">
   <div class="modal">
-    <form hx-post="{{ url_for('leaves.create_leave', employment_id=e.employment_id, year=year) }}"
-          hx-target="#leave-planner-panel" hx-swap="outerHTML">
+    <form hx-post="{{ url_for('leaves.create_leave', employment_id=e.employment_id, year=year, back=back or None) }}"
+          hx-target="{{ '#work-schedule-panel' if back else '#leave-planner-panel' }}" hx-swap="outerHTML">
       <div class="mhead">
         <h3>🏖️ Νέα άδεια — {{ e.full_name }}</h3>
-        <span class="muted" style="font-size:12.5px">Η ημέρα επιλέχθηκε από το ετήσιο πλάνο</span>
+        <span class="muted" style="font-size:12.5px">{{ 'Οι ημέρες επιλέχθηκαν από το πρόγραμμα εργασίας' if back else 'Η ημέρα επιλέχθηκε από το ετήσιο πλάνο' }}</span>
       </div>
       <div class="mbody">
         <div class="frm cols">
@@ -22,7 +22,7 @@
           <div class="leave-range wide" data-leave-range>
             <span class="leave-range-label">Περίοδος άδειας</span>
             <input type="hidden" name="date_from" value="{{ f.get('date_from', selected_date.isoformat()) }}">
-            <input type="hidden" name="date_to" value="{{ f.get('date_to', selected_date.isoformat()) }}">
+            <input type="hidden" name="date_to" value="{{ f.get('date_to', (selected_to or selected_date).isoformat()) }}">
             <button type="button" class="leave-range-trigger" aria-haspopup="dialog" aria-expanded="false">
               <span class="leave-range-value"></span><span class="leave-range-icon" aria-hidden="true">📅</span>
             </button>

@@ -6,7 +6,7 @@ from io import BytesIO
 
 from flask import Blueprint, abort, render_template, request, send_file
 
-from misevent.integrations import ergani_parameters
+from misevent.integrations import ergani_parameters, kpk_registry
 from misevent.rules import config
 from misevent.rules.constraints import norm_name
 
@@ -303,9 +303,10 @@ def ergani_specialty_pick():
 
 
 def _form_packages(f):
-    """Τα πακέτα της φόρμας ειδικότητας, ΑΝΑ ΡΟΛΟ. Τα ΚΑΔ/ειδικότητα
-    στέλνονται μόνο για τους ρόλους κύριας ασφάλισης — στους υπόλοιπους τα
-    αγνοεί ούτως ή άλλως η υπηρεσία (ζουν στο ΚΠΚ).
+    """Τα πακέτα της φόρμας ειδικότητας, ΑΝΑ ΡΟΛΟ. Η φόρμα έχει ΕΝΑ ΚΑΔ +
+    ΜΙΑ ειδικότητα κύριας (`main_*`, κοινά στους δύο κύριους ρόλους) και ΕΝΑ
+    ΚΑΔ πρόνοιας (`pron_kad`, κοινό στους ρόλους πρόνοιας)· το ΤΕΚΑ είναι
+    σταθερό (το βάζει η υπηρεσία).
 
     ➜ Οι ρόλοι πρόνοιας που η φόρμα ΚΡΥΒΕΙ (βλ. `.pron-sec` στο app.css)
     αγνοούνται: ένα κρυμμένο `<select>` εξακολουθεί να υποβάλλεται, οπότε μια
@@ -314,15 +315,20 @@ def _form_packages(f):
     hidden = {"PRON_UNIFORM"} if f.get("pron_differentiated") else {
         "PRON_NEW", "PRON_OLD"
     }
-    return {
-        role: {
+    out = {}
+    for role, spec_role in config.SPECIALTY_ROLES.items():
+        if role in hidden or role == "TEKA":
+            continue
+        if spec_role.tier == "welfare":
+            kad, code = f.get("pron_kad", ""), f.get(f"{role}_code", "")
+        else:
+            kad, code = f.get("main_kad", ""), f.get("main_code", "")
+        out[role] = {
             "kpk": f.get(f"{role}_kpk", "").strip(),
-            "kad": f.get(f"{role}_kad", "").strip(),
-            "specialty_code": f.get(f"{role}_code", "").strip(),
+            "kad": kad.strip(),
+            "specialty_code": code.strip(),
         }
-        for role in config.SPECIALTY_ROLES
-        if role not in hidden
-    }
+    return out
 
 
 def _form_pron(f):
@@ -343,7 +349,29 @@ def _specialty_ctx(name=None, form=None):
         "config": config,
         # Τα dropdowns κάθε ρόλου δείχνουν ΜΟΝΟ ΚΠΚ της βαθμίδας του.
         "kpks_by_tier": {t: svc.kpks_by_tier(t) for t in config.TIERS},
+        "kpkreg": kpk_registry,
     }
+
+
+@bp.get("/specialties/main")
+def specialty_main():
+    """Το μπλοκ κύριας/επικουρικής, μετά από αλλαγή ΚΑΔ, ειδικότητας ή
+    πρόνοιας: τα ΚΠΚ πετιούνται ώστε να ξαναπροταθούν (Ο.Σ.Υ.Κ.)."""
+    form = request.args.copy()
+    for role in ("MAIN_EPIK", "MAIN"):
+        form.pop(f"{role}_kpk", None)
+    return render_template("partials/_specialty_main.html", **_specialty_ctx(form=form))
+
+
+@bp.get("/specialties/pron")
+def specialty_pron():
+    """Οι κωδικοί πρόνοιας, μετά από αλλαγή ΚΑΔ ή ειδικότητας πρόνοιας."""
+    form = request.args.copy()
+    trigger = request.headers.get("HX-Trigger-Name", "")
+    for role in ("PRON_NEW", "PRON_OLD", "PRON_UNIFORM"):
+        if trigger in ("pron_kad", f"{role}_code"):
+            form.pop(f"{role}_kpk", None)
+    return render_template("partials/_specialty_pron.html", **_specialty_ctx(form=form))
 
 
 @bp.post("/specialties")

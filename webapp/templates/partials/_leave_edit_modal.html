@@ -1,8 +1,8 @@
 {% set f = form or {} %}
 <div class="modal-backdrop">
   <div class="modal">
-    <form hx-post="{{ url_for('leaves.update_leave', employment_id=e.employment_id, leave_id=lv.leave_id, year=year) }}"
-          hx-target="#leave-planner-panel" hx-swap="outerHTML">
+    <form hx-post="{{ url_for('leaves.update_leave', employment_id=e.employment_id, leave_id=lv.leave_id, year=year, back=back or None) }}"
+          hx-target="{{ '#work-schedule-panel' if back else '#leave-planner-panel' }}" hx-swap="outerHTML">
       <div class="mhead">
         <h3>🏖️ Άδεια — {{ e.full_name }}</h3>
         <span class="muted" style="font-size:12.5px">Επεξεργασία τύπου και περιόδου</span>

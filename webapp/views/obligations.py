@@ -43,7 +43,11 @@ def _panel(selected: str | None, ref, show_locked: bool = False, view: str = "ac
         "view": view,
         "views": VIEWS,
         # Οι στήλες έρχονται από το ΜΗΤΡΩΟ τύπων (obligation_types.TRACKS)
-        "tracks": TRACKS,
+        # (χωρίς τη στήλη «Πληρωμές» όταν εξοφλούνται αυτόματα)
+        "tracks": [
+            t for t in TRACKS
+            if not (t[0] == "payment" and proj.misc_settings.get("auto_payments"))
+        ],
         "detail": q.detail_payload(selected, ref) if selected else None,
     }
 

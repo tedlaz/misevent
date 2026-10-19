@@ -139,15 +139,15 @@ def test_sheet_hours_and_payroll_analysis():
     print("OK ώρες στο φύλλο + ανάλυση στη μισθοδοσία, μετά από replay")
 
 def test_part_time_efka_days():
-    """Μερική απασχόληση μισθωτού: οι ημέρες ΕΦΚΑ βγαίνουν από τον τύπο
-    ⌈συμβατικές ώρες/6,66⌉ x 4,33 (ΟΧΙ από τις πραγματικές παρουσίες),
-    και πλήρης μήνας = πλήρης συμφωνημένος μισθός."""
+    """Μερική απασχόληση μισθωτού: ημέρες ΕΦΚΑ = ημέρες εργασίας του μήνα
+    κατά το πρόγραμμα (Εγκ. e-ΕΦΚΑ 13/2023), cap 25, και πλήρης μήνας =
+    πλήρης συμφωνημένος μισθός."""
     from misevent.domain import payroll_engine as pe
 
-    assert pe.monthly_insurance_days(40.0) == 25
-    assert pe.monthly_insurance_days(20.0) == 13  # 3 ημέρες/εβδ x 4,33
-    assert pe.monthly_insurance_days(24.0) == 17  # 4 ημέρες/εβδ x 4,33
-    assert pe.monthly_insurance_days(30.0) == 22  # 5 ημέρες/εβδ x 4,33
+    assert pe.monthly_insurance_days(40.0, 23) == 25  # πλήρης: πάντα 25
+    assert pe.monthly_insurance_days(20.0, 22) == 22  # 4ωρο πενθήμερο
+    assert pe.monthly_insurance_days(12.0, 13) == 13  # 4ωρο τριήμερο
+    assert pe.monthly_insurance_days(24.0, 27) == 25  # εξαήμερο: cap 25
 
     store = Database().store("test")
     proj = Projections()
@@ -172,19 +172,19 @@ def test_part_time_efka_days():
         if d.weekday() < 5:
             svc.record_attendance(eid, d, 4, shifts=["09:00-13:00"])
         d += timedelta(days=1)
-    # Το προσχέδιο προτείνει τη συμβατική βάση (13), όχι τις ~23 παρουσίες
+    # Ιούλιος 2026: 23 ημέρες Δευ–Παρ -> 23 ημέρες ΕΦΚΑ
     draft = svc.attendance_draft(2026, 7)[eid]
-    assert draft["efka_days"] == 13, draft["efka_days"]
+    assert draft["efka_days"] == 23, draft["efka_days"]
     svc.approve_attendance(2026, 7)
     res = svc.run_monthly_payroll(2026, 7)
     r = res[0][1]
-    # Πλήρης μήνας: 13/13 ημέρες -> πλήρης μισθός, καμία περικοπή
+    # Πλήρης μήνας: 23/23 ημέρες -> πλήρης μισθός, καμία περικοπή
     assert r.base_gross == 500.0 and r.gross == 500.0
     # Ημερομίσθιο μερικής = ωρομίσθιο x ώρες ημέρας (ΟΧΙ μισθός/25):
     # ωρομίσθιο 500/25x6/20 = 6€ x 4ω = 24€ -> τριήμερο μισό = 12€/ημέρα
     emp = proj.employments[eid]
     assert svc.sick_deduction(emp, {"sick_half": 1}, 2026, 7) == 12.0
-    print("OK μερική 20ω: 13 ημέρες ΕΦΚΑ (στρογγ.άνω(20/6,66)x4,33) και πλήρης μισθός")
+    print("OK μερική 20ω: 23 ημέρες ΕΦΚΑ (ημέρες εργασίας Ιουλίου) και πλήρης μισθός")
 
 
 def test_midmonth_termination_is_paid():

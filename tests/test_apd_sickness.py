@@ -49,7 +49,7 @@ def setup(monthly_gross=1500.0, hire=date(2024, 4, 8)):
     )
     svc.define_specialty(
         "ΥΠΑΛΛΗΛΟΣ ΓΡΑΦΕΙΟΥ",
-        {"MAIN_EPIK": {"kad": "5510", "specialty_code": "411100",
+        {"MAIN_EPIK": {"kad": "0141", "specialty_code": "411100",
                        "kpk": "0101"}},
     )
     pid = svc.register_person(

@@ -701,12 +701,12 @@ def _slip_page(pdf: ReportPDF, r: dict, year: int, month: int,
                      f"{a.get('efka_days', 0)} ημέρες εργασίας")
     else:
         wk = emp.weekly_hours if emp is not None else 40.0
-        bdays = pe.monthly_insurance_days(wk or 40.0)
+        bdays = a.get("base_days") or pe.monthly_insurance_days(wk or 40.0)
         base_note = (f"μισθός {eur(a.get('monthly_gross') or 0)} × "
                      f"{a.get('efka_days', 0)}/{bdays} ημέρες ΕΦΚΑ")
         if (wk or 40) < 40:
-            base_note += (f" — συμβατική βάση μερικής: "
-                          f"στρογγ.άνω({num(wk)}/6,66) × 4,33 = {bdays} ημέρες")
+            base_note += (f" — μερική: {bdays} ημέρες εργασίας του μήνα "
+                          "κατά το πρόγραμμα")
         if a.get("unpaid_days"):
             base_note += f" · {a['unpaid_days']} ημέρες άνευ αποδοχών"
     _line(pdf, "Βασικές αποδοχές περιόδου", base_note,

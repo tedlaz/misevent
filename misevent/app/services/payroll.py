@@ -502,6 +502,9 @@ class PayrollMixin:
         # Κρατήσεις από τα ΚΠΚ των καλύψεων της απασχόλησης (ΕΦΚΑ κύρια
         # + επικουρική + άλλα ταμεία) — βλ. contribution_rates().
         rates = self.contribution_rates(emp.insurance_profile, period_end)
+        base_days = pe.monthly_insurance_days(
+            emp.weekly_hours, line.get("month_planned")
+        )
         if emp.pay_type == "daily":
             res = pe.calc_monthly_daily(
                 emp.daily_wage,
@@ -522,7 +525,7 @@ class PayrollMixin:
                 sick=sick,
                 premiums=premium["total"],
                 rates=rates,
-                base_days=pe.monthly_insurance_days(emp.weekly_hours),
+                base_days=base_days,
                 birth_date=emp.birth_date,
             )
 
@@ -533,6 +536,7 @@ class PayrollMixin:
             "daily_wage": emp.daily_wage,
             "hourly_rate": hourly,
             "efka_days": ins_days,
+            "base_days": base_days,  # ημέρες ΕΦΚΑ πλήρους μήνα (μισθωτός)
             "unpaid_days": unpaid,
             "base_gross": res.base_gross,  # βάση μετά τις άνευ αποδοχών
             "sick_deduction": sick,

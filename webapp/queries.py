@@ -98,6 +98,14 @@ def period_has_employment(y: int, m: int) -> bool:
     return False
 
 
+def hidden_payment(ob) -> bool:
+    """Πληρωμή κρυμμένη από το χρονολόγιο (Διάφορα → `auto_payments`):
+    εξοφλείται αυτόματα, άρα δεν περιμένει ενέργεια του χρήστη."""
+    return bool(proj.misc_settings.get("auto_payments")) and (
+        OB_TRACKS.get(ob.obligation_type) == "payment"
+    )
+
+
 def is_locked(ob, index) -> bool:
     """Κλειδωμένη = έχει ανεκπλήρωτο ΠΡΟΑΠΑΙΤΟΥΜΕΝΟ event.
 
@@ -131,6 +139,8 @@ def obligation_list(ref: date, show_locked: bool = False, view: str = "active"):
         if view == "active" and o.fulfilled:
             continue
         if view == "done" and not o.fulfilled:
+            continue
+        if hidden_payment(o):
             continue
         if not show_locked and is_locked(o, index):
             continue
@@ -170,7 +180,10 @@ def obligation_list(ref: date, show_locked: bool = False, view: str = "active"):
 def locked_count() -> int:
     """Πόσες υποχρεώσεις είναι κρυμμένες γιατί περιμένουν προαπαιτούμενο."""
     index = deps.build_index(proj.obligations.values())
-    return sum(1 for o in proj.obligations.values() if is_locked(o, index))
+    return sum(
+        1 for o in proj.obligations.values()
+        if not hidden_payment(o) and is_locked(o, index)
+    )
 
 
 def status_counts(obs) -> dict:
@@ -488,7 +501,7 @@ def payroll_rows(y: int, m: int, preview: bool):
                                 unpaid_days=unpaid, sick=sick,
                                 premiums=premium, rates=rates,
                                 base_days=pe.monthly_insurance_days(
-                                    e.weekly_hours))
+                                    e.weekly_hours, line.get("month_planned")))
         rows.append(
             {
                 "Εργαζόμενος": e.full_name,
@@ -1382,7 +1395,7 @@ def _base_breakdown(emp, a: dict, on_date):
         })
     else:
         gross = a.get("monthly_gross") or 0.0
-        base_days = pe.monthly_insurance_days(weekly)
+        base_days = a.get("base_days") or pe.monthly_insurance_days(weekly)
         daily = round(gross / base_days, 2) if base_days else 0.0
         d.update({
             "kind": "monthly",
@@ -1803,7 +1816,10 @@ def _forecast_payroll(emp, y: int, m: int) -> tuple[float, float, float]:
     end = last_working_day_of_month(y, m)
     terms = emp.contract_on(end)
     rates = _rates_on(emp, end)
-    base_days = pe.monthly_insurance_days(terms.weekly_hours)
+    base_days = pe.monthly_insurance_days(
+        terms.weekly_hours,
+        len(emp.scheduled_days_in_month(y, m, whole_month=True)),
+    )
     covered = pe._employment_overlap_days(
         emp.hire_date, emp.termination_date, first, last
     )

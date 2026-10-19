@@ -437,6 +437,10 @@ table.tbl a.lnk:hover{border-color:var(--ink)}
 
 /* -------------------------------------------- Ετήσιο πρόγραμμα εργασίας */
 .work-schedule-planner{view-transition-name:work-schedule-panel}
+/* Το view-transition-name κάνει το panel stacking context: το modal που ζει
+   μέσα του (#modal-host) θα έμενε κάτω από τη sticky κεφαλίδα (z-index 5).
+   Όσο είναι ανοιχτό, το panel ανεβαίνει πάνω από αυτήν. */
+.work-schedule-planner:has(.modal-backdrop){position:relative;z-index:31}
 .work-schedule-planner.bulk-swap-smooth .work-row{animation:none}
 ::view-transition-old(work-schedule-panel){animation:work-panel-out .16s ease-in both}
 ::view-transition-new(work-schedule-panel){animation:work-panel-in .22s ease-out both}
@@ -451,7 +455,8 @@ table.tbl a.lnk:hover{border-color:var(--ink)}
 .work-zoom button{min-width:36px;padding-left:10px;padding-right:10px}
 .work-zoom button:disabled{opacity:.35;cursor:not-allowed;transform:none}
 .work-zoom-level{min-width:52px!important;font-family:var(--mono);font-size:12px}
-.work-legend{display:flex;align-items:center;gap:15px;flex-wrap:wrap;padding:0 4px;
+.work-legend{display:flex;align-items:center;gap:10px 15px;flex-wrap:wrap;padding:0 4px;
+  margin:12px 0 14px;
   color:var(--muted);font-size:11.5px}.work-legend span{display:flex;align-items:center;gap:6px}
 .work-legend small{margin-left:auto;color:var(--muted)}
 .work-key{width:17px;height:10px;border-radius:3px;border:1px solid rgba(42,58,70,.12)}
@@ -525,7 +530,9 @@ table.tbl a.lnk:hover{border-color:var(--ink)}
 .work-erg-ok{margin-top:3px;align-self:flex-start;color:#2C8158;font-size:9px;font-weight:700;
   letter-spacing:.03em}
 .work-tele-summary{color:#72509B!important}
-.work-track{position:relative;min-width:0;cursor:crosshair;background:#FBFCFD}
+.work-track{position:relative;min-width:0;cursor:crosshair;background:#FBFCFD;
+  padding-bottom:30px}  /* χώρος για τη λωρίδα υπολοίπου αδείας */
+.work-track .leave-accrual-strip{display:flex}.work-employee .leave-balance-summary{max-width:200px}
 .work-day-cell{position:relative;min-width:0;overflow:hidden;background:#F7F9FA;
   cursor:zoom-in;transition:background-color .16s ease,filter .16s ease}
 .work-day-cell.bulk-selected{z-index:3;outline:2px solid #25E8D0;outline-offset:-2px;
@@ -1302,6 +1309,14 @@ button.ghost.danger:hover{background:var(--prob-bg)}
 .cov.teka{border-left-color:#7A4DB8}
 .cov.efka_welfare{border-left-color:#C7699E}
 .cov.other{border-left-color:var(--warn)}
+/* Εναλλακτικά πακέτα ειδικότητας: ΜΙΑ κάρτα ανά εναλλακτική, «ή» ανάμεσα. */
+.alts{display:flex;flex-wrap:wrap;align-items:center;gap:6px}
+.alts + .alts{margin-top:8px;padding-top:8px;border-top:1px dashed var(--line)}
+.alt{border:1px solid var(--line);border-radius:9px;padding:5px 8px 7px;
+  background:var(--paper)}
+.alt-h{font-size:11.5px;font-weight:700;margin-bottom:4px}
+.alt-or{font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;
+  text-align:center;margin:4px 0}
 
 /* Εβδομαδιαία λωρίδα προγράμματος: 7 πλακίδια Δε–Κυ */
 .wk{display:grid;grid-template-columns:repeat(7,1fr);gap:6px}

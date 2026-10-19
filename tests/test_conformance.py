@@ -139,9 +139,9 @@ def case_monthly_full(p):
 
 
 def case_monthly_partial(p):
-    """Μερική απασχόληση: η ΒΑΣΗ ημερών βγαίνει από τις ΣΥΜΒΑΤΙΚΕΣ ώρες
-    (⌈h/6,66⌉×4,33), όχι από τις πραγματικές ημέρες παρουσίας."""
-    base_days = pe.monthly_insurance_days(p["weekly_hours"])
+    """Μερική απασχόληση: η ΒΑΣΗ ημερών = ημέρες εργασίας του μήνα κατά το
+    πρόγραμμα (`month_days`), cap 25 — Εγκ. e-ΕΦΚΑ 13/2023."""
+    base_days = pe.monthly_insurance_days(p["weekly_hours"], p["month_days"])
     r = pe.calc_monthly(
         p["monthly_gross"], p["children"], date.fromisoformat(p["period_end"]),
         unpaid_days=p.get("unpaid_days", 0), base_days=base_days,

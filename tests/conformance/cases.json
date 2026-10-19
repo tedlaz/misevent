@@ -272,10 +272,11 @@
         "monthly_gross": 600.0,
         "children": 0,
         "weekly_hours": 20.0,
+        "month_days": 22,
         "period_end": "2026-06-30"
       },
       "expect": {
-        "base_days": 13.0,
+        "base_days": 22.0,
         "gross": 600.0,
         "efka_employee": 80.22,
         "efka_employer": 130.74,
@@ -292,17 +293,18 @@
         "monthly_gross": 600.0,
         "children": 0,
         "weekly_hours": 20.0,
+        "month_days": 22,
         "unpaid_days": 3,
         "period_end": "2026-06-30"
       },
       "expect": {
-        "base_days": 13.0,
-        "gross": 461.54,
-        "efka_employee": 61.71,
-        "efka_employer": 100.57,
-        "taxable": 399.83,
+        "base_days": 22.0,
+        "gross": 518.18,
+        "efka_employee": 69.28,
+        "efka_employer": 112.91,
+        "taxable": 448.9,
         "fmy": 0.0,
-        "net": 399.83
+        "net": 448.9
       }
     },
     {

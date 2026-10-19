@@ -65,7 +65,7 @@ def test_company_specialty_persists_verified_ergani_pair():
         "main_pension=7/17|healthcare=0/0|auxiliary=3/3",
     )
     coverages = {
-        "MAIN_EPIK": {"kad": "1234", "specialty_code": "123456", "kpk": "0101"},
+        "MAIN_EPIK": {"kad": "0141", "specialty_code": "411100", "kpk": "0101"},
     }
     service.define_specialty(
         "ΠΩΛΗΤΗΣ", coverages, row["code"], row["description"]

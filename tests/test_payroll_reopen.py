@@ -48,7 +48,7 @@ def setup():
         "efka_main", "0101", date(2024, 1, 1), 0.1337, 0.2179, KPK_RATES)
     svc.define_specialty(
         "ΥΠΑΛΛΗΛΟΣ",
-        {"MAIN_EPIK": {"kad": "0110", "specialty_code": "000000",
+        {"MAIN_EPIK": {"kad": "0110", "specialty_code": "122100",
                        "kpk": "0101"}},
     )
     pid = svc.register_person(

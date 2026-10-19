@@ -11,7 +11,7 @@ from misevent.rules import obligation_types as ot
 from misevent.rules.calendar_gr import is_working_day
 
 from . import clock
-from .queries import blocked_reason
+from .queries import blocked_reason, dep_label
 from .system import proj, svc
 
 # Πρόγραμμα πλήρους απασχόλησης (πενθήμερο) — υποχρεωτικό σε κάθε πρόσληψη
@@ -182,6 +182,30 @@ def trigger(ob_id: str) -> str:
     return COMMANDS[spec.command](ob.period_year, ob.period_month)
 
 
+def auto_settle_payments() -> list[str]:
+    """Διάφορα → `auto_payments`: εκτελεί κάθε ανεκπλήρωτη πληρωμή (στήλη
+    «Πληρωμές») που δεν είναι πλέον μπλοκαρισμένη. Καλείται μετά από κάθε
+    επιτυχημένη εντολή (`helpers.run_command`). Οι πληρωμές δεν είναι
+    προαπαιτούμενα άλλων, άρα αρκεί ένα πέρασμα. Επιστρέφει τις ετικέτες
+    όσων εξοφλήθηκαν."""
+    if not proj.misc_settings.get("auto_payments"):
+        return []
+    done = []
+    for ob in sorted(
+        proj.obligations.values(), key=lambda o: (o.due_date, o.obligation_type)
+    ):
+        if ob.fulfilled or ot.TRACK_OF.get(ob.obligation_type) != "payment":
+            continue
+        if blocked_reason(ob):
+            continue
+        try:
+            trigger(ob.obligation_id)
+        except ValueError:
+            continue  # π.χ. «τίποτα προς πληρωμή» — μένει ανοιχτή
+        done.append(dep_label(ob))
+    return done
+
+
 def seed_demo() -> str:
     """Δοκιμαστικά δεδομένα: εταιρεία + 3 πρόσωπα/απασχολήσεις."""
     if proj.persons:
@@ -217,15 +241,15 @@ def seed_demo() -> str:
     # και οι δύο φορείς επικουρικής επιτρεπτοί. Η πρόσληψη διαλέγει από εδώ.
     def _packages(code):
         return {
-            "MAIN_EPIK": {"kad": "5510", "specialty_code": code, "kpk": "0101"},
-            "MAIN": {"kad": "5510", "specialty_code": code, "kpk": "0103"},
+            "MAIN_EPIK": {"kad": "0141", "specialty_code": code, "kpk": "0101"},
+            "MAIN": {"kad": "0141", "specialty_code": code, "kpk": "0103"},
             "TEKA": {"kad": "0083", "specialty_code": "000860",
                      "kpk": "4169"},
         }
 
     svc.define_specialty("ΥΠΑΛΛΗΛΟΣ ΓΡΑΦΕΙΟΥ", _packages("411100"))
     svc.define_specialty("ΠΩΛΗΤΗΣ", _packages("411200"))
-    svc.define_specialty("ΕΡΓΑΤΗΣ", _packages("932100"))
+    svc.define_specialty("ΕΡΓΑΤΗΣ", _packages("411300"))
 
     # Τα δοκιμαστικά δεδομένα στήνονται γύρω από την ΗΜΕΡΟΜΗΝΙΑ ΑΝΑΦΟΡΑΣ,
     # ώστε το seed να είναι συνεπές και όταν «ταξιδεύουμε στον χρόνο».

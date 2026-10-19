@@ -25,10 +25,15 @@ def run_command(fn, *args, **kwargs):
 
     Τα commands του services.py/constraints.py πετούν ValueError με
     ελληνικό μήνυμα — το πιάνουμε και το δείχνουμε ως toast, ποτέ 500."""
+    from .actions import auto_settle_payments  # actions -> queries -> ... κύκλος
+
     try:
         with lock:
-            msg = fn(*args, **kwargs)
-        return True, (msg or "Ολοκληρώθηκε")
+            msg = fn(*args, **kwargs) or "Ολοκληρώθηκε"
+            paid = auto_settle_payments()
+        if paid:
+            msg = f"{msg} — εξοφλήθηκαν αυτόματα: {', '.join(paid)}"
+        return True, msg
     except (ValueError, KeyError) as exc:
         return False, str(exc)
 

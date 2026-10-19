@@ -11,6 +11,7 @@ import json
 from datetime import date
 
 import misevent.integrations.ergani_parameters as ergani_parameters
+import misevent.integrations.kpk_registry as kpk_registry
 import misevent.rules.config as config
 import misevent.rules.constraints as constraints
 from misevent.domain.events import CompanySpecialtyDefined, InsuranceProfileAssigned
@@ -119,6 +120,10 @@ class SpecialtiesMixin:
                 "με τα πακέτα του"
             )
 
+        # Το ΤΕΚΑ έχει σταθερό πακέτο: ό,τι κι αν δόθηκε, μπαίνει αυτό.
+        if "teka" in carriers:
+            given["TEKA"] = dict(config.TEKA_PACKAGE)
+
         # --- Ποιοι ρόλοι ΠΡΕΠΕΙ να υπάρχουν ------------------------------
         required = [r for c in carriers for r in config.CARRIER_ROLES[c]]
         if pron["enabled"]:
@@ -176,6 +181,13 @@ class SpecialtiesMixin:
         # Γράφονται ΩΣ ΑΡΙΘΜΟΙ στην ΑΠΔ (No 31/35/37) — κείμενο εδώ θα
         # έσκαγε αργότερα, κατά την παραγωγή του αρχείου.
         constraints.check_coverage_codes(kad, code, kpk, label)
+        # Κύρια/πρόνοια e-ΕΦΚΑ: μόνο συνδυασμοί που ισχύουν στον Ο.Σ.Υ.Κ.
+        # (`kpk_registry.FUNDS`). Το ΤΕΚΑ έχει σταθερό πακέτο (config.TEKA_PACKAGE).
+        if fund in kpk_registry.FUNDS and not kpk_registry.combination_kpks(kad, code):
+            raise ValueError(
+                f"«{label}»: ο συνδυασμός ΚΑΔ {kad} – ειδικότητα {code} δεν "
+                "ισχύει στο μητρώο ΚΑΔ/Ειδικοτήτων/ΚΠΚ του e-ΕΦΚΑ"
+            )
         # Το ΚΠΚ πρέπει να έχει και ΠΟΣΟΣΤΑ — αλλιώς η μισθοδοσία δεν
         # μπορεί να υπολογίσει κρατήσεις.
         if kpk not in self.known_kpks(fund):
@@ -183,7 +195,7 @@ class SpecialtiesMixin:
                 f"«{label}»: το ΚΠΚ {kpk} δεν έχει καταχωρημένα ποσοστά — "
                 "προσθέστε γραμμή ισχύος στο Μητρώο ΚΠΚ (σελίδα Παράμετροι)"
             )
-        return {
+        package = {
             "role": role,
             "fund": fund,
             "label": label,
@@ -192,6 +204,14 @@ class SpecialtiesMixin:
             "kpk": kpk,
             "when": config.role_when(role),
         }
+        # ΑΠΔ No 36 της ΚΥΡΙΑΣ γραμμής: ΠΑΡΑΓΩΓΟ του φορέα επικουρικής του
+        # ρόλου και του συνδυασμού (Ο.Σ.Υ.Κ.) — ΤΕΚΑ 09, ΕΦΚΑ 10/00. Χωρίς την
+        # πρόνοια: αυτή εξαρτάται από τον εργαζόμενο και την προσθέτει η ΑΠΔ.
+        if spec_role.tier in ("main", "main_auxiliary"):
+            package["special_case"] = kpk_registry.main_special_case(
+                config.role_when(role).get("auxiliary", ""), kad, code
+            )
+        return package
 
     def import_specialties(self, data) -> dict:
         """Μαζική εισαγωγή ειδικοτήτων (θέσεων εργασίας) από αρχείο CSV.

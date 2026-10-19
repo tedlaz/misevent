@@ -42,7 +42,7 @@ def test_weekly_system():
             "main_pension=10,87/21,81|healthcare=0/0|auxiliary=3/3",
         )
         svc.define_specialty("ΠΩΛΗΤΗΣ", {
-            "MAIN_EPIK": {"kad": "0110", "specialty_code": "000000", "kpk": "0101"},
+            "MAIN_EPIK": {"kad": "0110", "specialty_code": "122100", "kpk": "0101"},
         })
         return store, proj, svc
 

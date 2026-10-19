@@ -13,6 +13,7 @@ from ..clock import today
 from ..helpers import flash_to, form_date, run_command
 from ..labels import DAY_NAMES, LEAVE_LABELS
 from ..system import proj, svc
+from .leaves import _accrual
 
 bp = Blueprint("work_schedules", __name__, url_prefix="/work-schedules")
 
@@ -132,6 +133,8 @@ def _planner_context(year: int) -> dict:
         )
         cursor = sunday + timedelta(days=1)
 
+    # Ημερομηνία αναφοράς του υπολοίπου αδείας — ίδια με το πλάνο αδειών
+    reference_date = min(max(ref, start), end)
     rows = []
     employments = sorted(
         (item for item in proj.employments.values() if item.hire_submitted),
@@ -254,6 +257,7 @@ def _planner_context(year: int) -> dict:
                 "pending_count": pending_count,
                 "modified_count": modified_count,
                 "next_week_pending": bool(next_week_pending),
+                "accrual": _accrual(employment, year, reference_date),
             }
         )
 

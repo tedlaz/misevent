@@ -45,6 +45,56 @@ def _balance_tone(balance: float, accrued: float) -> str:
     return "good"
 
 
+def _accrual(employment, year: int, reference_date: date) -> dict:
+    """Κανονική άδεια: σύνοψη έως την ημερομηνία αναφοράς + υπόλοιπο στο τέλος
+    κάθε μήνα. Κοινό για το πλάνο αδειών και το πρόγραμμα εργασίας."""
+    employment_id = employment.employment_id
+    accrued_reference = svc.annual_leave_accrued(employment_id, reference_date)
+    taken_reference = svc.annual_leave_taken_until(employment_id, reference_date)
+    planned_total = svc.annual_leave_taken(employment_id, year)
+    balance_reference = round(accrued_reference - taken_reference, 2)
+    year_start = date(year, 1, 1)
+    monthly_accrual = []
+    for month in range(1, 13):
+        month_days = monthrange(year, month)[1]
+        checkpoint = date(year, month, month_days)
+        active = (
+            (employment.hire_date is None or checkpoint >= employment.hire_date)
+            and (
+                employment.termination_date is None
+                or date(year, month, 1) <= employment.termination_date
+            )
+        )
+        accrued = svc.annual_leave_accrued(employment_id, checkpoint)
+        taken = svc.annual_leave_taken_until(employment_id, checkpoint)
+        balance = round(accrued - taken, 2)
+        monthly_accrual.append(
+            {
+                "month": month,
+                "days": month_days,
+                "checkpoint": checkpoint,
+                "checkpoint_offset": (checkpoint - year_start).days,
+                "accrued": accrued,
+                "taken": taken,
+                "balance": balance,
+                "tone": _balance_tone(balance, accrued) if active else "neutral",
+                "active": active,
+            }
+        )
+    return {
+        "entitlement": svc.annual_leave_entitlement(employment_id, year),
+        "reference_date": reference_date,
+        "reference_offset": (reference_date - year_start).days,
+        "accrued": accrued_reference,
+        "taken": taken_reference,
+        "planned": planned_total,
+        "future_planned": max(0, planned_total - taken_reference),
+        "balance": balance_reference,
+        "tone": _balance_tone(balance_reference, accrued_reference),
+        "months": monthly_accrual,
+    }
+
+
 def _planner_context(year: int) -> dict:
     year_start, year_end = date(year, 1, 1), date(year, 12, 31)
     days_in_year = (year_end - year_start).days + 1
@@ -134,42 +184,9 @@ def _planner_context(year: int) -> dict:
                 }
             )
 
-        employment_id = employment.employment_id
-        annual_entitlement = svc.annual_leave_entitlement(employment_id, year)
-        accrued_reference = svc.annual_leave_accrued(employment_id, reference_date)
-        taken_reference = svc.annual_leave_taken_until(employment_id, reference_date)
-        planned_total = svc.annual_leave_taken(employment_id, year)
-        balance_reference = round(accrued_reference - taken_reference, 2)
-        monthly_accrual = []
-        for month, month_days in month_data:
-            checkpoint = date(year, month, month_days)
-            active = (
-                (employment.hire_date is None or checkpoint >= employment.hire_date)
-                and (
-                    employment.termination_date is None
-                    or date(year, month, 1) <= employment.termination_date
-                )
-            )
-            accrued = svc.annual_leave_accrued(employment_id, checkpoint)
-            taken = svc.annual_leave_taken_until(employment_id, checkpoint)
-            balance = round(accrued - taken, 2)
-            monthly_accrual.append(
-                {
-                    "month": month,
-                    "days": month_days,
-                    "checkpoint": checkpoint,
-                    "checkpoint_offset": (checkpoint - year_start).days,
-                    "accrued": accrued,
-                    "taken": taken,
-                    "balance": balance,
-                    "tone": _balance_tone(balance, accrued) if active else "neutral",
-                    "active": active,
-                }
-            )
-
         accrual_daily = [
             svc.annual_leave_accrued(
-                employment_id, year_start + timedelta(days=offset)
+                employment.employment_id, year_start + timedelta(days=offset)
             )
             for offset in range(days_in_year)
         ]
@@ -181,18 +198,7 @@ def _planner_context(year: int) -> dict:
                 "contract_end": contract_end,
                 "height": 70 + (max(len(lane_ends), 1) - 1) * 28,
                 "accrual_daily": accrual_daily,
-                "accrual": {
-                    "entitlement": annual_entitlement,
-                    "reference_date": reference_date,
-                    "reference_offset": (reference_date - year_start).days,
-                    "accrued": accrued_reference,
-                    "taken": taken_reference,
-                    "planned": planned_total,
-                    "future_planned": max(0, planned_total - taken_reference),
-                    "balance": balance_reference,
-                    "tone": _balance_tone(balance_reference, accrued_reference),
-                    "months": monthly_accrual,
-                },
+                "accrual": _accrual(employment, year, reference_date),
             }
         )
 
@@ -233,6 +239,21 @@ def _panel(year: int):
     return render_template("partials/_leave_planner_panel.html", **_planner_context(year))
 
 
+def _back() -> str:
+    """Από ποια σελίδα άνοιξε το modal: "work" = πρόγραμμα εργασίας."""
+    return "work" if request.values.get("back") == "work" else ""
+
+
+def _return_panel(year: int):
+    """Το panel που ανανεώνεται μετά την αποθήκευση — της σελίδας προέλευσης."""
+    if _back():
+        # lazy: το work_schedules εισάγει το `_accrual` από εδώ
+        from .work_schedules import _panel as work_panel
+
+        return work_panel(year)
+    return _panel(year)
+
+
 @bp.get("/")
 def index():
     return render_template("leaves.html", **_planner_context(_year()))
@@ -252,6 +273,7 @@ def leave_modal(employment_id, leave_id):
         lv=leave,
         year=_year(),
         leave_labels=LEAVE_LABELS,
+        back=_back(),
     )
 
 
@@ -261,14 +283,17 @@ def new_leave_modal(employment_id):
     selected = request.args.get("date", "")
     try:
         selected_date = date.fromisoformat(selected)
+        selected_to = date.fromisoformat(request.args.get("date_to") or selected)
     except (TypeError, ValueError):
         abort(400)
     return render_template(
         "partials/_leave_create_modal.html",
         e=employment,
         selected_date=selected_date,
+        selected_to=max(selected_to, selected_date),
         year=_year(),
         leave_labels=LEAVE_LABELS,
+        back=_back(),
     )
 
 
@@ -298,7 +323,7 @@ def create_leave(employment_id):
 
     ok, message = run_command(command)
     if ok:
-        return flash_to(_panel(year), message)
+        return flash_to(_return_panel(year), message)
     selected = form_date(request.form, "date_from", date(year, 1, 1))
     html = render_template(
         "partials/_leave_create_modal.html",
@@ -307,6 +332,7 @@ def create_leave(employment_id):
         year=year,
         leave_labels=LEAVE_LABELS,
         form=request.form,
+        back=_back(),
     )
     response = flash_to(html, message, err=True)
     response.headers["HX-Retarget"] = "#modal-host"
@@ -340,7 +366,7 @@ def update_leave(employment_id, leave_id):
 
     ok, message = run_command(command)
     if ok:
-        return flash_to(_panel(year), message)
+        return flash_to(_return_panel(year), message)
     employment, leave = _leave_or_404(employment_id, leave_id)
     html = render_template(
         "partials/_leave_edit_modal.html",
@@ -349,6 +375,7 @@ def update_leave(employment_id, leave_id):
         year=year,
         leave_labels=LEAVE_LABELS,
         form=request.form,
+        back=_back(),
     )
     response = flash_to(html, message, err=True)
     response.headers["HX-Retarget"] = "#modal-host"

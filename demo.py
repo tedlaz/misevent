@@ -68,15 +68,15 @@ def main():
     #     διαλέγει ειδικότητα + φορέα.
     def packages(code):
         return {
-            "MAIN_EPIK": {"kad": "5510", "specialty_code": code, "kpk": "0101"},
-            "MAIN": {"kad": "5510", "specialty_code": code, "kpk": "0103"},
+            "MAIN_EPIK": {"kad": "0141", "specialty_code": code, "kpk": "0101"},
+            "MAIN": {"kad": "0141", "specialty_code": code, "kpk": "0103"},
             "TEKA": {"kad": "0083", "specialty_code": "000860",
                      "kpk": "4169"},
         }
 
     svc.define_specialty("ΥΠΑΛΛΗΛΟΣ ΓΡΑΦΕΙΟΥ", packages("411100"))
     svc.define_specialty("ΠΩΛΗΤΗΣ", packages("411200"))
-    svc.define_specialty("ΕΡΓΑΤΗΣ", packages("932100"))
+    svc.define_specialty("ΕΡΓΑΤΗΣ", packages("411300"))
 
     # 1. Πρόσωπα + απασχολήσεις. Κάθε start_employment γεννά αυτόματα
     #    όλες τις υποχρεώσεις της περιόδου. Η υποβολή Ε3/ΟΧΕ στο ΕΡΓΑΝΗ

@@ -213,9 +213,9 @@ class SheetsMixin:
     def expected_efka_days(emp, worked, leave, unpaid, month_planned) -> int:
         """Οι ΠΡΟΒΛΕΠΟΜΕΝΕΣ ημέρες ασφάλισης (ΕΦΚΑ) της περιόδου.
 
-        Μισθωτός: **συμβατική βάση ως παραδοχή** — 25 ημέρες/μήνα σε πλήρη
-        απασχόληση, ⌈ώρες/6,66⌉ x 4,33 σε μερική (`pe.monthly_insurance_days`)
-        — όποιες κι αν είναι οι εργάσιμες. Οι μη πληρωμένες ημέρες αφαιρούνται
+        Μισθωτός: 25 ημέρες/μήνα σε πλήρη απασχόληση (**παραδοχή** — όποιες
+        κι αν είναι οι εργάσιμες)· σε μερική οι ημέρες προγράμματος του μήνα
+        (`pe.monthly_insurance_days`). Οι μη πληρωμένες ημέρες αφαιρούνται
         από τη βάση ΑΝΑΛΟΓΙΚΑ προς τον μήνα: ο στόχος είναι να τηρούνται
         μισθός + ημέρες ασφάλισης, και κάθε υπόλειμμα να τεκμηριώνεται
         (άδεια με ή χωρίς αποδοχές).
@@ -225,7 +225,7 @@ class SheetsMixin:
         if not month_planned:
             return 0
         paid = min(worked + leave, max(month_planned - unpaid, 0))
-        base = pe.monthly_insurance_days(emp.weekly_hours)
+        base = pe.monthly_insurance_days(emp.weekly_hours, month_planned)
         return min(round(base * paid / month_planned), base)
 
     def approve_attendance(self, year: int, month: int, lines: dict | None = None):

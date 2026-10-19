@@ -5,7 +5,8 @@
   const MAX_ZOOM = 72;
   const BUTTON_FACTOR = 1.8;
   const DAY = 86400000;
-  let zoom = 1;
+  let zoom = 16;  // αρχική προβολή: 16×, κεντραρισμένη στη σημερινή ημέρα
+  let centeredYear = null;
   let toastTimer = null;
   let returnView = null;
   let restoringView = false;
@@ -71,6 +72,7 @@
       <button type="button" class="save" data-work-bulk-action="save">Αποθήκευση</button>
       <button type="button" class="danger" data-work-bulk-action="delete">Ρεπό / Διαγραφή</button>
       <button type="button" class="revert" data-work-bulk-action="revert">Ακύρωση αλλαγών</button>
+      <button type="button" class="save" data-work-bulk-action="leave">Άδεια…</button>
       <button type="button" class="close" data-work-bulk-clear aria-label="Καθαρισμός επιλογής">×</button>`;
     panel.append(toolbar);
     return toolbar;
@@ -224,6 +226,19 @@
     }
   }
 
+  // Κρατά zoom/κύλιση ώστε μετά την αποθήκευση το panel να γυρίσει εκεί.
+  function rememberView(panel) {
+    const scroll = panel.querySelector('[data-work-scroll]');
+    returnView = {
+      year: panel.dataset.year,
+      zoom,
+      scrollLeft: scroll.scrollLeft,
+      scrollTop: scroll.scrollTop,
+      windowX: window.scrollX,
+      windowY: window.scrollY
+    };
+  }
+
   function zoomRange(panel, startIndex, endIndex, clientY) {
     const scroll = panel.querySelector('[data-work-scroll]');
     const rect = scroll.getBoundingClientRect();
@@ -254,6 +269,14 @@
     }
     const scroll = panel.querySelector('[data-work-scroll]');
     applyZoom(panel, zoom);
+    // Πρώτη εμφάνιση του έτους: κέντρο στη σημερινή ημέρα (ημ. αναφοράς),
+    // αν ανήκει στο έτος. Όχι όταν επανέρχεται αποθηκευμένη προβολή.
+    const today = panel.querySelector('.work-day-heads .today');
+    if (today && !returnView && centeredYear !== panel.dataset.year) {
+      centeredYear = panel.dataset.year;
+      const ratio = (Number(today.dataset.dayIndex) + .5) / Number(panel.dataset.days);
+      requestAnimationFrame(() => applyZoom(panel, zoom, null, null, ratio));
+    }
     if (bulkSwapInProgress && returnView?.year === panel.dataset.year) {
       panel.classList.add('bulk-swap-smooth');
       scroll.scrollLeft = returnView.scrollLeft;
@@ -832,6 +855,25 @@
       if (!bulkSelection.size) return;
       const toolbar = bulkAction.closest('[data-work-bulk-toolbar]');
       const action = bulkAction.dataset.workBulkAction;
+      // «Άδεια…» → το modal νέας άδειας με το εύρος των επιλεγμένων ημερών.
+      if (action === 'leave') {
+        const cells = [...bulkSelection];
+        const tracks = new Set(cells.map(cell => cell.closest('[data-work-track]')));
+        if (tracks.size !== 1) {
+          toast('Επιλέξτε ημέρες ενός μόνο εργαζομένου για νέα άδεια', true);
+          return;
+        }
+        const dates = cells.map(cell => cell.dataset.date).sort();
+        const track = [...tracks][0];
+        rememberView(panel);
+        clearBulkSelection(panel);
+        htmx.ajax('GET', track.dataset.leaveUrl, {
+          target: '#modal-host', swap: 'innerHTML',
+          values: {date: dates[0], date_to: dates[dates.length - 1],
+                   year: panel.dataset.year, back: 'work'}
+        });
+        return;
+      }
       const hours = toolbar.querySelector('[data-work-bulk-hours]').value.trim();
       if (action === 'save' && !hours) {
         toast('Συμπληρώστε το ωράριο της μαζικής μεταβολής', true);
@@ -944,15 +986,12 @@
       closedToast(panel);
       return;
     }
-    const panelScroll = panel.querySelector('[data-work-scroll]');
-    returnView = {
-      year: panel.dataset.year,
-      zoom,
-      scrollLeft: panelScroll.scrollLeft,
-      scrollTop: panelScroll.scrollTop,
-      windowX: window.scrollX,
-      windowY: window.scrollY
-    };
+    rememberView(panel);
+    // Ημέρα με άδεια → επεξεργασία της άδειας (όχι η καρτέλα ημέρας)
+    if (cell?.dataset.leaveModalUrl) {
+      htmx.ajax('GET', cell.dataset.leaveModalUrl, {target: '#modal-host', swap: 'innerHTML'});
+      return;
+    }
     const url = new URL(panel.dataset.dayUrl, window.location.origin);
     url.searchParams.set('date', (cell || dayHead).dataset.date || dayHead.dataset.workDate);
     url.searchParams.set('year', panel.dataset.year);
