@@ -10,6 +10,7 @@
 Έτσι δεν διπλογράφονται στοιχεία ταυτότητας που ζουν στο μητρώο (/persons).
 """
 
+import base64
 import json
 from calendar import monthrange
 from copy import copy
@@ -31,7 +32,7 @@ from misevent.integrations import ergani_parameters as ergani_params
 from misevent.rules import config, constraints
 from misevent.rules.calendar_gr import is_working_day
 
-from .. import labels
+from .. import amka_pdf, labels
 from .. import queries as q
 from ..clock import today
 from ..filters import money
@@ -755,6 +756,8 @@ def _card(employment_id):
     return {
         "e": e,
         "employment_status": employment_status,
+        # Έγγραφα που αφορούν την αναγγελία (τρίτη χώρα / ανήλικος) αλλά λείπουν
+        "missing_docs": svc.missing_hire_documents(employment_id),
         "days": DAYS,
         "leave_labels": LEAVE_LABELS,
         "childcare_options": config.CHILDCARE_REDUCTION_OPTIONS,
@@ -877,8 +880,8 @@ def _hire_json_preview(employment_id):
     try:
         if submitted:
             payload = json.loads(submitted.payload)
-        else:
-            payload = svc.build_hire_web_e3n(employment_id)
+        else:  # τα συνημμένα PDF ως «PDF 340 KB · sha256 …», όχι base64
+            payload = ergani_mod.redact_files(svc.build_hire_web_e3n(employment_id))
         return {
             "payload_json": json.dumps(
                 payload, ensure_ascii=False, indent=2, default=str
@@ -1265,8 +1268,10 @@ def contract(employment_id):
 @bp.post("/<employment_id>/ergani/e3")
 def ergani_e3(employment_id):
     def cmd():
+        missing = svc.missing_hire_documents(employment_id)
         res = svc.submit_hire_e3(employment_id)
-        return f"Υποβλήθηκε Αναγγελία Πρόσληψης WebE3N ({res['status']})"
+        msg = f"Υποβλήθηκε Αναγγελία Πρόσληψης WebE3N ({res['status']})"
+        return msg + (f" ⚠ χωρίς: {', '.join(missing)}" if missing else "")
 
     ok, msg = run_command(cmd)
     return flash_to(_fragment(employment_id), msg, err=not ok)
@@ -1274,9 +1279,10 @@ def ergani_e3(employment_id):
 
 @bp.get("/<employment_id>/ergani/e3/json")
 def ergani_e3_json(employment_id):
-    """Προεπισκόπηση του ακριβούς WebE3N JSON, χωρίς υποβολή."""
+    """Προεπισκόπηση του ακριβούς WebE3N JSON, χωρίς υποβολή (τα συνημμένα
+    PDF συνοπτικά — όχι MB base64 στην οθόνη)."""
     try:
-        payload = svc.build_hire_web_e3n(employment_id)
+        payload = ergani_mod.redact_files(svc.build_hire_web_e3n(employment_id))
     except ValueError as exc:
         return Response(str(exc), status=400, content_type="text/plain; charset=utf-8")
     body = json.dumps(payload, ensure_ascii=False, indent=2, default=str)
@@ -1478,18 +1484,23 @@ def leave_cancel(employment_id, leave_id):
 
 @bp.post("/<employment_id>/terminate")
 def terminate(employment_id):
+    files = [{"name": u.filename, "data": base64.b64encode(u.read()).decode()}
+             for u in request.files.getlist("resignation") if u.filename]
+
     def cmd():
         f = request.form
-        svc.terminate(
+        note = svc.terminate(
             employment_id,
             form_date(f, "termination_date"),
             f.get("reason", ""),
             with_notice=bool(f.get("with_notice")),
+            # PDF/φωτογραφίες της δήλωσης -> ΕΝΑ PDF (ίδια μετατροπή με την αίτηση)
+            resignation_pdf=amka_pdf.to_pdf(files) if files else None,
         )
-        return (
-            "Καταχωρήθηκε η αποχώρηση — Ψηφιακή Αναγγελία Λήξης στο ΕΡΓΑΝΗ "
-            "και εκκαθάριση αποδοχών"
-        )
+        if note:
+            return f"Καταχωρήθηκε η αποχώρηση και η εκκαθάριση αποδοχών ⚠ {note}"
+        return ("Καταχωρήθηκε η αποχώρηση — Ψηφιακή Αναγγελία Λήξης στο ΕΡΓΑΝΗ "
+                "και εκκαθάριση αποδοχών")
 
     ok, msg = run_command(cmd)
     if ok:

@@ -25,7 +25,12 @@ from misevent.domain.events import (
 from misevent.domain.projections import PERSON_TEXT_FIELDS, PersonState
 from misevent.integrations.apd_files import EmployerInfo
 
-from ._base import _decode_import, _parse_import_date
+from ._base import (
+    MAX_DOCUMENT_BYTES,
+    PERSON_DOCUMENT_KINDS,
+    _decode_import,
+    _parse_import_date,
+)
 
 # ΤΑ ΠΕΔΙΑ ΤΟΥ ΑΡΧΕΙΟΥ ΠΡΟΣΩΠΩΝ — ΠΑΡΑΓΩΓΑ, ΟΧΙ ΧΕΙΡΟΓΡΑΦΗ ΛΙΣΤΑ.
 # Πηγή: το `constraints.PERSON_FIELDS` (ό,τι δέχεται η `correct_person`) συν
@@ -156,7 +161,7 @@ class CompanyMixin:
         sex_n = str(sex or "").strip()
         nationality_n = str(nationality_code or "").strip()
         identity_type_n = str(identity_type or "").strip().upper()
-        identity_number_n = str(identity_number or "").strip().upper()
+        identity_number_n = constraints.norm_identity_number(identity_number, identity_type)
         identity_issuer_n = str(identity_issuer or "").strip().upper()
 
         # Η γέννηση είναι ΜΕΡΟΣ του κλειδιού ταυτότητας -> υποχρεωτική
@@ -409,6 +414,7 @@ class CompanyMixin:
         clean = self._clean_person_fields(fields)
         if not clean:
             raise ValueError("Δεν δόθηκαν πεδία προς ενημέρωση")
+        self._norm_identity_number(p, clean)
         self._check_person_fields(person_id, p, clean)
         self.store.append(person_id, PersonDetailsCorrected(person_id, clean))
 
@@ -429,10 +435,9 @@ class CompanyMixin:
                 f"Τα πεδία {', '.join(bad)} δεν μεταβάλλονται — "
                 "χρησιμοποιήστε τη διόρθωση στοιχείων"
             )
-        clean = {
-            k: v for k, v in self._clean_person_fields(fields).items()
-            if v != getattr(p, k)
-        }
+        clean = self._clean_person_fields(fields)
+        self._norm_identity_number(p, clean)
+        clean = {k: v for k, v in clean.items() if v != getattr(p, k)}
         if not clean:
             raise ValueError("Καμία αλλαγή σε σχέση με τα τρέχοντα στοιχεία")
         self._check_person_fields(person_id, p, clean)
@@ -442,11 +447,53 @@ class CompanyMixin:
             person_id, PersonDetailsChanged(person_id, effective_from, clean)
         )
 
+    # ------------------------------------------- Έγγραφα (ΕΚΤΟΣ event log)
+    # Βλ. persistence/documents.py: blobs που διαγράφονται — όχι events.
+    def attach_document(self, person_id, kind, content: bytes, filename="") -> dict:
+        """Αποθηκεύει (ή αντικαθιστά) το PDF ενός είδους για ένα πρόσωπο."""
+        if person_id not in self.proj.persons:
+            raise ValueError(f"Άγνωστο πρόσωπο {person_id}")
+        if kind not in PERSON_DOCUMENT_KINDS:
+            raise ValueError(f"Άγνωστο είδος εγγράφου «{kind}»")
+        if not content.startswith(b"%PDF"):
+            raise ValueError("Το έγγραφο πρέπει να είναι PDF")
+        if len(content) > MAX_DOCUMENT_BYTES:
+            raise ValueError("Το έγγραφο ξεπερνά τα 10 MB")
+        return self.documents.put(person_id, kind, filename or f"{kind}.pdf", content)
+
+    def person_documents(self, person_id) -> list[dict]:
+        """Τα έγγραφα ενός προσώπου (χωρίς περιεχόμενο) + ετικέτα είδους."""
+        return [{**d, "label": PERSON_DOCUMENT_KINDS.get(d["kind"], d["kind"])}
+                for d in self.documents.list(person_id)]
+
+    def person_document(self, person_id, kind) -> dict | None:
+        """Ένα έγγραφο ΜΕ περιεχόμενο (`content`), ή None."""
+        return self.documents.get(person_id, kind)
+
+    def delete_document(self, person_id, kind) -> bool:
+        return self.documents.delete(person_id, kind)
+
+    @staticmethod
+    def _norm_identity_number(p, clean: dict):
+        """Ο αριθμός ταυτότητας κανονικοποιείται με τον ΤΕΛΙΚΟ τύπο (μπορεί να
+        αλλάζει μόνο ο ένας από τους δύο)."""
+        if "identity_number" in clean or "identity_type" in clean:
+            clean["identity_number"] = constraints.norm_identity_number(
+                clean.get("identity_number", p.identity_number),
+                clean.get("identity_type", p.identity_type))
+
     @staticmethod
     def _clean_person_fields(fields: dict) -> dict:
         """Κανονικοποίηση πεδίων προσώπου (κοινή σε διόρθωση & μεταβολή)."""
         clean = {}
+        # Προαιρετικά πεδία: κενό = ΣΒΗΣΙΜΟ (όχι «χωρίς αλλαγή»). Τα πεδία που
+        # δεν στέλνει μια φόρμα δεν φτάνουν καν εδώ (π.χ. κλειδωμένος ΑΜΑ στη μεταβολή).
         clearable = {
+            "ama",
+            "email",
+            "identity_issuer",
+            "identity_issue_date",
+            "identity_expiry_date",
             "res_permit_inst",
             "res_permit_inst_type",
             "res_permit_inst_number",
@@ -465,6 +512,9 @@ class CompanyMixin:
             if k not in constraints.PERSON_FIELDS:
                 continue
             if v in (None, "") and k not in clearable:
+                continue
+            # Κείμενα: None = δεν στάλθηκε (χωρίς αλλαγή), "" = σβήσιμο
+            if v is None and k in ("ama", "email", "identity_issuer"):
                 continue
             if k in ("last_name", "first_name", "father_name", "mother_name"):
                 clean[k] = constraints.norm_name(v)

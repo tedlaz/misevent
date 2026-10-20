@@ -81,10 +81,19 @@
           <button class="run sm"
             hx-post="{{ url_for('employments.ergani_e3', employment_id=mid) }}"
             hx-target="#employment-card" hx-swap="outerHTML"
+            {% if missing_docs %}hx-confirm="Λείπει: {{ missing_docs|join(', ') }} (Πληροφορίες προσώπου → Έγγραφα). Υποβολή χωρίς αυτό;"{% endif %}
             title="Αναγγελία Πρόσληψης WebE3N">Υποβολή WebE3N</button>
+          {% if missing_docs %}
+            <span class="tag warn" title="Ανεβάστε το από τις πληροφορίες του προσώπου → Έγγραφα">
+              ⚠ Λείπει: {{ missing_docs|join(', ') }}</span>
+          {% endif %}
         {% endif %}
         {% if wto_done %}
           <span class="tag ok" title="Ψηφιακή Οργάνωση Χρόνου Εργασίας">ΟΧΕ ✓</span>
+        {% elif not e3_done %}
+          {# Το ΕΡΓΑΝΗ δέχεται ΟΧΕ μόνο για ενεργή σχέση εργασίας (μετά το WebE3N) #}
+          <span class="tag off" title="Το ΕΡΓΑΝΗ δέχεται ΟΧΕ μόνο μετά την αναγγελία πρόσληψης">
+            ΟΧΕ μετά το WebE3N</span>
         {% else %}
           <button class="ghost sm"
             hx-post="{{ url_for('employments.ergani_wto', employment_id=mid) }}"

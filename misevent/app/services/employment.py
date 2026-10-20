@@ -11,6 +11,7 @@ import uuid
 from datetime import timedelta
 
 import misevent.integrations.ergani as ergani_mod
+import misevent.integrations.ergani_parameters as ergani_parameters
 import misevent.rules.constraints as constraints
 from misevent.domain.events import (
     EmploymentHireDetailsCorrected,
@@ -20,6 +21,8 @@ from misevent.domain.events import (
     ScheduleDeclaredToErgani,
     WorkScheduleAssigned,
 )
+
+from ._base import PERSON_DOCUMENT_KINDS
 
 
 class EmploymentMixin:
@@ -253,7 +256,11 @@ class EmploymentMixin:
             # ΑΜΕΣΩΣ στο ΕΡΓΑΝΗ (ΟΧΕ μεταβλητού, αριθμημένο batch), ώστε οι
             # ημέρες να μην μένουν αδήλωτες (pending). Χωρίς στοιχεία εταιρείας
             # δεν υποβάλλεται — μένει καθαρός σχεδιασμός (όπως το standing fixed).
-            if self.proj.company is not None:
+            # ⚠️ Το ΕΡΓΑΝΗ δέχεται ΟΧΕ ΜΟΝΟ για ενεργή σχέση εργασίας, δηλ. ΜΕΤΑ
+            # την αναγγελία πρόσληψης. Στη ΜΕΤΑΦΟΡΑ (`ergani_hire_done`) αυτή έχει
+            # ήδη γίνει· αλλιώς οι ημέρες μένουν pending και δηλώνονται μετά το
+            # WebE3N από το κουμπί της καρτέλας.
+            if self.proj.company is not None and ergani_hire_done:
                 self.submit_schedule_days({employment_id: list(days)})
 
         # ΜΕΤΑΦΟΡΑ: η αναγγελία πρόσληψης έχει ήδη σταλεί από το προηγούμενο
@@ -491,7 +498,7 @@ class EmploymentMixin:
         emp = self.proj.employments[employment_id]
         if not self.proj.company or not emp.schedule:
             return
-        self._ergani_submit(
+        res = self._ergani_submit(
             "WTO",
             employment_id,
             ergani_mod.build_wto(
@@ -501,13 +508,30 @@ class EmploymentMixin:
                 effective_from or emp.payroll_start,
                 end_date,
             ),
+            endpoint="WTOWeek",
         )
-        self.store.append(
-            employment_id,
-            ScheduleDeclaredToErgani(employment_id, dict(emp.schedule)),
-        )
+        # Κάλυψη ΜΟΝΟ αν το ΕΡΓΑΝΗ τη δέχτηκε — απορριφθείσα ΟΧΕ δεν καλύπτει
+        # τίποτα (μένει καταγεγραμμένη ως failed και ξαναστέλνεται).
+        if res["status"] != "failed":
+            self.store.append(
+                employment_id,
+                ScheduleDeclaredToErgani(employment_id, dict(emp.schedule)),
+            )
 
     # -------------------------------------------------- Υποβολές πρόσληψης ΕΡΓΑΝΗ
+    def hire_announced(self, employment_id: str) -> bool:
+        """Έχει γίνει (ή μεταφερθεί) η αναγγελία πρόσληψης; Χωρίς αυτήν το
+        ΕΡΓΑΝΗ απορρίπτει την ΟΧΕ («Δεν υπάρχει ενεργή σχέση εργασίας»)."""
+        return (self.ergani_hire_submitted(employment_id, "WebE3N")
+                or self.ergani_hire_submitted(employment_id, "E3"))
+
+    def _require_hire_announced(self, employment_id: str):
+        if not self.hire_announced(employment_id):
+            name = self.proj.employments[employment_id].full_name
+            raise ValueError(
+                f"{name}: υποβάλετε πρώτα την Αναγγελία Πρόσληψης (WebE3N) — "
+                "το ΕΡΓΑΝΗ δέχεται ΟΧΕ μόνο για ενεργή σχέση εργασίας")
+
     def ergani_hire_submitted(self, employment_id: str, doc_type: str) -> bool:
         """Έχει ήδη υποβληθεί (επιτυχώς ή εικονικά) το έντυπο για αυτή την
         απασχόληση; Αποτυχημένη υποβολή (failed) επιτρέπεται να ξαναγίνει."""
@@ -537,7 +561,34 @@ class EmploymentMixin:
             emp.insurance_profile,
             emp.schedule,
             branch=branch,
+            files={kind: doc["content"]
+                   for kind in self.hire_document_kinds(employment_id)
+                   if (doc := self.person_document(emp.person_id, kind))},
         )
+
+    def hire_document_kinds(self, employment_id) -> list[str]:
+        """Ποια έγγραφα του προσώπου ΑΦΟΡΟΥΝ την αναγγελία πρόσληψης:
+        νομιμοποιητικά για υπηκοότητα εκτός ΕΕ, βιβλιάριο για ηλικία < 18
+        την ημέρα πρόσληψης."""
+        emp = self.proj.employments[employment_id]
+        p = self.proj.persons.get(emp.person_id)
+        if p is None:
+            return []
+        kinds = []
+        if p.nationality_code and not ergani_parameters.is_eu_nationality(
+                p.nationality_code):
+            kinds.append("foreign_file")
+        born, hired = p.birth_date, emp.hire_date
+        if born and hired and (hired.year - born.year
+                               - ((hired.month, hired.day) < (born.month, born.day))) < 18:
+            kinds.append("young_file")
+        return kinds
+
+    def missing_hire_documents(self, employment_id) -> list[str]:
+        """Ετικέτες εγγράφων που αφορούν την πρόσληψη αλλά ΔΕΝ έχουν ανέβει."""
+        emp = self.proj.employments[employment_id]
+        return [PERSON_DOCUMENT_KINDS[k] for k in self.hire_document_kinds(employment_id)
+                if not self.person_document(emp.person_id, k)]
 
     def submit_hire_e3(self, employment_id):
         """WebE3N — Αναγγελία Πρόσληψης (χειροκίνητη ενεργοποίηση)."""
@@ -570,6 +621,7 @@ class EmploymentMixin:
             raise ValueError("Δεν έχει οριστεί εβδομαδιαίο πρόγραμμα εργασίας")
         if self.ergani_hire_submitted(employment_id, "WTO"):
             raise ValueError("Η ΟΧΕ πρόσληψης έχει ήδη υποβληθεί")
+        self._require_hire_announced(employment_id)
         self._declare_standing_weekly(employment_id)
 
     def submit_hire_wto_variable(self, employment_id):

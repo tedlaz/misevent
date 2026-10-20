@@ -12,7 +12,7 @@
   <div class="backup-actions">
     <div>
       <b>Πλήρες backup</b>
-      <div class="muted">Αρχείο βάσης SQLite (.db) με όλα τα δεδομένα της εφαρμογής.</div>
+      <div class="muted">Αρχείο .zip με όλα τα δεδομένα της εφαρμογής (βάση + έγγραφα). Δεκτά και παλιά backup .db.</div>
     </div>
     <a class="ghost" href="{{ url_for('backup.download') }}">⬇ Λήψη backup</a>
     <form method="post" enctype="multipart/form-data"
@@ -20,7 +20,7 @@
           onsubmit="return confirm('Να αντικατασταθούν ΟΛΑ τα δεδομένα (όλες οι εταιρείες, χρήστες, παράμετροι) από αυτό το backup; Θα κρατηθεί αυτόματα αντίγραφο της τρέχουσας κατάστασης και θα χρειαστεί νέα σύνδεση.');">
       <label class="restore-file">
         <span>Αρχείο backup</span>
-        <input type="file" name="backup" accept=".db" required>
+        <input type="file" name="backup" accept=".zip,.db" required>
       </label>
       <button class="run danger" type="submit">⬆ Restore</button>
     </form>

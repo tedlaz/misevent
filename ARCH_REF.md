@@ -62,6 +62,9 @@ Commands (PayrollService) ──> EventStore (append-only)
     system                      χρήστες + μητρώο εταιρειών
     shared                      ΚΟΙΝΕΣ νομοθετικές παράμετροι
     company:<company_id>        τα δεδομένα ΜΙΑΣ εταιρείας
+<data>/documents.db         ΕΓΓΡΑΦΑ (blobs) — πίνακας `documents`, ίδια στήλη `store`
+<data>/secrets.db           κωδικοί ΕΡΓΑΝΗ ανά εταιρεία, ΚΡΥΠΤΟΓΡΑΦΗΜΕΝΟΙ (Fernet)
+<data>/secrets.key          το κλειδί τους
 <data>/secret.key           κλειδί υπογραφής session
 ```
 
@@ -83,6 +86,30 @@ COALESCE(MAX(seq), 0) + 1 … WHERE store = :store`.
 απευθείας σε άλλο αρχείο. Όλο το SQLite-specific (connect, DDL, PRAGMA) ζει
 στο `misevent/persistence/database.py` — το `EventStore` από πάνω δεν ξέρει τι
 βάση τρέχει από κάτω.
+
+➜ **ΕΓΓΡΑΦΑ = ΕΚΤΟΣ event log, σε ΔΙΚΗ τους βάση** (`documents.db`, δίπλα στη
+`misevent.db`· `misevent/persistence/documents.py`). Τα PDF που συνοδεύουν την
+αναγγελία πρόσληψης (WebE3N `f_foreign_file` / `f_young_file`) **δεν είναι
+γεγονότα**: είναι δυαδικά, μεγάλα, και πρέπει να **διαγράφονται** (GDPR) — ενώ
+τα events είναι αμετάβλητα. Γι' αυτό η `misevent.db` μένει **ένας πίνακας
+`events`**. Ίδιοι κανόνες απομόνωσης (`WHERE store = ?`, κανένα SQL έξω από το
+module· `scope(store)` ανά εταιρεία → `svc.documents`). Συνέπειες:
+- το **backup όλου του συστήματος** είναι `.zip` (`misevent.db` + `documents.db`)·
+  παλιό σκέτο `.db` γίνεται δεκτό και επαναφέρει μόνο τα events·
+- το **audit / rollback / backup ΜΙΑΣ εταιρείας** (JSON event log) **δεν** τα
+  περιέχει — ούτε η εξαγωγή προσώπων·
+- το event της υποβολής ΕΡΓΑΝΗ κρατά το payload με τα PDF **συνοπτικά**
+  (`ergani.redact_files`: μέγεθος + sha256), όχι δεύτερο αντίγραφο σε base64.
+
+➜ **ΚΩΔΙΚΟΙ ΕΡΓΑΝΗ = ΕΚΤΟΣ event log** (`secrets.db` + `secrets.key`·
+`webapp/ergani_credentials.py`, εξάρτηση `cryptography` — μόνο στο webapp).
+Ανά εταιρεία: περιβάλλον (**προσομοίωση** / δοκιμαστικό / **παραγωγικό**),
+όνομα χρήστη, κωδικός. Ο κωδικός πρέπει να ξαναδιαβάζεται, άρα κρυπτογραφείται
+(όχι hash)· σε event θα έμενε για πάντα στο ιστορικό/audit. Τα ορίζουν **μόνο
+διαχειριστές** (Εταιρεία → ④ Σύνδεση ΕΡΓΑΝΗ)· το `Registry.set_ergani` αλλάζει
+αμέσως τον `svc.ergani` της εταιρείας. Χωρίς ρύθμιση = προσομοίωση (όπως πριν).
+⚠️ Το backup όλου του συστήματος περιέχει **βάση ΚΑΙ κλειδί** (ώστε το restore
+να δουλεύει αλλού) — άρα το αρχείο backup δίνει πρόσβαση στους κωδικούς.
 
 `<data>` = **`instance/`** (gitignored), ή ό,τι λέει το
 **`MISEVENT_DATA_DIR`** (τα tests τρέχουν σε δικό τους, καθαρό φάκελο —

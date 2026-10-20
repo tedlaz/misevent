@@ -127,6 +127,38 @@ def norm_email(s: str) -> str:
     return e
 
 
+# Δελτίο Αστυνομικής Ταυτότητας (κωδικός ΕΡΓΑΝΗ — με ΛΑΤΙΝΙΚΑ A, T, όπως στο μητρώο)
+GREEK_ID_TYPE = "ΔAT"
+# Λατινικά γράμματα που μοιάζουν με ελληνικά κεφαλαία — συνηθισμένο λάθος
+# πληκτρολόγησης στον αριθμό ελληνικής ταυτότητας (ΑΖ503638 με λατινικά A, Z),
+# που το ΕΡΓΑΝΗ δεν διασταυρώνει.
+_LATIN_TO_GREEK = str.maketrans("ABEZHIKMNOPTXY", "ΑΒΕΖΗΙΚΜΝΟΡΤΧΥ")
+
+
+def norm_identity_number(number, identity_type) -> str:
+    """Αριθμός ταυτότητας: κεφαλαία, χωρίς κενά/παύλες. Για ΕΛΛΗΝΙΚΗ αστυνομική
+    ταυτότητα τα λατινικά «δίδυμα» γίνονται ελληνικά· όποιο λατινικό γράμμα
+    μείνει είναι λάθος. Τα άλλα έγγραφα (διαβατήριο κ.λπ.) μένουν ως έχουν."""
+    n = "".join(str(number or "").split()).replace("-", "").upper()
+    if str(identity_type or "").strip().upper() != GREEK_ID_TYPE:
+        return n
+    n = n.translate(_LATIN_TO_GREEK)
+    latin = sorted({ch for ch in n if "A" <= ch <= "Z"})
+    if latin:
+        raise ValueError(
+            f"Ο αριθμός ελληνικής ταυτότητας «{n}» έχει λατινικό γράμμα "
+            f"({', '.join(latin)}) — γράψτε τον με ελληνικούς χαρακτήρες")
+    return n
+
+
+def ama_plausible(ama: str) -> bool:
+    """Ο ΑΜΑ δεν έχει δημοσιευμένο ψηφίο ελέγχου· πιάνουμε μόνο τα προφανώς
+    ψεύτικα: ίδιο ψηφίο παντού (000000000, 111111111) ή σχεδόν μηδενικός
+    (≥ 6 μηδενικά μπροστά, π.χ. 000000001)."""
+    a = str(ama or "")
+    return not (len(set(a)) == 1 or (a.isdigit() and int(a) < 1000))
+
+
 def identity_key(last_name: str, first_name: str, father_name: str, birth_date):
     """Κανονικοποιημένο κλειδί ταυτότητας προσώπου:
     Επώνυμο / Όνομα / Πατρώνυμο / **ημερομηνία γέννησης**.
@@ -240,6 +272,9 @@ def check_person_identity(
     check_amka(amka)
     if ama and len(ama) != AMA_LENGTH:
         raise ValueError(f"Το ΑΜΑ πρέπει να έχει {AMA_LENGTH} ψηφία (δόθηκε «{ama}»)")
+    if ama and not ama_plausible(ama):
+        raise ValueError(f"Ο ΑΜΑ «{ama}» δεν είναι πραγματικός αριθμός — "
+                         "αφήστε τον κενό αν δεν τον γνωρίζετε")
 
 
 def check_web_e3n_identity(

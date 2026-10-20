@@ -2,8 +2,8 @@
 Client για το Web API (REST) του ΠΣ ΕΡΓΑΝΗ ΙΙ.
 
 Περιβάλλοντα:
-- Εργάνη ΙΙ δοκιμαστικό: https://trialv2eservices.yeka.gr)
-- Παραγωγικό:            https://eservices.yeka.gr/WebservicesAPI/api
+- Δοκιμαστικό: https://trialv2eservices.yeka.gr/WebservicesAPI/Api
+- Παραγωγικό:  https://eservices.yeka.gr/WebservicesAPI/Api
 
 Ροή (κατά την τεκμηρίωση «Ergani Web API για εργοδότες»):
   POST /Authentication          {UserName, Password, UserType: "01"}
@@ -19,8 +19,8 @@ Client για το Web API (REST) του ΠΣ ΕΡΓΑΝΗ ΙΙ.
   WTO          Ψηφιακή Οργάνωση Χρόνου Εργασίας — Σταθερό Εβδομαδιαίο
   E4_METAVOLI  Δήλωση Μεταβολής Στοιχείων Εργασιακής Σχέσης
                (αποδοχές / ωράριο / μερική απασχόληση)
-  E5_LIXI      Ψηφιακή Αναγγελία Λήξης (οικειοθελής αποχώρηση /
-               καταγγελία / λήξη σύμβασης)
+  E5_LIXI      Ψηφιακή Αναγγελία Λήξης: WebE5N (οικειοθελής αποχώρηση) ή
+               WebE7N (λήξη ορισμένου χρόνου)· η καταγγελία ΔΕΝ υπάρχει στο API
 
 ΠΡΟΣΟΧΗ: Με simulate=True (προεπιλογή) ΔΕΝ γίνεται καμία κλήση δικτύου·
 ο client παράγει το πλήρες payload και «εικονικό» αριθμό πρωτοκόλλου,
@@ -30,13 +30,17 @@ username=..., password=...) — τα ακριβή JSON σχήματα ανά έ�
 να επαληθευτούν με τα επίσημα XSD/οδηγίες του ΠΣ ΕΡΓΑΝΗ πριν τη χρήση.
 """
 
+import base64
+import hashlib
 import json
 import uuid
 from datetime import UTC, date, datetime
 
+# Το περιβάλλον (και τα στοιχεία σύνδεσης) ορίζεται ΑΝΑ ΕΤΑΙΡΕΙΑ από
+# διαχειριστή — βλ. webapp/ergani_credentials.py. Προεπιλογή: simulate.
 BASE_URLS = {
-    "trial": "https://trialv2eservices.yeka.gr/WebservicesAPI/api",
-    "production": "https://eservicesPROSOXI.yeka.gr/WebservicesAPI/api",
+    "trial": "https://trialv2eservices.yeka.gr/WebservicesAPI/Api",
+    "production": "https://eservices.yeka.gr/WebservicesAPI/Api",
 }
 
 DOC_LABELS = {
@@ -113,8 +117,10 @@ class ErganiClient:
             raise ErganiError("Αποτυχία authentication στο ΕΡΓΑΝΗ")
 
     # ------------------------------------------------------ Υποβολή
-    def submit(self, doc_type: str, payload: dict) -> dict:
-        """Υποβάλλει έντυπο. Επιστρέφει {status, reference, payload}."""
+    def submit(self, doc_type: str, payload: dict, endpoint: str = "") -> dict:
+        """Υποβάλλει έντυπο. Επιστρέφει {status, reference, payload}.
+        `endpoint`: ο τύπος του API (`/Documents/{endpoint}`), όταν διαφέρει από
+        το εσωτερικό `doc_type` (π.χ. «WTO» -> WTOWeek / WTODaily)."""
         if doc_type not in DOC_LABELS:
             raise ValueError(f"Άγνωστο έντυπο {doc_type}")
         body = json.dumps(payload, ensure_ascii=False, default=str)
@@ -126,7 +132,7 @@ class ErganiClient:
             return {"status": "simulated", "reference": ref, "payload": body}
         if self._token is None:
             self.authenticate()
-        res = self._post(f"/Documents/{doc_type}", payload)
+        res = self._post(f"/Documents/{endpoint or doc_type}", payload)
         return {
             "status": "submitted",
             "reference": str(res.get("protocol") or res.get("id") or ""),
@@ -135,6 +141,32 @@ class ErganiClient:
 
 
 # ------------------------------------------------- Payload builders
+# Πεδία WebE3N με αρχείο PDF σε base64.
+FILE_FIELDS = ("f_file", "f_file_symbash", "f_foreign_file", "f_young_file")
+
+
+def _b64(content: bytes | None) -> str:
+    return base64.b64encode(content).decode("ascii") if content else ""
+
+
+def redact_files(payload: dict) -> dict:
+    """Αντίγραφο του payload με τα base64 PDF -> «PDF 340 KB · sha256 ab12…».
+    Για την καταγραφή της υποβολής (event) και την προεπισκόπηση: το έγγραφο
+    ζει ήδη στη βάση εγγράφων — ούτε δεύτερο αντίγραφο στο log, ούτε MB στην οθόνη."""
+    if isinstance(payload, list):
+        return [redact_files(x) for x in payload]
+    if not isinstance(payload, dict):
+        return payload
+    out = {}
+    for key, value in payload.items():
+        if key in FILE_FIELDS and value:
+            raw = base64.b64decode(value)
+            value = (f"PDF {max(1, round(len(raw) / 1024))} KB · "
+                     f"sha256 {hashlib.sha256(raw).hexdigest()[:12]}")
+        out[key] = redact_files(value)
+    return out
+
+
 def _d(x: date) -> str:
     return x.isoformat()
 
@@ -190,35 +222,10 @@ def employment_status(weekly_hours: float, schedule: dict | None) -> str:
     return "2" if work_days < 5 else "1"
 
 
-def build_web_e3n(
-    company,
-    emp,
-    profile,
-    schedule: dict | None,
-    first_day_start: str | None = None,
-    first_day_end: str | None = None,
-    branch=None,
-) -> dict:
-    """Payload αναγγελίας πρόσληψης κατά τη δομή ``WebE3N.json``.
-
-    Τα στοιχεία που δεν τηρούνται ακόμη στο μητρώο αποδίδονται με την κενή
-    τιμή που επιτρέπει η προδιαγραφή. Το payload παραμένει πλήρες, ώστε η
-    προεπισκόπηση να δείχνει ακριβώς τι πρόκειται να σταλεί.
-    """
-    inferred_start, inferred_end = _first_day_hours(emp, schedule)
-    first_day_start = first_day_start or inferred_start
-    first_day_end = first_day_end or inferred_end
-    gross = emp.daily_wage if emp.pay_type == "daily" else emp.monthly_gross
-    auxiliary_scheme = str(
-        getattr(profile, "auxiliary_scheme", "") if profile else ""
-    ).lower()
-    # Το WebE3N απαιτεί τουλάχιστον μία επιλογή. Η κύρια ασφάλιση και η
-    # απουσία χωριστού επικουρικού φορέα αντιστοιχούν στον e-ΕΦΚΑ (001),
-    # ενώ η ρητή υπαγωγή στο ΤΕΚΑ αντιστοιχεί στο 002.
-    auxiliary_code = "002" if auxiliary_scheme == "teka" else "001"
-    auxiliary = [{"f_kod_epikourikis": auxiliary_code}]
-
-    form = {
+def _identity_block(company, emp, profile, branch) -> dict:
+    """Παράρτημα + στοιχεία προσώπου: ΚΟΙΝΟ πρώτο τμήμα των WebE3N / WebE5N /
+    WebE7N (ίδια πεδία, ίδια σειρά — η σειρά δεσμεύει τη μετατροπή σε XML)."""
+    return {
         "f_aa_pararthmatos": str(getattr(profile, "branch_no", 0) if profile else 0),
         "f_rel_protocol": "",
         "f_rel_date": "",
@@ -271,6 +278,43 @@ def build_web_e3n(
         "f_code_anergias": "",
         "f_ar_vivliou_anilikou": "",
         "f_epipedo_morfosis": str(getattr(emp, "education_level", "") or ""),
+    }
+
+
+def build_web_e3n(
+    company,
+    emp,
+    profile,
+    schedule: dict | None,
+    first_day_start: str | None = None,
+    first_day_end: str | None = None,
+    branch=None,
+    files: dict | None = None,
+) -> dict:
+    """Payload αναγγελίας πρόσληψης κατά τη δομή ``WebE3N.json``.
+
+    ``files``: {πεδίο WebE3N (`foreign_file`/`young_file`): bytes PDF} — μπαίνουν
+    ως base64 στα αντίστοιχα `f_*` (βλ. ``FILE_FIELDS``).
+
+    Τα στοιχεία που δεν τηρούνται ακόμη στο μητρώο αποδίδονται με την κενή
+    τιμή που επιτρέπει η προδιαγραφή. Το payload παραμένει πλήρες, ώστε η
+    προεπισκόπηση να δείχνει ακριβώς τι πρόκειται να σταλεί.
+    """
+    inferred_start, inferred_end = _first_day_hours(emp, schedule)
+    first_day_start = first_day_start or inferred_start
+    first_day_end = first_day_end or inferred_end
+    gross = emp.daily_wage if emp.pay_type == "daily" else emp.monthly_gross
+    auxiliary_scheme = str(
+        getattr(profile, "auxiliary_scheme", "") if profile else ""
+    ).lower()
+    # Το WebE3N απαιτεί τουλάχιστον μία επιλογή. Η κύρια ασφάλιση και η
+    # απουσία χωριστού επικουρικού φορέα αντιστοιχούν στον e-ΕΦΚΑ (001),
+    # ενώ η ρητή υπαγωγή στο ΤΕΚΑ αντιστοιχεί στο 002.
+    auxiliary_code = "002" if auxiliary_scheme == "teka" else "001"
+    auxiliary = [{"f_kod_epikourikis": auxiliary_code}]
+
+    form = {
+        **_identity_block(company, emp, profile, branch),
         "f_proslipsidate": _d_gr(emp.hire_date),
         "f_proslipsitime": first_day_start,
         "f_apoxwrisitime": first_day_end,
@@ -324,8 +368,8 @@ def build_web_e3n(
         "f_file": "",
         "f_file_symbash": "",
         "f_comments": "",
-        "f_foreign_file": "",
-        "f_young_file": "",
+        "f_foreign_file": _b64((files or {}).get("foreign_file")),
+        "f_young_file": _b64((files or {}).get("young_file")),
         "f_xronos_katavolis_apodoxon": "ΜΗΝΙΑΙΩΣ",
         "f_ipoxreotiki_katartisi": "0",
         "f_efarmoste_sillogiki_simbasi": "0",
@@ -352,45 +396,64 @@ def build_web_e3n(
     }
 
 
+# Ψηφιακή Οργάνωση Χρόνου Εργασίας — σχήματα από το ίδιο το ΕΡΓΑΝΗ
+# (GET /Documents/WTOWeek και /Documents/WTODaily· αντίγραφα στο data/).
+# Οι τύποι αναλυτικής εγγραφής (`f_type`) είναι η λίστα «WorkTimeType» της
+# υπηρεσίας EX_BASE_03: ΕΡΓ εργασία, ΤΗΛ τηλεργασία, ΑΝ ανάπαυση/ρεπό.
+WTO_DAY = {"SUN": "0", "MON": "1", "TUE": "2", "WED": "3", "THU": "4",
+           "FRI": "5", "SAT": "6"}
+
+
+def _hm(minutes: int) -> str:
+    """Λεπτά -> ΩΩ:ΛΛ (μετά τα μεσάνυχτα: modulo 24ω, π.χ. 22:00-06:00)."""
+    m = minutes % (24 * 60)
+    return f"{m // 60:02d}:{m % 60:02d}"
+
+
+def _wto_analytics(day_text) -> dict:
+    """Τα τμήματα ΜΙΑΣ ημέρας ως αναλυτικές εγγραφές· κενό = ανάπαυση/ρεπό."""
+    from misevent.rules.constraints import parse_day_schedule
+
+    segs = parse_day_schedule(day_text)
+    rows = [{"f_type": "ΤΗΛ" if seg["telework"] else "ΕΡΓ",
+             "f_from": _hm(seg["start"]), "f_to": _hm(seg["end"])} for seg in segs]
+    return {"ErgazomenosWTOAnalytics": rows or [{"f_type": "ΑΝ", "f_from": "", "f_to": ""}]}
+
+
+def _wto(emp, from_date: date, to_date: date | None, rows: list) -> dict:
+    """Κοινό περίβλημα WTOWeek/WTODaily: ΜΙΑ δήλωση, ένας εργαζόμενος."""
+    branch = getattr(getattr(emp, "insurance_profile", None), "branch_no", 0) or 0
+    person = {"f_afm": emp.afm, "f_eponymo": emp.last_name, "f_onoma": emp.first_name}
+    return {"WTOS": {"WTO": [{
+        "f_aa_pararthmatos": str(branch),
+        "f_rel_protocol": "",
+        "f_rel_date": "",
+        "f_comments": "",
+        "f_from_date": _d_gr(from_date),
+        "f_to_date": _d_gr(to_date),
+        "Ergazomenoi": {"ErgazomenoiWTO": [{**person, **row} for row in rows]},
+    }]}}
+
+
 def build_wto(
     company, emp, schedule: dict, effective_from: date, end_date: date | None = None
 ) -> dict:
-    """Ψηφιακή Οργάνωση Χρόνου Εργασίας — Σταθερό Εβδομαδιαίο.
-
-    `end_date` κενό = δεν λήγει· διαφορετικά το πρόγραμμα ισχύει έως εκείνη
-    την ημερομηνία (μετά δεν υπάρχει πρόγραμμα)."""
-    return {
-        "Entypo": "WTO",
-        "Ergodotis": {"AME": company.ame, "AFM": company.afm},
-        "Ergazomenos": {
-            "AFM": emp.afm,
-            "Eponymo": emp.last_name,
-            "Onoma": emp.first_name,
-        },
-        "IsxysApo": _d(effective_from),
-        "IsxysEws": _d(end_date) if end_date else "",
-        "Typos": "ΣΤΑΘΕΡΟ_ΕΒΔΟΜΑΔΙΑΙΟ",
-        "Programma": schedule,  # {"MON": "09:00-17:00", ...}
-    }
+    """WTOWeek — Σταθερό Εβδομαδιαίο: μία εγγραφή ανά ημέρα της εβδομάδας
+    (`f_day`, 0 = Κυριακή), ΚΑΙ τα ρεπό ρητά. `end_date` κενό = δεν λήγει."""
+    return _wto(emp, effective_from, end_date, [
+        {"f_day": WTO_DAY[day], "ErgazomenosAnalytics": _wto_analytics(schedule.get(day))}
+        for day in ("MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN")
+    ])
 
 
 def build_wto_variable(company, emp, days: dict, week_start: date) -> dict:
-    """Ψηφιακή Οργάνωση Χρόνου Εργασίας — ΜΕΤΑΒΛΗΤΟ (ημερήσιο) για μία εβδομάδα.
-
-    `days`: {"2026-07-14": "09:00-17:00", ...} — οι 7 ημέρες της εβδομάδας
-    (κενό ωράριο = ρεπό). Υποβάλλεται με ισχύ την πρώτη ημέρα της εβδομάδας."""
-    return {
-        "Entypo": "WTO",
-        "Ergodotis": {"AME": company.ame, "AFM": company.afm},
-        "Ergazomenos": {
-            "AFM": emp.afm,
-            "Eponymo": emp.last_name,
-            "Onoma": emp.first_name,
-        },
-        "IsxysApo": _d(week_start),
-        "Typos": "ΜΕΤΑΒΛΗΤΟ_ΕΒΔΟΜΑΔΙΑΙΟ",
-        "Programma": dict(days),  # {"2026-07-14": "09:00-17:00", ...}
-    }
+    """WTODaily — Μεταβλητό (ημερήσιο): `days` = {"2026-07-14": "09:00-17:00", ...}
+    (κενό ωράριο = ρεπό). Περίοδος = από την πρώτη έως την τελευταία ημέρα."""
+    dates = sorted(date.fromisoformat(d) for d in days)
+    return _wto(emp, dates[0] if dates else week_start, dates[-1] if dates else week_start, [
+        {"f_date": _d_gr(d), "ErgazomenosAnalytics": _wto_analytics(days[d.isoformat()])}
+        for d in dates
+    ])
 
 
 def build_metavoli(company, emp, effective_from: date) -> dict:
@@ -415,17 +478,65 @@ def build_metavoli(company, emp, effective_from: date) -> dict:
     }
 
 
-def build_lixi(company, emp, termination_date: date, reason: str) -> dict:
-    """Ψηφιακή Αναγγελία Λήξης (οικειοθελής / καταγγελία / λήξη)."""
+# Ψηφιακή Αναγγελία Λήξης — σχήματα από το ίδιο το ΕΡΓΑΝΗ (data/ergani_schemas/).
+# Η ΚΑΤΑΓΓΕΛΙΑ σύμβασης αορίστου ΔΕΝ βρέθηκε ως έντυπο του API (μόνο portal).
+def _exit_common(emp, schedule) -> dict:
+    gross = emp.daily_wage if emp.pay_type == "daily" else emp.monthly_gross
     return {
-        "Entypo": "E5_LIXI",
-        "Ergodotis": {"AME": company.ame, "AFM": company.afm},
-        "Ergazomenos": {
-            "AFM": emp.afm,
-            "Eponymo": emp.last_name,
-            "Onoma": emp.first_name,
-            "AMKA": emp.amka,
-        },
-        "ImLixis": _d(termination_date),
-        "Aitia": reason or "ΟΙΚΕΙΟΘΕΛΗΣ_ΑΠΟΧΩΡΗΣΗ",
+        "xaraktirismos": "1" if emp.pay_type == "monthly" else "0",
+        "kathestos": employment_status(emp.weekly_hours, schedule),
+        "apodoxes": _decimal_gr(gross, 2),
     }
+
+
+def _specialty(profile) -> str:
+    return str(getattr(profile, "ergani_specialty_code", "")
+               or getattr(profile, "specialty_code", "") or "")
+
+
+def build_web_e5n(company, emp, profile, termination_date: date, branch=None,
+                  resignation_pdf: bytes | None = None) -> dict:
+    """WebE5N — Οικειοθελής αποχώρηση. `resignation_pdf`: η δήλωση με
+    υπογραφή του εργαζομένου (ΥΠΟΧΡΕΩΤΙΚΗ κατά τον οδηγό ΕΡΓΑΝΗ ΙΙ)."""
+    c = _exit_common(emp, getattr(emp, "schedule", None))
+    form = {
+        **_identity_block(company, emp, profile, branch),
+        "f_xaraktirismos": c["xaraktirismos"],
+        "f_sxeshapasxolisis": str(getattr(emp, "employment_relationship", "0") or "0"),
+        "f_orismenou_apo": _d_gr(getattr(emp, "fixed_term_from", None)),
+        "f_orismenou_ews": _d_gr(getattr(emp, "fixed_term_to", None)),
+        "f_kathestosapasxolisis": c["kathestos"],
+        "f_eidikothta": _specialty(profile),
+        "f_proslipsidate": _d_gr(emp.hire_date),
+        "f_apoxwrisidate": _d_gr(termination_date),
+        "f_apodoxes": c["apodoxes"],
+        "f_comments": "",
+        "f_file": _b64(resignation_pdf),
+        "f_foreign_file": "",
+        "f_young_file": "",
+    }
+    return {"AnaggeliesE5N": {"AnaggeliaE5N": [form]}}
+
+
+def build_web_e7n(company, emp, profile, termination_date: date, branch=None) -> dict:
+    """WebE7N — Λύση σύμβασης ορισμένου χρόνου λόγω λήξης του συμφωνημένου
+    χρόνου (`f_logosperatosis` 0). Χωρίς συνημμένο (οδηγός ΕΡΓΑΝΗ ΙΙ)."""
+    c = _exit_common(emp, getattr(emp, "schedule", None))
+    form = {
+        **_identity_block(company, emp, profile, branch),
+        "f_xaraktirismos": c["xaraktirismos"],
+        "f_sxeshapasxolisis": "1",
+        "f_kathestosapasxolisis": c["kathestos"],
+        "f_oros": "0",
+        "f_eidikothta": _specialty(profile),
+        "f_apodoxes": c["apodoxes"],
+        "f_proslipsidate": _d_gr(emp.hire_date),
+        "f_lixisymbashdate": _d_gr(getattr(emp, "fixed_term_to", None) or termination_date),
+        "f_apolysisdate": _d_gr(termination_date),
+        "f_comments": "",
+        "f_logosperatosis": "0",
+        "f_logosperatosiscomments": "",
+        "f_foreign_file": "",
+        "f_young_file": "",
+    }
+    return {"AnaggeliesE7N": {"AnaggeliaE7N": [form]}}

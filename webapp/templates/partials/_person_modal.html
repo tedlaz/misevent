@@ -15,16 +15,27 @@
           καταχωρούνται ΜΟΝΟ τα στοιχεία ταυτότητας (μία φορά)· η ΠΡΟΣΛΗΨΗ
           γίνεται μετά, από το badge «πρόσληψη» της γραμμής του</span>
         <div class="req-note">Τα πεδία με <b>*</b> είναι υποχρεωτικά</div>
-        {# Προσυμπλήρωση από Βεβαίωση ΑΜΚΑ: στέλνει ΚΑΙ ό,τι έχει ήδη γραφτεί
-           στη φόρμα (htmx περιλαμβάνει το γονικό form) και ξαναζωγραφίζει το
-           modal — δεν καταχωρεί τίποτα. #}
-        <label class="ghost" style="margin-top:8px"
-               title="Συμπλήρωση στοιχείων από το PDF της βεβαίωσης (amka.gr)">
-          📄 Από βεβαίωση ΑΜΚΑ
-          <input type="file" name="amka_pdf" accept=".pdf,application/pdf" hidden
+        {# Προσυμπλήρωση από αρχείο (PDF βεβαίωσης ΑΜΚΑ ή .json αίτησης): στέλνει
+           ΚΑΙ ό,τι έχει ήδη γραφτεί στη φόρμα (htmx περιλαμβάνει το γονικό
+           form) και ξαναζωγραφίζει το modal — δεν καταχωρεί τίποτα. #}
+        <div class="btnrow" style="margin-top:8px">
+        <a class="ghost" href="{{ url_for('persons.blank_form') }}"
+           title="Αρχείο .html που ανοίγει ο υποψήφιος σε όποιον browser — βγάζει .json για ανέβασμα εδώ">📝 Κενή αίτηση</a>
+        <label class="ghost"
+               title="Συμπλήρωση στοιχείων από βεβαίωση ΑΜΚΑ (PDF του amka.gr) ή αίτηση υποψηφίου (.json)">
+          📄 Από αρχείο
+          <input type="file" name="amka_pdf" accept=".pdf,.json,application/pdf,application/json" hidden
                  hx-post="{{ url_for('persons.new_from_amka') }}"
                  hx-trigger="change" hx-encoding="multipart/form-data"
                  hx-target="#modal-host" hx-swap="innerHTML"></label>
+        </div>
+        {# Συνημμένα της αίτησης (base64): αποθηκεύονται με την «Καταχώρηση». #}
+        {% for kind, label in PERSON_DOCUMENT_KINDS.items() if f.get('doc_' ~ kind) %}
+          <input type="hidden" name="doc_{{ kind }}" value="{{ f.get('doc_' ~ kind) }}">
+          <div class="muted" style="font-size:12.5px;margin-top:6px">📎 {{ label }} ·
+            {{ (f.get('doc_' ~ kind)|length * 3 // 4 // 1024) or 1 }} KB — αποθηκεύεται
+            με την καταχώρηση και στέλνεται με την πρόσληψη</div>
+        {% endfor %}
       </div>
 
       <div class="mbody">

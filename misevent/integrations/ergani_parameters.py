@@ -21,6 +21,7 @@ _TABLES = {
     "oaed": "oaed",
     "kad": "kad",
     "koinotites": "koinotites",
+    "residence_permit_types": "typoi_adeias_paramonis",
 }
 
 # Κωδικοί υπηκοότητας της τρέχουσας ΕΕ-27, όπως αποθηκεύονται στον πίνακα
@@ -33,15 +34,17 @@ _EU_NATIONALITY_CODES = frozenset({
 
 
 @lru_cache(maxsize=None)
-def _rows(kind: str) -> tuple[dict, ...]:
+def _rows(kind: str, extra: str | None = None) -> tuple[dict, ...]:
     table = _TABLES[kind]
     if not DB_PATH.is_file():
         return ()
     try:
         uri = DB_PATH.as_uri() + "?mode=ro"
         with sqlite3.connect(uri, uri=True) as conn:
+            where = " WHERE Extra = ?" if extra else ""
             rows = conn.execute(
-                f"SELECT code, description FROM {table} ORDER BY id"
+                f"SELECT code, description FROM {table}{where} ORDER BY id",
+                (extra,) if extra else (),
             ).fetchall()
     except sqlite3.Error:
         return ()
@@ -57,6 +60,13 @@ def identity_types() -> tuple[dict, ...]:
 
 def nationalities() -> tuple[dict, ...]:
     return _rows("nationalities")
+
+
+def residence_permit_types(direct: bool) -> tuple[dict, ...]:
+    """Είδη άδειας διαμονής τρίτων χωρών (WebE3N `f_res_permit_*_type`):
+    `direct` -> άμεση πρόσβαση στην αγορά εργασίας (inst), αλλιώς απαιτεί
+    πρόσθετη έγκριση (ap). «ΕΓΓΡΙΣΗ» [sic] όπως είναι γραμμένο στη βάση."""
+    return _rows("residence_permit_types", "ΑΜΕΣΗ" if direct else "ΕΓΓΡΙΣΗ")
 
 
 def education_levels() -> tuple[dict, ...]:

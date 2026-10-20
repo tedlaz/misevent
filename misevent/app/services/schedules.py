@@ -70,7 +70,9 @@ class SchedulesMixin:
         # ΣΤΑΘΕΡΟ πρόγραμμα: το νέο εβδομαδιαίο υποβάλλεται αμέσως ως standing
         # ΟΧΕ (με τη λήξη του, αν έχει). ΜΕΤΑΒΛΗΤΟ: το εβδομαδιαίο είναι ΜΟΝΟ
         # template του grid — η υποβολή στο ΕΡΓΑΝΗ γίνεται ρητά ανά εβδομάδα.
-        if emp.schedule_mode == "fixed":
+        # Πριν την αναγγελία πρόσληψης ΔΕΝ στέλνεται (το ΕΡΓΑΝΗ την απορρίπτει):
+        # η «Υποβολή ΟΧΕ» της καρτέλας θα δηλώσει τότε το ισχύον πρόγραμμα.
+        if emp.schedule_mode == "fixed" and self.hire_announced(employee_id):
             self._declare_standing_weekly(employee_id, effective_from, end_date)
 
     def validate_daily_schedule(self, employee_id, days: dict) -> dict:
@@ -164,6 +166,7 @@ class SchedulesMixin:
             emp = self.proj.employments.get(eid)
             if emp is None:
                 raise ValueError(f"Άγνωστη απασχόληση {eid}")
+            self._require_hire_announced(eid)  # ΟΧΕ μόνο για ενεργή σχέση εργασίας
             days = sorted(
                 {
                     d if isinstance(d, date) else date.fromisoformat(str(d))
@@ -219,18 +222,28 @@ class SchedulesMixin:
 
         batch_no = self.next_schedule_batch_no()
         total = 0
+        rejected = []
         for eid, days in grouped.items():
             emp = self.proj.employments[eid]
             payload = {d.isoformat(): emp.day_schedule(d) for d in days}
-            self._ergani_submit(
+            res = self._ergani_submit(
                 "WTO",
                 eid,
                 ergani_mod.build_wto_variable(
                     self.proj.company, emp, payload, self._week_monday(days[0])
                 ),
+                endpoint="WTODaily",
             )
+            # Απορριφθείσες ημέρες ΔΕΝ σημειώνονται δηλωμένες — μένουν pending.
+            if res["status"] == "failed":
+                rejected.append(f"{emp.full_name}: {res['reference']}")
+                continue
             self.store.append(eid, ScheduleDaysSubmitted(eid, batch_no, payload))
             total += len(payload)
+        if rejected:
+            raise ValueError(
+                (f"Δηλώθηκαν {total} ημερήσια προγράμματα· " if total else "")
+                + "ΑΠΕΡΡΙΨΕ το ΕΡΓΑΝΗ — " + " · ".join(rejected))
         return {"batch_no": batch_no, "count": total, "employees": len(grouped)}
 
     def _earliest_pending_before(self, emp, limit: date):

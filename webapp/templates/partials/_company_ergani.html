@@ -1,0 +1,41 @@
+{# Στοιχεία σύνδεσης ΕΡΓΑΝΗ ΤΗΣ ΕΝΕΡΓΗΣ ΕΤΑΙΡΕΙΑΣ (webapp/ergani_credentials.py).
+   Αλλάζουν ΜΟΝΟ διαχειριστές· οι υπόλοιποι βλέπουν την κατάσταση. Ο κωδικός
+   δεν ξαναεμφανίζεται ποτέ — κενό πεδίο = κρατά τον υπάρχοντα. Θέλει `ergani`. #}
+<div id="ergani-conn">
+  {% set env = ergani.environment %}
+  <p class="muted" style="font-size:13px;margin-top:0">
+    Τρέχουσα κατάσταση:
+    <span class="tag {{ 'warn' if env == 'production' else 'ok' if env == 'trial' else 'off' }}">
+      {{ environments[env] }}</span>
+    {% if ergani.username %} · χρήστης <b>{{ ergani.username }}</b>{% endif %}
+    {% if ergani.updated_at %} · ενημέρωση {{ ergani.updated_at[:10] }}{% endif %}
+  </p>
+  {% if current_user and current_user.is_admin %}
+    <form class="frm cols" hx-post="{{ url_for('company.ergani_save') }}"
+          hx-target="#ergani-conn" hx-swap="outerHTML"
+          hx-confirm="Αποθήκευση στοιχείων ΕΡΓΑΝΗ; Με «ΠΑΡΑΓΩΓΙΚΟ» οι υποβολές πηγαίνουν στο ΠΡΑΓΜΑΤΙΚΟ ΕΡΓΑΝΗ.">
+      <label>Περιβάλλον
+        <select name="environment">
+          {% for code, label in environments.items() %}
+            <option value="{{ code }}" {{ 'selected' if code == env }}>{{ label }}</option>
+          {% endfor %}
+        </select></label>
+      <label>Όνομα χρήστη (Web Services)
+        <input name="username" value="{{ ergani.username }}" autocomplete="off"></label>
+      <label>Κωδικός
+        <input type="password" name="password" autocomplete="new-password"
+               placeholder="{{ '•••••••• (κενό = χωρίς αλλαγή)' if ergani.has_password else '' }}"></label>
+      <div class="btnrow" style="align-self:end">
+        <button class="run" type="submit">Αποθήκευση</button>
+        <button class="ghost" type="button"
+                hx-post="{{ url_for('company.ergani_test') }}"
+                hx-target="#ergani-conn" hx-swap="outerHTML">Δοκιμή σύνδεσης</button>
+      </div>
+    </form>
+    <p class="muted" style="font-size:12.5px">
+      Οι κωδικοί φυλάγονται κρυπτογραφημένοι, εκτός ιστορικού (events), και
+      περιλαμβάνονται στο backup όλου του συστήματος.</p>
+  {% else %}
+    <p class="muted" style="font-size:12.5px">Τα στοιχεία σύνδεσης τα ορίζει διαχειριστής.</p>
+  {% endif %}
+</div>

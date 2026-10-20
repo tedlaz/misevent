@@ -3,12 +3,19 @@ Backup / restore ΟΛΟΥ του συστήματος — ΜΟΝΟ για admin.
 
 Σε αντίθεση με το audit (event log ΜΙΑΣ εταιρείας, JSON), εδώ ταξιδεύει
 ολόκληρη η βάση: όλες οι εταιρείες, οι χρήστες και οι κοινές παράμετροι,
-ως αρχείο SQLite. Ίδιο δίχτυ ασφαλείας με το audit: αντίγραφο της τρέχουσας
-βάσης στον δίσκο πριν την αντικατάσταση, και επιστροφή σε αυτήν αν το replay
-του backup αποτύχει.
+ως .zip: `misevent.db` (events), `documents.db` (έγγραφα — blobs εκτός event
+log, βλ. persistence/documents.py) και `secrets.db` + `secrets.key` (κωδικοί
+ΕΡΓΑΝΗ ανά εταιρεία, κρυπτογραφημένοι — βλ. webapp/ergani_credentials.py).
+⚠️ Άρα το αρχείο backup δίνει πρόσβαση στους κωδικούς ΕΡΓΑΝΗ.
+Παλιό backup σκέτο `.db` γίνεται ακόμη δεκτό: επαναφέρει μόνο τα events.
+
+Ίδιο δίχτυ ασφαλείας με το audit: αντίγραφο της τρέχουσας κατάστασης στον
+δίσκο πριν την αντικατάσταση, και επιστροφή σε αυτήν αν το replay του
+backup αποτύχει.
 """
 
 import re
+import zipfile
 from datetime import UTC, datetime
 from io import BytesIO
 
@@ -24,7 +31,13 @@ from flask import (
 )
 
 from ..system import lock, registry
-from ..tenancy import data_dir
+from ..tenancy import (
+    DB_NAME,
+    DOCUMENTS_DB_NAME,
+    SECRETS_DB_NAME,
+    SECRETS_KEY_NAME,
+    data_dir,
+)
 
 bp = Blueprint("backup", __name__, url_prefix="/backup")
 
@@ -33,8 +46,44 @@ MAX_BACKUP_BYTES = 500 * 1024 * 1024
 # `<company_id>/*.json` (audit log μιας εταιρείας).
 BACKUPS_DIR = data_dir() / "backups"
 SAFETY_BACKUP_DIR = BACKUPS_DIR / "system"
-_SAFETY_NAME = re.compile(r"before-restore-[\w.-]+\.(db|json)")
+_SAFETY_NAME = re.compile(r"before-restore-[\w.-]+\.(zip|db|json)")
 _SCOPE = re.compile(r"[\w-]+")
+
+
+def _bundle() -> bytes:
+    """Backup ΟΛΟΥ του συστήματος: .zip με τη βάση events, τη βάση εγγράφων και
+    τους κωδικούς ΕΡΓΑΝΗ (βάση + κλειδί τους — ταξιδεύουν μαζί)."""
+    secrets_db, secrets_key = registry.secrets.snapshot()
+    out = BytesIO()
+    with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED) as z:
+        z.writestr(DB_NAME, registry.db.snapshot())
+        z.writestr(DOCUMENTS_DB_NAME, registry.documents.snapshot())
+        z.writestr(SECRETS_DB_NAME, secrets_db)
+        z.writestr(SECRETS_KEY_NAME, secrets_key)
+    return out.getvalue()
+
+
+def _unbundle(data: bytes) -> dict[str, bytes]:
+    """{όνομα αρχείου: bytes} από .zip — ή από παλιό σκέτο .db (μόνο events).
+    Ό,τι λείπει από ένα παλιότερο backup δεν αγγίζεται στο restore."""
+    if not data.startswith(b"PK"):
+        return {DB_NAME: data}
+    try:
+        with zipfile.ZipFile(BytesIO(data)) as z:
+            parts = {n: z.read(n) for n in z.namelist()}
+    except zipfile.BadZipFile:
+        raise ValueError("Το αρχείο δεν είναι backup του misevent") from None
+    if DB_NAME not in parts:
+        raise ValueError("Το αρχείο δεν είναι backup του misevent")
+    return parts
+
+
+def _apply(parts: dict[str, bytes]):
+    registry.db.restore_snapshot(parts[DB_NAME])
+    if DOCUMENTS_DB_NAME in parts:
+        registry.documents.restore_snapshot(parts[DOCUMENTS_DB_NAME])
+    if SECRETS_DB_NAME in parts and SECRETS_KEY_NAME in parts:
+        registry.secrets.restore_snapshot(parts[SECRETS_DB_NAME], parts[SECRETS_KEY_NAME])
 
 
 def _stamp() -> str:
@@ -84,12 +133,12 @@ def index():
 @bp.get("/download")
 def download():
     with lock:
-        data = registry.db.snapshot()
+        data = _bundle()
     return send_file(
         BytesIO(data),
-        mimetype="application/vnd.sqlite3",
+        mimetype="application/zip",
         as_attachment=True,
-        download_name=f"misevent-backup-{_stamp()}.db",
+        download_name=f"misevent-backup-{_stamp()}.zip",
     )
 
 
@@ -109,19 +158,21 @@ def _restore_bytes(data: bytes, first_run: bool = False):
     with lock:
         if first_run and not registry.is_fresh():
             raise ValueError("Το σύστημα έχει ήδη δεδομένα· restore μόνο από διαχειριστή")
-        current = registry.db.snapshot()
+        parts = _unbundle(data)
+        current = _bundle()
         SAFETY_BACKUP_DIR.mkdir(parents=True, exist_ok=True)
         # Μικροδευτερόλεπτα: δύο restores στο ίδιο δευτερόλεπτο δεν
         # επικαλύπτουν το ένα το αντίγραφο του άλλου.
         stamp = datetime.now(UTC).strftime("%Y%m%d-%H%M%S-%fZ")
-        safety = SAFETY_BACKUP_DIR / f"before-restore-{stamp}.db"
+        safety = SAFETY_BACKUP_DIR / f"before-restore-{stamp}.zip"
         safety.write_bytes(current)
-        registry.db.restore_snapshot(data)
+        registry.db.restore_snapshot(parts[DB_NAME])  # άκυρη βάση: τίποτα δεν άλλαξε
         try:
+            _apply(parts)
             registry.reload()
         except Exception:
-            # Τα events μπήκαν αλλά δεν ξαναπαίζονται: πίσω στην προηγούμενη.
-            registry.db.restore_snapshot(current)
+            # Δεν φορτώθηκε: πίσω στην προηγούμενη κατάσταση (ΟΛΑ τα αρχεία).
+            _apply(_unbundle(current))
             registry.reload()
             raise ValueError(
                 "Το backup δεν φορτώθηκε· επανήλθε η προηγούμενη κατάσταση"
@@ -167,10 +218,10 @@ def safety_delete(scope, name):
 
 @bp.post("/safety/<scope>/<name>/restore")
 def safety_restore(scope, name):
-    """Μόνο τα `.db` όλου του συστήματος· τα `.json` μιας εταιρείας
+    """Μόνο τα `.zip`/`.db` όλου του συστήματος· τα `.json` μιας εταιρείας
     επαναφέρονται από το audit log της."""
     path = _safety_path(scope, name)
-    if scope != "system" or path.suffix != ".db":
+    if scope != "system" or path.suffix not in (".zip", ".db"):
         abort(404)
     try:
         _restore_bytes(path.read_bytes())

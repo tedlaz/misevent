@@ -236,7 +236,16 @@ def test_webapp(fresh_system):
     # Φίλτρα λίστας: κατάσταση + κανονικοποιημένο κλειδί αναζήτησης ανά γραμμή
     check("/persons φίλτρα", c.get("/persons/"), 'data-search="ΓΕΩΡΓΙΟΥ ΜΑΡΙΑ')
     # Βεβαίωση ΑΜΚΑ: λάθος αρχείο -> μήνυμα (όχι 500), η φόρμα κρατά τα στοιχεία
-    check("/persons/new βεβαίωση ΑΜΚΑ", c.get("/persons/new"), "Από βεβαίωση ΑΜΚΑ")
+    modal = check("/persons/new από αρχείο", c.get("/persons/new"), "Από αρχείο")
+    check("/persons/new είδος άδειας = λίστα", c.get("/persons/new"),
+          '<select name="res_permit_ap_type">')
+    # Αίτηση υποψηφίου (.html): αυτόνομη, και ΚΑΘΕ πεδίο της υπάρχει στο modal
+    form = check("/persons/form.html", c.get("/persons/form.html"), "misevent.candidate/1")
+    # εκτός: <meta name=viewport> και τα συνημμένα (στο modal γίνονται doc_<είδος>)
+    names = set(re.findall(r'name="(\w+)"', form)) - {"viewport", "foreign_file",
+                                                        "young_file"}
+    assert names and names <= set(re.findall(r'name="(\w+)"', modal)), names
+    assert not re.search(r'(src|href)="(https?:)?//', form), "εξωτερική αναφορά"
     r = c.post("/persons/new/amka", content_type="multipart/form-data", data={
         "ama": "987654321", "amka_pdf": (io.BytesIO(b"not a pdf"), "x.pdf"),
     })
@@ -290,10 +299,23 @@ def test_webapp(fresh_system):
     print("\n=== Ροή: ΕΠΑΝΑΠΡΟΣΛΗΨΗ μέσω UI ===")
     n_before = len(proj.persons[pid].employment_ids)
     # 1. λήξη τρέχουσας απασχόλησης
+    # Δήλωση αποχώρησης ως ΦΩΤΟΓΡΑΦΙΑ -> PDF -> WebE5N (f_file)
+    from PIL import Image
+
+    img = io.BytesIO()
+    Image.new("RGB", (200, 300), "white").save(img, "JPEG")
     rt = c.post(
-        f"/employments/{eid}/terminate",
-        data={"termination_date": "2026-06-30", "reason": "ΟΙΚΕΙΟΘΕΛΗΣ_ΑΠΟΧΩΡΗΣΗ"},
+        f"/employments/{eid}/terminate", content_type="multipart/form-data",
+        data={"termination_date": "2026-06-30", "reason": "ΟΙΚΕΙΟΘΕΛΗΣ_ΑΠΟΧΩΡΗΣΗ",
+              "resignation": (io.BytesIO(img.getvalue()), "dilosi.jpg")},
     )
+    lixi = [s for s in proj.ergani_submissions
+            if s.employee_id == eid and s.doc_type == "E5_LIXI"]
+    ok = bool(lixi) and '"AnaggeliesE5N"' in lixi[-1].payload and \
+        '"f_file": "PDF ' in lixi[-1].payload
+    print(f"  {'OK  ' if ok else 'FAIL'} οικειοθελής -> WebE5N με τη δήλωση (PDF)")
+    if not ok:
+        fails.append("η αποχώρηση δεν έστειλε WebE5N με τη δήλωση")
     # Η καρτέλα εκκαθάρισης δείχνει τα αναλογούντα ποσά + καταβλητέο της ημέρας
     check("εκκαθάριση αποχώρησης: καταβλητέο στην αποχώρηση",
           rt, "Καταβλητέο στην αποχώρηση")

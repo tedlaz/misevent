@@ -45,8 +45,14 @@ from misevent.persistence.database import (
     Database,
     company_store,
 )
+from misevent.persistence.documents import DocumentStore
+
+from .ergani_credentials import SecretStore
 
 DB_NAME = "misevent.db"
+DOCUMENTS_DB_NAME = "documents.db"  # blobs, εκτός event log — δίπλα στη βάση
+SECRETS_DB_NAME = "secrets.db"  # κωδικοί ΕΡΓΑΝΗ ανά εταιρεία, κρυπτογραφημένοι
+SECRETS_KEY_NAME = "secrets.key"
 DEFAULT_COMPANY_NAME = "Εταιρεία 1"
 
 
@@ -65,7 +71,8 @@ def db_file(root: Path | None = None) -> Path:
 class Tenant:
     """Ο κόσμος ΜΙΑΣ εταιρείας — ό,τι έστηνε πριν το `system.py` καθολικά."""
 
-    def __init__(self, company_id: str, db: Database, shared):
+    def __init__(self, company_id: str, db: Database, shared, documents: DocumentStore,
+                 secrets: SecretStore):
         self.company_id = company_id
         self.store_name = company_store(company_id)
 
@@ -77,7 +84,9 @@ class Tenant:
 
         self.sched = ObligationScheduler(self.store, self.proj, horizon_months=1)
         self.store.subscribe(self.sched.handle)
-        self.svc = PayrollService(self.store, self.proj)
+        self.svc = PayrollService(self.store, self.proj,
+                                  ergani_client=secrets.client(self.store_name),
+                                  documents=documents.scope(self.store_name))
 
         # Οι ΚΟΙΝΕΣ παράμετροι ενημερώνουν ΚΑΘΕ φορτωμένη εταιρεία ζωντανά.
         for handler in (self.proj.handle, self.sched.handle):
@@ -106,6 +115,9 @@ class Registry:
         path = db_file(self.root)
         path.parent.mkdir(parents=True, exist_ok=True)
         self.db = Database(str(path))
+        self.documents = DocumentStore(str(path.with_name(DOCUMENTS_DB_NAME)))
+        self.secrets = SecretStore(str(path.with_name(SECRETS_DB_NAME)),
+                                   key_path=path.with_name(SECRETS_KEY_NAME))
 
         self.shared = self.db.store(SHARED_STORE)
 
@@ -157,9 +169,16 @@ class Registry:
             raise ValueError("Η εταιρεία δεν βρέθηκε")
         tenant = self._tenants.get(company_id)
         if tenant is None:
-            tenant = Tenant(company_id, self.db, self.shared)
+            tenant = Tenant(company_id, self.db, self.shared, self.documents, self.secrets)
             self._tenants[company_id] = tenant
         return tenant
+
+    def set_ergani(self, company_id: str, environment: str, username: str,
+                   password: str = ""):
+        """Στοιχεία ΕΡΓΑΝΗ μιας εταιρείας + νέος client ΑΜΕΣΩΣ (χωρίς restart)."""
+        tenant = self.tenant(company_id)
+        self.secrets.set(tenant.store_name, environment, username, password)
+        tenant.svc.ergani = self.secrets.client(tenant.store_name)
 
     def create_company(self, name: str, created_by: str = "") -> str:
         """Νέος ΚΕΝΟΣ χώρος εταιρείας. Τα στοιχεία του εργοδότη καταχωρούνται

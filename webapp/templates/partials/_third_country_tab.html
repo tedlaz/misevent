@@ -3,6 +3,22 @@
 {% set inst = fv.get('res_permit_inst', person.res_permit_inst if person else '') %}
 {% set ap = fv.get('res_permit_ap', person.res_permit_ap if person else '') %}
 {% set visa = fv.get('res_permit_visa', person.res_permit_visa if person else '') %}
+{# «Είδος άδειας» από τη λίστα ΕΡΓΑΝΗ (άμεση πρόσβαση / με έγκριση). Τιμή
+   εκτός λίστας (παλιά καταχώρηση) εμφανίζεται κι αυτή, για να μη χαθεί. #}
+{% macro permit_type(name, direct, fv, person) %}
+  {% set cur = fv.get(name, person[name] if person else '') or '' %}
+  {% set rows = residence_permit_types(direct) %}
+  <select name="{{ name }}">
+    <option value="">— Επιλογή —</option>
+    {% if cur and cur not in rows|map(attribute='code') %}
+      <option value="{{ cur }}" selected>{{ cur }}</option>
+    {% endif %}
+    {% for row in rows %}
+      <option value="{{ row.code }}" {{ 'selected' if cur == row.code }}>
+        {{ row.code }} — {{ row.description }}</option>
+    {% endfor %}
+  </select>
+{% endmacro %}
 <div class="fsecs">
   <div class="fsec fs-id compact">
     <div class="fs-h"><span class="fs-ic">🌍</span>
@@ -21,8 +37,7 @@
           <option value="0" {{ 'selected' if inst == '0' }}>0 — Όχι</option>
           <option value="1" {{ 'selected' if inst == '1' }}>1 — Ναι</option>
         </select></label>
-      <label>Είδος άδειας<input name="res_permit_inst_type" maxlength="5"
-        inputmode="numeric" value="{{ fv.get('res_permit_inst_type', person.res_permit_inst_type if person else '') }}"></label>
+      <label>Είδος άδειας{{ permit_type('res_permit_inst_type', true, fv, person) }}</label>
       <label>Αριθμός άδειας<input name="res_permit_inst_number" maxlength="20"
         value="{{ fv.get('res_permit_inst_number', person.res_permit_inst_number if person else '') }}"></label>
       <label>Ημερομηνία λήξης<input type="date" name="res_permit_inst_expiry_date"
@@ -40,8 +55,7 @@
           <option value="0" {{ 'selected' if ap == '0' }}>0 — Όχι</option>
           <option value="1" {{ 'selected' if ap == '1' }}>1 — Ναι</option>
         </select></label>
-      <label>Είδος άδειας<input name="res_permit_ap_type" maxlength="5"
-        inputmode="numeric" value="{{ fv.get('res_permit_ap_type', person.res_permit_ap_type if person else '') }}"></label>
+      <label>Είδος άδειας{{ permit_type('res_permit_ap_type', false, fv, person) }}</label>
       <label>Αριθμός άδειας<input name="res_permit_ap_number" maxlength="20"
         value="{{ fv.get('res_permit_ap_number', person.res_permit_ap_number if person else '') }}"></label>
       <label>Ημερομηνία λήξης<input type="date" name="res_permit_ap_expiry_date"

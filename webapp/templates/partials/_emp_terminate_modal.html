@@ -6,7 +6,7 @@
 <div class="modal-backdrop">
   <div class="modal">
     <form hx-post="{{ url_for('employments.terminate', employment_id=e.employment_id) }}"
-          hx-target="#employment-card" hx-swap="outerHTML">
+          hx-target="#employment-card" hx-swap="outerHTML" hx-encoding="multipart/form-data">
       <div class="mhead">
         <h3>🚪 Αποχώρηση — {{ e.full_name }}</h3>
         <span class="muted" style="font-size:12.5px">
@@ -40,6 +40,13 @@
             Με προειδοποίηση
             <span class="muted" style="font-size:12px">— μόνο σε καταγγελία
               σύμβασης· η αποζημίωση απόλυσης γίνεται η μισή</span></label>
+          {# ΕΡΓΑΝΗ ΙΙ: η οικειοθελής αποχώρηση (WebE5N) θέλει ΥΠΟΧΡΕΩΤΙΚΑ τη
+             δήλωση με υπογραφή του εργαζομένου· οι φωτογραφίες γίνονται PDF. #}
+          <label>Δήλωση αποχώρησης με υπογραφή του εργαζομένου
+            <input type="file" name="resignation" multiple
+                   accept="application/pdf,image/jpeg,image/png">
+            <span class="muted" style="font-size:12px">— μόνο σε οικειοθελή
+              αποχώρηση· υποχρεωτική για αποστολή στο ΕΡΓΑΝΗ (PDF ή φωτογραφίες)</span></label>
         </div>
 
         <h3 class="sec">Υπολογισμοί εκκαθάρισης</h3>

@@ -201,7 +201,8 @@ button.tag.lnk-tag{font-family:inherit;font-size:10.5px;font-weight:700}
 .tabs:has(#tab-employer:checked) .tp-employer,
 .tabs:has(#tab-branches:checked) .tp-branches,
 .tabs:has(#tab-specialties:checked) .tp-specialties,
-.tabs:has(#tab-kpk:checked) .tp-kpk{display:block}
+.tabs:has(#tab-kpk:checked) .tp-kpk,
+.tabs:has(#tab-ergani:checked) .tp-ergani{display:block}
 /* ενεργή ετικέτα */
 #tab-general:checked ~ .tabbar label[for=tab-general],
 #tab-foreign:checked ~ .tabbar label[for=tab-foreign],
@@ -211,7 +212,8 @@ button.tag.lnk-tag{font-family:inherit;font-size:10.5px;font-weight:700}
 .tabs:has(#tab-employer:checked) .tabbar label[for=tab-employer],
 .tabs:has(#tab-branches:checked) .tabbar label[for=tab-branches],
 .tabs:has(#tab-specialties:checked) .tabbar label[for=tab-specialties],
-.tabs:has(#tab-kpk:checked) .tabbar label[for=tab-kpk]{
+.tabs:has(#tab-kpk:checked) .tabbar label[for=tab-kpk],
+.tabs:has(#tab-ergani:checked) .tabbar label[for=tab-ergani]{
   color:var(--ink);background:var(--card);border-color:var(--line);
   border-bottom:1px solid var(--card)}
 .legend{display:flex;gap:14px;flex-wrap:wrap;font-size:12.5px;
@@ -1414,7 +1416,7 @@ main>*:nth-child(4){animation-delay:.15s}
 
 /* --------------------------------------------------------- ΚΟΥΜΠΙΑ */
 /* Κοινή βάση: ανασήκωμα στο hover, «πάτημα» στο active, ορατό focus ring. */
-button.run,a.run,button.ghost,a.ghost,.lnkbtn{
+button.run,a.run,button.ghost,a.ghost,label.ghost,.lnkbtn{
   position:relative;overflow:hidden;isolation:isolate;
   transition:transform .18s var(--spring),box-shadow .22s var(--ease),
     background-color .22s var(--ease),border-color .22s var(--ease),
@@ -1444,8 +1446,8 @@ button.run::after,a.run::after{content:'';position:absolute;inset:0;z-index:-1;
 button.run:hover:not(:disabled)::after,a.run:hover::after{
   animation:sweep .75s var(--ease)}
 
-button.ghost,a.ghost{box-shadow:var(--sh-1)}
-button.ghost:hover,a.ghost:hover{transform:translateY(-2px);
+button.ghost,a.ghost,label.ghost{box-shadow:var(--sh-1)}
+button.ghost:hover,a.ghost:hover,label.ghost:hover{transform:translateY(-2px);
   border-color:var(--ink);box-shadow:var(--sh-2)}
 button.ghost:active,a.ghost:active{transform:translateY(0) scale(.97)}
 button.ghost.on{box-shadow:var(--sh-2)}
@@ -2665,3 +2667,13 @@ body.authpage{background:var(--paper);min-height:100vh;display:flex;
   background:color-mix(in srgb,var(--warn) 16%,transparent)}
 .tb-mo.late .tb-row > i:not(:empty){background:color-mix(in srgb,var(--prob) 16%,transparent)}
 .tb-mo.sel .tb-row > i:not(:empty){background:rgba(255,255,255,.25)}
+
+/* ------------------------------------- ΑΝΑΖΗΤΗΣΗ ΣΕ ΜΕΓΑΛΑ SELECT (select-search.js) */
+.ss{position:relative;display:block;min-width:0}
+.ss-menu{position:absolute;left:0;right:0;top:calc(100% + 2px);z-index:50;
+  margin:0;padding:4px 0;list-style:none;max-height:260px;overflow:auto;
+  background:var(--card);border:1px solid var(--line);border-radius:8px;
+  box-shadow:0 6px 18px rgba(23,36,47,.14);font-size:13px;color:var(--ink)}
+.ss-menu li{padding:5px 10px;cursor:pointer}
+.ss-menu li.on,.ss-menu li:hover{background:var(--ready-bg)}
+.ss-menu li.ss-more{color:var(--muted);font-style:italic;cursor:default;background:none}

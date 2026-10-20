@@ -13,7 +13,7 @@ import misevent.rules.config as config
 import misevent.rules.constraints as constraints
 from misevent.domain.events import ContractChanged, EmployeeTerminated, EmploymentDeleted
 
-from ._base import DISMISSAL_REASON
+from ._base import DISMISSAL_REASON, FIXED_TERM_END_REASON, VOLUNTARY_EXIT_REASON
 
 
 class ContractMixin:
@@ -420,22 +420,53 @@ class ContractMixin:
             "ergani": self.proj.company is not None,
         }
 
-    def terminate(self, employee_id, termination_date, reason="", with_notice=False):
-        """Αποχώρηση/λήξη εργασιακής σχέσης + Ψηφιακή Αναγγελία Λήξης."""
+    def terminate(self, employee_id, termination_date, reason="", with_notice=False,
+                  resignation_pdf: bytes | None = None) -> str:
+        """Αποχώρηση/λήξη εργασιακής σχέσης + Ψηφιακή Αναγγελία Λήξης.
+
+        Έντυπο ΕΡΓΑΝΗ ανά αιτία (σχήματα στο data/ergani_schemas/):
+          - οικειοθελής      -> WebE5N, με τη δήλωση του εργαζομένου (PDF)
+                                ΥΠΟΧΡΕΩΤΙΚΑ όταν η αποστολή είναι πραγματική·
+          - λήξη ορισμένου   -> WebE7N (χωρίς συνημμένο)·
+          - καταγγελία       -> ΚΑΜΙΑ αποστολή: δεν διατίθεται μέσω API.
+        Επιστρέφει σημείωση για τον χρήστη (κενή αν δεν χρειάζεται)."""
         emp = self._check_termination(employee_id, termination_date)
+        reason = reason or VOLUNTARY_EXIT_REASON
+        # Έλεγχοι ΠΡΙΝ το event: καμία μισή αποχώρηση
+        if reason == FIXED_TERM_END_REASON and emp.employment_relationship != "1":
+            raise ValueError("Η «Λήξη ορισμένου χρόνου» αφορά μόνο σύμβαση "
+                             "ορισμένου χρόνου")
+        if resignation_pdf is not None and not resignation_pdf.startswith(b"%PDF"):
+            raise ValueError("Η δήλωση αποχώρησης πρέπει να είναι PDF")
+        if (self.proj.company and reason == VOLUNTARY_EXIT_REASON
+                and not self.ergani.simulate and not resignation_pdf):
+            raise ValueError(
+                "Επισυνάψτε τη δήλωση αποχώρησης με υπογραφή του εργαζομένου "
+                "(PDF) — το ΕΡΓΑΝΗ την απαιτεί στην οικειοθελή αποχώρηση")
 
         self.store.append(
             employee_id, EmployeeTerminated(employee_id, termination_date, reason)
         )
 
+        note = ""
         if self.proj.company:
-            self._ergani_submit(
-                "E5_LIXI",
-                employee_id,
-                ergani_mod.build_lixi(self.proj.company, emp, termination_date, reason),
-            )
+            profile = emp.insurance_profile
+            branch = self.get_branch(getattr(profile, "branch_no", 0) or 0)
+            args = (self.proj.company, emp, profile, termination_date)
+            if reason == VOLUNTARY_EXIT_REASON:
+                self._ergani_submit("E5_LIXI", employee_id, ergani_mod.build_web_e5n(
+                    *args, branch=branch, resignation_pdf=resignation_pdf),
+                    endpoint="WebE5N")
+            elif reason == FIXED_TERM_END_REASON:
+                self._ergani_submit("E5_LIXI", employee_id, ergani_mod.build_web_e7n(
+                    *args, branch=branch), endpoint="WebE7N")
+            else:
+                note = ("η Ψηφιακή Αναγγελία Λήξης για καταγγελία ΔΕΝ διατίθεται "
+                        "μέσω API — υποβάλετέ την στο portal του ΕΡΓΑΝΗ εντός 4 "
+                        "εργάσιμων")
 
         # ΟΛΟΙ οι υπολογισμοί της εκκαθάρισης γίνονται ΕΔΩ, αυτόματα: Δώρο +
         # Επίδομα Αδείας pro-rata, αποζημίωση μη ληφθείσας αδείας και (σε
         # καταγγελία) αποζημίωση απόλυσης — κανένα χειροκίνητο κουμπί.
         self._settle_exit_accruals(emp, with_notice)
+        return note

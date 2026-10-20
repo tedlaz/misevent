@@ -1,0 +1,42 @@
+{# Έγγραφα προσώπου που στέλνονται με την αναγγελία πρόσληψης ΕΡΓΑΝΗ (WebE3N).
+   Ζουν στη ΒΑΣΗ ΕΓΓΡΑΦΩΝ (όχι events) — διαγράφονται. Ανανεώνεται μόνο του
+   (outerHTML) σε ανέβασμα/διαγραφή. Θέλει `person`, `documents`. #}
+<div id="person-docs">
+  <b class="sec">Έγγραφα πρόσληψης (ΕΡΓΑΝΗ)</b>
+  {% if documents %}
+    <table class="tbl">
+      <thead><tr><th>Έγγραφο</th><th>Μέγεθος</th><th>Ανέβηκε</th><th></th></tr></thead>
+      <tbody>
+        {% for d in documents %}
+          <tr>
+            <td>{{ d.label }}</td>
+            <td class="mono">{{ (d.size // 1024) or 1 }} KB</td>
+            <td class="mono">{{ d.added|date_gr }}</td>
+            <td style="text-align:right;white-space:nowrap">
+              <a class="ghost" href="{{ url_for('persons.document_download',
+                 person_id=person.person_id, kind=d.kind) }}">⬇ Λήψη</a>
+              <button type="button" class="ghost"
+                      hx-post="{{ url_for('persons.document_delete',
+                               person_id=person.person_id, kind=d.kind) }}"
+                      hx-confirm="Διαγραφή του εγγράφου «{{ d.label }}»; Δεν αναιρείται."
+                      hx-target="#person-docs" hx-swap="outerHTML">🗑</button>
+            </td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  {% else %}
+    <div class="empty">Κανένα έγγραφο.</div>
+  {% endif %}
+  <form class="btnrow" style="margin-top:8px"
+        hx-post="{{ url_for('persons.document_upload', person_id=person.person_id) }}"
+        hx-encoding="multipart/form-data" hx-target="#person-docs" hx-swap="outerHTML">
+    <select name="kind" required>
+      {% for kind, label in PERSON_DOCUMENT_KINDS.items() %}
+        <option value="{{ kind }}">{{ label }}</option>
+      {% endfor %}
+    </select>
+    <input type="file" name="file" accept="application/pdf,image/jpeg,image/png" multiple required>
+    <button class="ghost" type="submit">⬆ Ανέβασμα</button>
+  </form>
+</div>

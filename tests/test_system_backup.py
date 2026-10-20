@@ -1,6 +1,13 @@
 """Backup / restore ΟΛΟΥ του συστήματος (σελίδα «Σύστημα → Backup»)."""
 
+import zipfile
 from io import BytesIO
+
+
+def _events_db(backup: bytes) -> bytes:
+    """Η βάση events μέσα σε ένα backup .zip."""
+    with zipfile.ZipFile(BytesIO(backup)) as z:
+        return z.read("misevent.db")
 
 
 def test_system_backup_roundtrip(fresh_system):
@@ -17,7 +24,10 @@ def test_system_backup_roundtrip(fresh_system):
     r = client.get("/backup/download")
     assert r.status_code == 200
     snapshot = r.data
-    assert snapshot.startswith(b"SQLite format 3")
+    with zipfile.ZipFile(BytesIO(snapshot)) as z:
+        assert sorted(z.namelist()) == ["documents.db", "misevent.db",
+                                        "secrets.db", "secrets.key"]
+    assert _events_db(snapshot).startswith(b"SQLite format 3")
 
     extra = registry.create_company("Μετά το backup")
     assert extra in {c.company_id for c in auth.active_companies()}
@@ -32,7 +42,7 @@ def test_system_backup_roundtrip(fresh_system):
     import sqlite3
 
     bad = sqlite3.connect(":memory:")
-    bad.deserialize(snapshot)
+    bad.deserialize(_events_db(snapshot))
     bad.execute("UPDATE events SET event_type = 'Άγνωστο' WHERE store = 'system'")
     bad.commit()
     r = client.post("/backup/restore",
@@ -44,7 +54,7 @@ def test_system_backup_roundtrip(fresh_system):
                     data={"backup": (BytesIO(snapshot), "b.db")})
     assert "/login?restored=1" in r.headers["Location"]
     assert {c.company_id for c in auth.active_companies()} == before
-    assert list((fresh_system / "backups" / "system").glob("before-restore-*.db"))
+    assert list((fresh_system / "backups" / "system").glob("before-restore-*.zip"))
     # Μετά το restore: αποσύνδεση -> νέα σύνδεση με τα στοιχεία του backup.
     assert client.get("/persons/").status_code == 302
     client = ui_client(app)
@@ -96,18 +106,18 @@ def test_safety_backups_page(fresh_system):
     client.post("/backup/restore", data={"backup": (BytesIO(snapshot), "b.db")})
     client = ui_client(app)  # το restore αποσυνδέει
 
-    (safety,) = (fresh_system / "backups" / "system").glob("before-restore-*.db")
+    (safety,) = (fresh_system / "backups" / "system").glob("before-restore-*.zip")
     base = f"/backup/safety/system/{safety.name}"
     assert safety.name in client.get("/backup/").get_data(as_text=True)
 
     r = client.get(base)
-    assert r.status_code == 200 and r.data.startswith(b"SQLite format 3")
+    assert r.status_code == 200 and r.data.startswith(b"PK")
 
     r = client.post(base + "/restore")
     assert "/login?restored=1" in r.headers["Location"]
     client = ui_client(app)
     # Η επαναφορά κράτησε ΝΕΟ αντίγραφο· το αρχικό μένει.
-    assert len(list(safety.parent.glob("before-restore-*.db"))) == 2
+    assert len(list(safety.parent.glob("before-restore-*.zip"))) == 2
 
     r = client.post(base + "/delete")
     assert r.status_code == 302 and not safety.exists()

@@ -7,6 +7,8 @@
 ξεχωριστή σελίδα-καρτέλα προσώπου.
 """
 
+import base64
+from datetime import date
 from io import BytesIO
 
 from flask import Blueprint, abort, render_template, request, send_file
@@ -57,6 +59,26 @@ def new_modal():
     )
 
 
+def _identity_dates(form) -> dict:
+    """Ημ/νίες ταυτότητας ΜΟΝΟ αν υπάρχουν στη φόρμα: κενό πεδίο = σβήσιμο,
+    απόν πεδίο = χωρίς αλλαγή (το None μόνο του δεν τα ξεχωρίζει)."""
+    return {k: form_optional_date(form, k)
+            for k in ("identity_issue_date", "identity_expiry_date") if k in form}
+
+
+def _form_documents(form) -> dict:
+    """{είδος: PDF bytes} από τα hidden `doc_<είδος>` του modal νέου προσώπου."""
+    docs = {}
+    for kind in amka_pdf.ATTACHMENT_KINDS:
+        raw = form.get(f"doc_{kind}")
+        if raw:
+            try:
+                docs[kind] = base64.b64decode(raw, validate=True)
+            except ValueError:  # binascii.Error ⊂ ValueError (και μη-ASCII)
+                raise ValueError("Χαλασμένο συνημμένο — ανεβάστε ξανά την αίτηση") from None
+    return docs
+
+
 @bp.post("/new/amka")
 def new_from_amka():
     """Προσυμπλήρωση του modal από Βεβαίωση ΑΜΚΑ (PDF). ΔΕΝ καταχωρεί τίποτα:
@@ -67,13 +89,20 @@ def new_from_amka():
     f = request.files.get("amka_pdf")
     try:
         if f is None or not f.filename:
-            raise ValueError("Επιλέξτε το PDF της Βεβαίωσης ΑΜΚΑ")
-        found = amka_pdf.read(f.read())
+            raise ValueError("Επιλέξτε αρχείο (PDF βεβαίωσης ΑΜΚΑ ή .json αίτησης)")
+        found, docs = amka_pdf.read_upload(f.read())
         if not found:
-            raise ValueError("Δεν βρέθηκαν στοιχεία στη βεβαίωση")
+            raise ValueError("Δεν βρέθηκαν στοιχεία στο αρχείο")
         form.update(found)
-        ok, msg = True, (f"Συμπληρώθηκαν {len(found)} πεδία από τη βεβαίωση ΑΜΚΑ — "
-                         "ελέγξτε τα και συμπληρώστε τα υπόλοιπα")
+        # Τα συνημμένα ταξιδεύουν ως hidden πεδία (base64) ως το `create` —
+        # καμία προσωρινή αποθήκευση στον server πριν την καταχώρηση.
+        form.update({f"doc_{k}": base64.b64encode(v).decode() for k, v in docs.items()})
+        bad = amka_pdf.problems(found)
+        ok, msg = not bad, (f"Συμπληρώθηκαν {len(found)} πεδία"
+                            + (f" και {len(docs)} συνημμένα" if docs else "")
+                            + " από το αρχείο — ελέγξτε τα και συμπληρώστε τα υπόλοιπα")
+        if bad:
+            msg += " ⚠ " + " · ".join(bad)
     except ValueError as exc:
         ok, msg = False, str(exc)
     html = render_template(
@@ -84,6 +113,23 @@ def new_from_amka():
         eu_nationality_codes=ergani_params.eu_nationality_codes(),
     )
     return flash_to(html, msg, err=not ok)
+
+
+@bp.get("/form.html")
+def blank_form():
+    """Κενή αίτηση στοιχείων για τον υποψήφιο — αυτόνομο .html· το .json που
+    βγάζει ανεβαίνει από το ίδιο κουμπί με τη βεβαίωση ΑΜΚΑ."""
+    html = render_template(
+        "candidate_form.html", fields=amka_pdf.FORM_FIELDS,
+        tc_groups=amka_pdf.TC_GROUPS, lists=amka_pdf.choices(),
+        dates=amka_pdf.DATE_FIELDS, digits={"afm": 9, "amka": 11, "ama": 9, "postal_code": 5},
+        defaults={"nationality_code": "048"}, schema=amka_pdf.CANDIDATE_SCHEMA,
+        eu_codes=list(ergani_params.eu_nationality_codes()),
+    )
+    return send_file(
+        BytesIO(html.encode("utf-8")), mimetype="text/html",
+        as_attachment=True, download_name="aitisi_stoixeion_ergazomenou.html",
+    )
 
 
 @bp.get("/modal/close")
@@ -144,7 +190,8 @@ def import_json():
 def create():
     def cmd():
         f = request.form
-        svc.register_person(
+        docs = _form_documents(f)  # ΠΡΙΝ την καταχώρηση: χαλασμένο = τίποτα
+        person_id = svc.register_person(
             last_name=f.get("last_name", ""),
             first_name=f.get("first_name", ""),
             father_name=f.get("father_name", ""),
@@ -160,12 +207,13 @@ def create():
             identity_type=f.get("identity_type", ""),
             identity_number=f.get("identity_number", ""),
             identity_issuer=f.get("identity_issuer", ""),
-            identity_issue_date=form_optional_date(f, "identity_issue_date"),
-            identity_expiry_date=form_optional_date(f, "identity_expiry_date"),
+            **_identity_dates(f),
             education_level=f.get("education_level", ""),
             **form_contact_fields(f),
             **form_third_country_fields(f),
         )
+        for kind, content in docs.items():
+            svc.attach_document(person_id, kind, content, f"{kind}.pdf")
         return (f"Καταχωρήθηκε ο εργαζόμενος {f.get('last_name')} "
                 f"{f.get('first_name')} — κάντε πρόσληψη από το badge «πρόσληψη»")
 
@@ -223,8 +271,60 @@ def info_modal(person_id):
     return render_template(
         "partials/_person_info_modal.html",
         education_level_label=education_level_label,
+        documents=_documents(person_id),
         **info,
     )
+
+
+# ------------------------------------------- Έγγραφα (βάση εγγράφων, όχι events)
+def _documents(person_id) -> list[dict]:
+    return [{**d, "added": date.fromisoformat(d["added_at"][:10])}
+            for d in svc.person_documents(person_id)]
+
+
+def _documents_html(person_id, msg="", err=False):
+    html = render_template("partials/_person_documents.html",
+                           person=proj.persons[person_id],
+                           documents=_documents(person_id))
+    return flash_to(html, msg, err=err) if msg else html
+
+
+@bp.get("/<person_id>/documents/<kind>")
+def document_download(person_id, kind):
+    doc = svc.person_document(person_id, kind)
+    if doc is None:
+        abort(404)
+    return send_file(BytesIO(doc["content"]), mimetype="application/pdf",
+                     as_attachment=True,
+                     download_name=f"{kind}_{proj.persons[person_id].afm}.pdf")
+
+
+@bp.post("/<person_id>/documents")
+def document_upload(person_id):
+    """Ανέβασμα για όσα έρχονται εκτός αίτησης: PDF/εικόνες -> ΕΝΑ PDF."""
+    if person_id not in proj.persons:
+        abort(404)
+    files = request.files.getlist("file")
+    kind = request.form.get("kind", "")
+
+    def cmd():
+        content = amka_pdf.to_pdf([
+            {"name": f.filename, "data": base64.b64encode(f.read()).decode()}
+            for f in files if f.filename])
+        svc.attach_document(person_id, kind, content, f"{kind}.pdf")
+        return "Το έγγραφο αποθηκεύτηκε"
+
+    ok, msg = run_command(cmd)
+    return _documents_html(person_id, msg, err=not ok)
+
+
+@bp.post("/<person_id>/documents/<kind>/delete")
+def document_delete(person_id, kind):
+    if person_id not in proj.persons:
+        abort(404)
+    ok, msg = run_command(lambda: svc.delete_document(person_id, kind)
+                          and "Το έγγραφο διαγράφηκε")
+    return _documents_html(person_id, msg, err=not ok)
 
 
 @bp.post("/<person_id>/correct")
@@ -247,8 +347,7 @@ def correct(person_id):
             identity_type=f.get("identity_type"),
             identity_number=f.get("identity_number"),
             identity_issuer=f.get("identity_issuer"),
-            identity_issue_date=form_optional_date(f, "identity_issue_date"),
-            identity_expiry_date=form_optional_date(f, "identity_expiry_date"),
+            **_identity_dates(f),
             education_level=f.get("education_level"),
             **form_contact_fields(f),
             **form_third_country_fields(f),
@@ -307,8 +406,7 @@ def change(person_id):
             identity_type=f.get("identity_type"),
             identity_number=f.get("identity_number"),
             identity_issuer=f.get("identity_issuer"),
-            identity_issue_date=form_optional_date(f, "identity_issue_date"),
-            identity_expiry_date=form_optional_date(f, "identity_expiry_date"),
+            **_identity_dates(f),
             education_level=f.get("education_level"),
             **form_contact_fields(f, birth_place=False),
             **form_third_country_fields(f),

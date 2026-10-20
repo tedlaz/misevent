@@ -72,6 +72,14 @@ def create_app():
     app.jinja_env.globals["EMP_LIFECYCLE"] = EMP_LIFECYCLE
     # Μήνες σε γενική («Μισθοδοσία Ιουνίου 2026») — ΜΙΑ πηγή αλήθειας
     app.jinja_env.globals["months_gen"] = MONTHS_GEN
+    # Λίστες «Είδος άδειας» της καρτέλας τρίτων χωρών (3 forms την κάνουν include)
+    from misevent.integrations import ergani_parameters
+
+    app.jinja_env.globals["residence_permit_types"] = ergani_parameters.residence_permit_types
+    # Είδη εγγράφων προσώπου (modal νέου προσώπου + πληροφορίες προσώπου)
+    from misevent.app.services._base import PERSON_DOCUMENT_KINDS
+
+    app.jinja_env.globals["PERSON_DOCUMENT_KINDS"] = PERSON_DOCUMENT_KINDS
     # Λωρίδα χρόνου (`time_bar` του `_macros.html`): υπολογίζεται ΜΟΝΟ στις
     # σελίδες που τη ζητούν — function, όχι context processor.
     from . import queries

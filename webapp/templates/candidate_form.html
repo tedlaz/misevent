@@ -1,0 +1,247 @@
+{# Αίτηση στοιχείων υποψηφίου — ΑΥΤΟΝΟΜΟ αρχείο (κατεβαίνει από το modal νέου
+   προσώπου): inline CSS/JS, καμία εξωτερική αναφορά, ανοίγει offline σε κάθε
+   browser. «Αποθήκευση» -> .json που ανεβαίνει από το «Από αρχείο» του modal
+   (`amka_pdf.read_candidate`). Ονόματα πεδίων = τα `name=` του modal. #}
+{% macro field(name, label) %}
+  {% set req = label.endswith('*') %}
+  <label>{{ label }}
+  {% if name in lists %}
+    <select name="{{ name }}" {{ 'required' if req }}>
+      {% if lists[name][0][0] != '' %}<option value="">— Επιλογή —</option>{% endif %}
+      {% for code, desc in lists[name] %}
+        <option value="{{ code }}" {{ 'selected' if code == defaults.get(name) }}>
+          {{- code ~ ' — ' if code }}{{ desc }}</option>
+      {% endfor %}
+    </select>
+  {% elif name in dates %}
+    <input type="date" name="{{ name }}" min="1900-01-01" max="2100-12-31" {{ 'required' if req }}>
+  {% elif name in digits %}
+    <input name="{{ name }}" inputmode="numeric" maxlength="{{ digits[name] }}"
+           pattern="\d{{ '{' ~ digits[name] ~ '}' }}" {{ 'required' if req }}>
+  {% elif name == 'children' %}
+    <input type="number" name="children" min="0" max="20" value="0">
+  {% elif name == 'email' %}
+    <input type="email" name="email" placeholder="name@example.com">
+  {% else %}
+    <input name="{{ name }}" data-upper {{ 'type=tel' if name == 'phone' }} {{ 'required' if req }}>
+  {% endif %}
+  </label>
+{% endmacro %}
+<!doctype html>
+<html lang="el">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Αίτηση στοιχείων εργαζομένου</title>
+<style>
+  :root { --ink: #212b3c; --muted: #6c798c; --line: #c9d1dc; --accent: #0d8076;
+          --bad: #b72942; --bg: #f5f7fa; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink);
+         font: 15px/1.45 system-ui, "Segoe UI", Roboto, sans-serif; }
+  main { max-width: 860px; margin: 24px auto; padding: 24px 28px; background: #fff;
+         border: 1px solid var(--line); border-radius: 10px; }
+  h1 { margin: 0 0 4px; font-size: 22px; color: #172a45; }
+  h2 { margin: 26px 0 4px; font-size: 16px; color: #172a45; }
+  h3 { margin: 14px 0 6px; font-size: 13.5px; }
+  .note { color: var(--muted); font-size: 13.5px; margin: 4px 0 14px; }
+  /* minmax(0,…): οι μεγάλες περιγραφές των <select> δεν φουσκώνουν τη στήλη */
+  .grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px 18px; }
+  .grid4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  label { display: flex; flex-direction: column; gap: 3px; font-size: 13px; }
+  input, select { font: inherit; padding: 7px 9px; border: 1px solid var(--line);
+                  border-radius: 6px; background: #fff; color: inherit;
+                  width: 100%; min-width: 0; text-overflow: ellipsis; }
+  input:focus, select:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+  input:user-invalid, select:user-invalid { border-color: var(--bad); }
+  [data-upper] { text-transform: uppercase; }
+  /* min-width: 0 — το fieldset από default δεν στενεύει κάτω από το περιεχόμενό του */
+  fieldset { border: 1px solid var(--line); border-radius: 8px; padding: 6px 14px 14px;
+             margin: 8px 0 0; min-width: 0; }
+  fieldset:disabled { opacity: .5; }
+  .bar { display: flex; gap: 12px; align-items: center; margin-top: 24px; }
+  button { font: inherit; font-weight: 600; padding: 10px 22px; border: 0;
+           border-radius: 6px; background: var(--accent); color: #fff; cursor: pointer; }
+  #status { color: var(--muted); font-size: 13.5px; }
+  @media (max-width: 640px) {
+    main { margin: 0; border: 0; border-radius: 0; padding: 18px 16px; }
+    .grid, .grid4 { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+<main>
+  <h1>Αίτηση — στοιχεία εργαζομένου</h1>
+  <p class="note">Συμπληρώστε τα στοιχεία σας και πατήστε <b>«Αποθήκευση»</b>.
+    Θα κατέβει ένα αρχείο <b>.json</b>· στείλτε αυτό πίσω στον εργοδότη. Τα πεδία
+    με * είναι υποχρεωτικά. Τα στοιχεία δεν αποστέλλονται πουθενά από αυτή τη
+    σελίδα και χρησιμοποιούνται μόνο για την πρόσληψή σας.</p>
+
+  <form id="f" novalidate>
+    <div class="grid">
+      {% for name, label in fields %}{{ field(name, label) }}{% endfor %}
+    </div>
+
+    <h2>Πολίτες τρίτων χωρών</h2>
+    <p class="note">Μόνο για υπηκοότητα εκτός Ελλάδας και Ε.Ε. — τα πεδία
+      ενεργοποιούνται μόλις επιλεγεί τέτοια υπηκοότητα.</p>
+    <fieldset id="tc" disabled>
+      {% for title, group in tc_groups %}
+        <h3>{{ title }}</h3>
+        <div class="grid grid4">
+          {% for name, label in group %}{{ field(name, label) }}{% endfor %}
+        </div>
+      {% endfor %}
+      <h3>Νομιμοποιητικά έγγραφα</h3>
+      <label>Άδεια διαμονής / θεώρηση — PDF ή φωτογραφίες (όλες οι σελίδες)
+        <input type="file" name="foreign_file" multiple data-attach
+               accept="application/pdf,image/jpeg,image/png"></label>
+    </fieldset>
+
+    <h2>Ανήλικοι</h2>
+    <p class="note">Μόνο για ηλικία κάτω των 18 — ενεργοποιείται από την ημ. γέννησης.</p>
+    <fieldset id="young" disabled>
+      <label>Βιβλιάριο ανηλίκου — PDF ή φωτογραφίες (όλες οι σελίδες)
+        <input type="file" name="young_file" multiple data-attach
+               accept="application/pdf,image/jpeg,image/png"></label>
+    </fieldset>
+
+    <div class="bar">
+      <button type="submit">Αποθήκευση</button>
+      <span id="status" role="status"></span>
+    </div>
+  </form>
+</main>
+<script>
+{% include "candidate_checks.js" %}
+
+(function () {
+  var SCHEMA = {{ schema|tojson }};
+  var EU = {{ eu_codes|tojson }};
+  var form = document.getElementById("f");
+  var tc = document.getElementById("tc");
+  var nationality = form.elements.nationality_code;
+  var status = document.getElementById("status");
+
+  // Κεφαλαία καθώς γράφει — κρατά τη θέση του κέρσορα
+  form.querySelectorAll("[data-upper]").forEach(function (el) {
+    el.addEventListener("input", function () {
+      var s = el.selectionStart, e = el.selectionEnd;
+      el.value = el.value.toUpperCase();
+      el.setSelectionRange(s, e);
+    });
+  });
+
+  // ΑΦΜ / ΑΜΚΑ: αλγοριθμικός έλεγχος (το μήκος το πιάνει το pattern)
+  [["afm", afmOk, "Μη έγκυρος Α.Φ.Μ. — ελέγξτε τα 9 ψηφία."],
+   ["amka", amkaOk, "Μη έγκυρος Α.Μ.Κ.Α. — ελέγξτε τα 11 ψηφία."]].forEach(function (c) {
+    var el = form.elements[c[0]];
+    el.addEventListener("input", function () {
+      el.setCustomValidity(/^\d+$/.test(el.value) && el.value.length === el.maxLength
+                           && !c[1](el.value) ? c[2] : "");
+    });
+  });
+
+  // Τρίτες χώρες: ίδιος κανόνας με το third-country-tab.js της εφαρμογής
+  function syncTc() {
+    var v = nationality.value;
+    tc.disabled = !(v && EU.indexOf(v) < 0);
+  }
+  nationality.addEventListener("change", syncTc);
+  syncTc();
+
+  // Ανήλικος (< 18 σήμερα) -> ενεργό το βιβλιάριο
+  var young = document.getElementById("young");
+  var born = form.elements.birth_date;
+  function syncYoung() {
+    var b = born.valueAsDate, now = new Date();
+    if (!b) { young.disabled = true; return; }
+    var age = now.getFullYear() - b.getUTCFullYear()
+      - ((now.getMonth() < b.getUTCMonth()
+          || (now.getMonth() === b.getUTCMonth() && now.getDate() < b.getUTCDate())) ? 1 : 0);
+    young.disabled = age >= 18;
+  }
+  born.addEventListener("change", syncYoung);
+  syncYoung();
+
+  // Συνημμένα -> base64 μέσα στο .json. Οι φωτογραφίες σμικρύνονται (≤ 2000px,
+  // JPEG) ώστε το αρχείο να μένει μικρό· τα PDF πάνε όπως είναι.
+  var MAX_BYTES = 15 * 1024 * 1024;
+  function dataUrl(file) {
+    return new Promise(function (ok, bad) {
+      var r = new FileReader();
+      r.onload = function () { ok(r.result); };
+      r.onerror = bad;
+      r.readAsDataURL(file);
+    });
+  }
+  function attachment(file) {
+    if (file.type === "application/pdf") {
+      return dataUrl(file).then(function (u) {
+        return { name: file.name, type: file.type, data: u.split(",")[1] };
+      });
+    }
+    return new Promise(function (ok, bad) {
+      var img = new Image();
+      img.onload = function () {
+        var k = Math.min(1, 2000 / Math.max(img.naturalWidth, img.naturalHeight));
+        var c = document.createElement("canvas");
+        c.width = Math.round(img.naturalWidth * k);
+        c.height = Math.round(img.naturalHeight * k);
+        c.getContext("2d").drawImage(img, 0, 0, c.width, c.height);
+        ok({ name: file.name, type: "image/jpeg",
+             data: c.toDataURL("image/jpeg", 0.85).split(",")[1] });
+      };
+      img.onerror = function () { bad(new Error("Δεν διαβάστηκε η εικόνα «" + file.name + "»")); };
+      img.src = URL.createObjectURL(file);
+    });
+  }
+  function attachments() {
+    var out = {}, jobs = [];
+    form.querySelectorAll("[data-attach]").forEach(function (el) {
+      if (el.disabled || !el.files.length) return;
+      jobs.push(Promise.all(Array.prototype.map.call(el.files, attachment))
+        .then(function (list) { out[el.name] = list; }));
+    });
+    return Promise.all(jobs).then(function () { return out; });
+  }
+
+  form.addEventListener("submit", function (ev) {
+    ev.preventDefault();
+    if (!form.reportValidity()) {
+      status.textContent = "Διορθώστε τα σημειωμένα πεδία.";
+      return;
+    }
+    var fields = {};
+    Array.prototype.forEach.call(form.elements, function (el) {
+      if (el.name && !el.disabled && el.type !== "file") fields[el.name] = el.value.trim();
+    });
+    status.textContent = "Προετοιμασία…";
+    attachments().then(function (files) {
+      save(fields, files);
+    }, function (err) {
+      status.textContent = err.message;
+    });
+  });
+
+  function save(fields, files) {
+    var body = JSON.stringify({ schema: SCHEMA, fields: fields, attachments: files }, null, 2);
+    if (body.length > MAX_BYTES) {
+      status.textContent = "Τα συνημμένα είναι πολύ μεγάλα (όριο 15 MB) — "
+        + "στείλτε λιγότερες/μικρότερες σελίδες.";
+      return;
+    }
+    var blob = new Blob([body], { type: "application/json" });
+    var a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = ("aitisi_" + fields.last_name + "_" + fields.first_name)
+      .replace(/\s+/g, "_") + ".json";
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    status.textContent = "Αποθηκεύτηκε «" + a.download + "» — στείλτε το στον εργοδότη.";
+  }
+})();
+</script>
+</body>
+</html>

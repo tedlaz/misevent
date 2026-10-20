@@ -9,10 +9,21 @@ from typing import NamedTuple
 
 import misevent.integrations.ergani as ergani_mod
 from misevent.domain.events import ErganiSubmissionRecorded
+from misevent.persistence.documents import DocumentStore
+
+# ΕΓΓΡΑΦΑ ΠΡΟΣΩΠΟΥ που πάνε με την αναγγελία πρόσληψης (WebE3N, PDF base64).
+# Κλειδί = το πεδίο του WebE3N, ώστε η υποβολή να μη χρειάζεται αντιστοίχιση.
+PERSON_DOCUMENT_KINDS = {
+    "foreign_file": "Νομιμοποιητικά έγγραφα πολίτη τρίτης χώρας",
+    "young_file": "Βιβλιάριο ανηλίκου",
+}
+MAX_DOCUMENT_BYTES = 10 * 1024 * 1024
+
 
 # γεννά αποζημίωση απόλυσης στην εκκαθάριση της αποχώρησης.
 VOLUNTARY_EXIT_REASON = "ΟΙΚΕΙΟΘΕΛΗΣ_ΑΠΟΧΩΡΗΣΗ"
 DISMISSAL_REASON = "ΚΑΤΑΓΓΕΛΙΑ_ΣΥΜΒΑΣΗΣ"
+FIXED_TERM_END_REASON = "ΛΗΞΗ_ΣΥΜΒΑΣΗΣ_ΟΡΙΣΜΕΝΟΥ"
 
 # ΚΑΝΟΝΙΚΗ ΑΔΕΙΑ — μακρά υπηρεσία: 25 εργάσιμες ημέρες (αντί 20/21/22) με 12
 # έτη συνολικής εργασίας σε ΟΠΟΙΟΝΔΗΠΟΤΕ εργοδότη ή 10 έτη ΣΤΟΝ ΙΔΙΟ. Ισχύει
@@ -72,24 +83,28 @@ class ApdEarnings(NamedTuple):
 
 
 class ServiceBase:
-    def __init__(self, store, projections, ergani_client=None):
+    def __init__(self, store, projections, ergani_client=None, documents=None):
         self.store = store
         self.proj = projections
         # Client ΕΡΓΑΝΗ ΙΙ (Web API). Προεπιλογή: simulate mode.
         self.ergani = ergani_client or ergani_mod.ErganiClient(simulate=True)
+        # Έγγραφα (blobs) — ΞΕΧΩΡΙΣΤΗ βάση, εκτός event log (βλ.
+        # persistence/documents.py). Προεπιλογή: στη μνήμη (tests/scripts).
+        self.documents = documents or DocumentStore().scope(getattr(store, "name", ""))
 
     # ------------------------------------------------------------ ΕΡΓΑΝΗ
-    def _ergani_submit(self, doc_type: str, employee_id: str, payload: dict):
+    def _ergani_submit(self, doc_type: str, employee_id: str, payload: dict,
+                       endpoint: str = ""):
         """Υποβολή στο ΕΡΓΑΝΗ + καταγραφή ως event. Αποτυχία δικτύου
-        καταγράφεται ως failed χωρίς να μπλοκάρει την τοπική ενέργεια."""
+        καταγράφεται ως failed χωρίς να μπλοκάρει την τοπική ενέργεια.
+        Το event κρατά το payload με τα συνημμένα PDF ΣΥΝΟΠΤΙΚΑ (μέγεθος +
+        sha256) — το ίδιο το αρχείο ζει στη βάση εγγράφων."""
         try:
-            res = self.ergani.submit(doc_type, payload)
+            res = self.ergani.submit(doc_type, payload, endpoint)
         except ergani_mod.ErganiError as exc:
-            res = {
-                "status": "failed",
-                "reference": str(exc),
-                "payload": json.dumps(payload, ensure_ascii=False, default=str),
-            }
+            res = {"status": "failed", "reference": str(exc)}
+        res["payload"] = json.dumps(
+            ergani_mod.redact_files(payload), ensure_ascii=False, default=str)
         self.store.append(
             employee_id or "COMPANY",
             ErganiSubmissionRecorded(

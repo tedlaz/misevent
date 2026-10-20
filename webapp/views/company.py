@@ -4,16 +4,17 @@
 
 from io import BytesIO
 
-from flask import Blueprint, abort, render_template, request, send_file
+from flask import Blueprint, abort, g, render_template, request, send_file
 
-from misevent.integrations import ergani_parameters, kpk_registry
+from misevent.integrations import ergani, ergani_parameters, kpk_registry
 from misevent.rules import config
 from misevent.rules.constraints import norm_name
 
 from .. import osyk
 from ..clock import today
+from ..ergani_credentials import ENVIRONMENTS
 from ..helpers import flash_to, run_command
-from ..system import proj, svc
+from ..system import proj, registry, svc
 
 bp = Blueprint("company", __name__, url_prefix="/company")
 
@@ -87,7 +88,48 @@ def index():
     return render_template(
         "company.html", c=proj.company,
         company_values=_company_form_values(proj.company), **_panel_ctx(),
+        **_ergani_ctx(),
     )
+
+
+# ------------------------------------------- Σύνδεση ΕΡΓΑΝΗ (ΜΟΝΟ διαχειριστές)
+def _ergani_ctx() -> dict:
+    store = registry.store_name(g.company_id)
+    return {"ergani": registry.secrets.get(store), "environments": ENVIRONMENTS}
+
+
+def _ergani_html(msg: str, err: bool):
+    return flash_to(render_template("partials/_company_ergani.html", **_ergani_ctx()),
+                    msg, err=err)
+
+
+def _require_admin():
+    if not (g.user and g.user.is_admin):
+        abort(403)
+
+
+@bp.post("/ergani")
+def ergani_save():
+    _require_admin()
+    f = request.form
+    ok, msg = run_command(lambda: registry.set_ergani(
+        g.company_id, f.get("environment", "simulate"), f.get("username", ""),
+        f.get("password", "")) or "Αποθηκεύτηκαν τα στοιχεία ΕΡΓΑΝΗ")
+    return _ergani_html(msg, not ok)
+
+
+@bp.post("/ergani/test")
+def ergani_test():
+    """Μόνο authentication — καμία υποβολή εντύπου."""
+    _require_admin()
+    client = registry.secrets.client(registry.store_name(g.company_id))
+    if client.simulate:
+        return _ergani_html("Προσομοίωση: δεν γίνεται σύνδεση στο ΕΡΓΑΝΗ", False)
+    try:
+        client.authenticate()
+    except ergani.ErganiError as exc:
+        return _ergani_html(f"Αποτυχία σύνδεσης: {exc}", True)
+    return _ergani_html(f"Επιτυχής σύνδεση ({ENVIRONMENTS[client.environment]})", False)
 
 
 @bp.post("/")

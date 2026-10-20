@@ -11,10 +11,17 @@
   <input class="tabradio" type="radio" name="_tab" id="tab-employer" checked>
   <input class="tabradio" type="radio" name="_tab" id="tab-specialties">
   <input class="tabradio" type="radio" name="_tab" id="tab-branches">
+  <input class="tabradio" type="radio" name="_tab" id="tab-ergani">
   <div class="tabbar">
     <label for="tab-employer">① Στοιχεία εργοδότη</label>
     <label for="tab-branches">② Παραρτήματα</label>
     <label for="tab-specialties">③ Ειδικότητες (θέσεις εργασίας)</label>
+    <label for="tab-ergani">④ Σύνδεση ΕΡΓΑΝΗ</label>
+  </div>
+
+  <div class="card tabpane tp-ergani">
+    <h2>Σύνδεση ΕΡΓΑΝΗ (Web API)</h2>
+    {% include "partials/_company_ergani.html" %}
   </div>
 
   <div class="card tabpane tp-branches">
