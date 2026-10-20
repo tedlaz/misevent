@@ -18,10 +18,11 @@ import misevent.rules.constraints as constraints
 from misevent.domain.events import (
     CompanyBranchDefined,
     CompanyRegistered,
+    PersonDetailsChanged,
     PersonDetailsCorrected,
     PersonRegistered,
 )
-from misevent.domain.projections import PersonState
+from misevent.domain.projections import PERSON_TEXT_FIELDS, PersonState
 from misevent.integrations.apd_files import EmployerInfo
 
 from ._base import _decode_import, _parse_import_date
@@ -134,6 +135,12 @@ class CompanyMixin:
         res_permit_visa_from=None,
         res_permit_visa_to=None,
         education_level="",
+        address="",
+        postal_code="",
+        municipality="",
+        prefecture="",
+        phone="",
+        birth_place="",
     ):
         """Καταχωρεί ΦΥΣΙΚΟ ΠΡΟΣΩΠΟ (σταθερή ταυτότητα). Ελέγχει
         μοναδικότητα ΑΦΜ / ΑΜΚΑ / (Επώνυμο+Όνομα+Πατρώνυμο+ημ. γέννησης)
@@ -226,6 +233,11 @@ class CompanyMixin:
                 res_permit_visa_from=res_permit_visa_from,
                 res_permit_visa_to=res_permit_visa_to,
                 education_level=str(education_level or "").strip(),
+                **self._clean_person_fields({
+                    "address": address, "postal_code": postal_code,
+                    "municipality": municipality, "prefecture": prefecture,
+                    "phone": phone, "birth_place": birth_place,
+                }),
             ),
         )
         return person_id
@@ -394,6 +406,45 @@ class CompanyMixin:
         if p is None:
             raise ValueError(f"Άγνωστο πρόσωπο {person_id}")
 
+        clean = self._clean_person_fields(fields)
+        if not clean:
+            raise ValueError("Δεν δόθηκαν πεδία προς ενημέρωση")
+        self._check_person_fields(person_id, p, clean)
+        self.store.append(person_id, PersonDetailsCorrected(person_id, clean))
+
+    def change_person_details(self, person_id, effective_from: date, **fields):
+        """ΜΕΤΑΒΟΛΗ στοιχείων προσώπου ΑΠΟ μια ημερομηνία (τέκνα, οικογ.
+        κατάσταση, ταυτότητα, μόρφωση…) — όχι διόρθωση λάθους. Δεκτά ΜΟΝΟ τα
+        `constraints.PERSON_CHANGEABLE_FIELDS`· όσα δεν διαφέρουν από την
+        τρέχουσα τιμή αγνοούνται. Τα τέκνα επηρεάζουν τον ΦΜΥ, άρα η ισχύς τους
+        δεν μπαίνει σε κλεισμένη περίοδο μισθοδοσίας."""
+        p = self.proj.persons.get(person_id)
+        if p is None:
+            raise ValueError(f"Άγνωστο πρόσωπο {person_id}")
+        if not isinstance(effective_from, date):
+            raise ValueError("Δώστε ημερομηνία ισχύος της μεταβολής")
+        bad = [k for k in fields if k not in constraints.PERSON_CHANGEABLE_FIELDS]
+        if bad:
+            raise ValueError(
+                f"Τα πεδία {', '.join(bad)} δεν μεταβάλλονται — "
+                "χρησιμοποιήστε τη διόρθωση στοιχείων"
+            )
+        clean = {
+            k: v for k, v in self._clean_person_fields(fields).items()
+            if v != getattr(p, k)
+        }
+        if not clean:
+            raise ValueError("Καμία αλλαγή σε σχέση με τα τρέχοντα στοιχεία")
+        self._check_person_fields(person_id, p, clean)
+        if "children" in clean:
+            self._check_open_period(effective_from, "μεταβολή τέκνων")
+        self.store.append(
+            person_id, PersonDetailsChanged(person_id, effective_from, clean)
+        )
+
+    @staticmethod
+    def _clean_person_fields(fields: dict) -> dict:
+        """Κανονικοποίηση πεδίων προσώπου (κοινή σε διόρθωση & μεταβολή)."""
         clean = {}
         clearable = {
             "res_permit_inst",
@@ -408,6 +459,7 @@ class CompanyMixin:
             "res_permit_visa_number",
             "res_permit_visa_from",
             "res_permit_visa_to",
+            *PERSON_TEXT_FIELDS,
         }
         for k, v in fields.items():
             if k not in constraints.PERSON_FIELDS:
@@ -428,6 +480,10 @@ class CompanyMixin:
                 clean[k] = str(v).strip().upper()
             elif k in ("identity_issue_date", "identity_expiry_date"):
                 clean[k] = v
+            elif k == "postal_code":
+                clean[k] = constraints.norm_digits(v)
+            elif k in PERSON_TEXT_FIELDS:
+                clean[k] = " ".join(str(v or "").split())
             elif k in (
                 "marital_status",
                 "education_level",
@@ -449,9 +505,10 @@ class CompanyMixin:
             ):
                 clean[k] = v
 
-        if not clean:
-            raise ValueError("Δεν δόθηκαν πεδία προς ενημέρωση")
+        return clean
 
+    def _check_person_fields(self, person_id, p, clean: dict):
+        """Έλεγχοι στην ΤΕΛΙΚΗ ταυτότητα μετά την ενημέρωση `clean`."""
         ln = clean.get("last_name", p.last_name)
         fn = clean.get("first_name", p.first_name)
         fa = clean.get("father_name", p.father_name)
@@ -501,4 +558,3 @@ class CompanyMixin:
             constraints.identity_key(ln, fn, fa, p.birth_date),
             exclude_person_id=person_id,
         )
-        self.store.append(person_id, PersonDetailsCorrected(person_id, clean))

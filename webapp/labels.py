@@ -70,6 +70,31 @@ ET_LABELS = {
     "008": "Αποδοχές ασθενείας",
 }
 
+# Πεδία προσώπου στο ιστορικό μεταβολών (PersonDetailsChanged)
+PERSON_FIELD_LABELS = {
+    "children": "Τέκνα",
+    "marital_status": "Οικογ. κατάσταση",
+    "email": "Email",
+    "identity_type": "Τύπος ταυτότητας",
+    "identity_number": "Αριθμός ταυτότητας",
+    "identity_issuer": "Εκδούσα αρχή",
+    "identity_issue_date": "Ημ. έκδοσης ταυτότητας",
+    "identity_expiry_date": "Λήξη ταυτότητας",
+    "education_level": "Επίπεδο μόρφωσης",
+    "res_permit_inst_number": "Άδεια άμεσης πρόσβασης",
+    "res_permit_inst_expiry_date": "Λήξη άδειας άμεσης πρόσβασης",
+    "res_permit_ap_number": "Άδεια με πρόσθετη έγκριση",
+    "res_permit_ap_expiry_date": "Λήξη άδειας με πρόσθετη έγκριση",
+    "res_permit_visa_number": "Θεώρηση εισόδου",
+    "res_permit_visa_to": "Λήξη θεώρησης",
+    "address": "Οδός / αριθμός",
+    "postal_code": "Τ.Κ.",
+    "municipality": "Δήμος",
+    "prefecture": "Νομός",
+    "phone": "Τηλέφωνο",
+}
+MARITAL_LABELS = {"0": "Άγαμος", "1": "Έγγαμος", "2": "Διαζευγμένος", "3": "Χήρος"}
+
 LEAVE_LABELS = {
     "kanoniki_adeia": "Κανονική άδεια",
     "astheneia": "Ασθένεια",
@@ -180,6 +205,7 @@ def nav_for(is_admin: bool, endpoint: str) -> list[dict]:
 EVENT_LABELS = {
     "PersonRegistered": "Καταχώρηση προσώπου",
     "PersonDetailsCorrected": "Διόρθωση στοιχείων προσώπου",
+    "PersonDetailsChanged": "Μεταβολή στοιχείων προσώπου",
     "EmploymentStarted": "Πρόσληψη",
     "EmploymentHireDetailsCorrected": "Διόρθωση φόρμας πρόσληψης",
     "EmploymentDeleted": "Διαγραφή απασχόλησης (εκ παραδρομής)",

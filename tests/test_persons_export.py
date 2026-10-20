@@ -43,6 +43,8 @@ def _seed(svc):
         last_name="ΠΑΠΑΔΟΠΟΥΛΟΣ", first_name="ΓΙΩΡΓΟΣ", father_name="ΝΙΚΟΣ",
         mother_name="ΜΑΡΙΑ", birth_date=date(1990, 5, 5),
         afm="111222336", amka="05059012343", ama="123456781", children=2,
+        address="ΔΑΣΟΥΣ 20", postal_code="19016", municipality="ΑΡΤΕΜΙΣ",
+        prefecture="ΑΤΤΙΚΗΣ", phone="2100000000", birth_place="ΑΝΘΕΙΑ, ΜΕΣΣΗΝΙΑΣ",
     )
     svc.register_person(
         last_name="ΤΕΣΤ", first_name="ΑΛΙ", father_name="ΧΑΣΑΝ",

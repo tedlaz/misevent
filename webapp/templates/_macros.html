@@ -86,3 +86,44 @@
   {% if e.pay_type == 'daily' %}{{ e.daily_wage|money }} €/ημέρα
   {% else %}{{ e.monthly_gross|money }} €/μήνα{% endif %}
 {% endmacro %}
+
+{# ΛΩΡΙΔΑ ΧΡΟΝΟΥ για το header (block `timebar` του base.html): τα έτη χρήσης
+   (πάντα και προηγούμενο/επόμενο) κλειστά, το έτος της ημερομηνίας αναφοράς
+   ανοιχτό με τους μήνες του. Χρώμα μήνα = κατάσταση των υποχρεώσεων περιόδου
+   (`queries.build_time_strip`)· αριθμός = ανοικτές υποχρεώσεις. Κλικ σε έτος
+   = ανοίγει (radio, χωρίς JS)· κλικ σε μήνα = οθόνη μήνα (`month.detail`)·
+   `sel` = ο μήνας που δείχνει η οθόνη μήνα (τονίζεται, ανοίγει το έτος του).
+   ΑΜΕΣΗ ΕΝΗΜΕΡΩΣΗ: κάθε htmx εντολή της σελίδας τη ξαναπαίρνει ως OOB
+   (`oob=True`, βλ. `refresh_time_bar` στο webapp/__init__.py). #}
+{% macro time_bar(oob=False, open_y=None, sel=None) %}
+  {% set s = time_strip() %}
+  {% set open_y = open_y or (sel[0] if sel) or s.open_y %}
+  <div id="tbar" class="tbar" role="group" aria-label="Περίοδοι — κλικ σε έτος για τους μήνες του, σε μήνα για την ανάλυσή του"
+       {%- if oob %} hx-swap-oob="true"{% endif %}>
+    {% for yr in s.years %}
+      <div class="tb-y">
+        <input type="radio" name="tb-yr" id="tb-yr-{{ yr.y }}" hidden
+               {{ 'checked' if yr.y == open_y }}>
+        <label for="tb-yr-{{ yr.y }}" class="tb-yc {{ yr.state }}"
+               title="{{ yr.y }}: {{ yr.done }} ολοκληρωμένες · {{ yr.open }} ανοικτές · {{ yr.late }} εκπρόθεσμες">
+          <b>{{ yr.y }}</b><i>{{ (yr.open + yr.late) or '' }}</i></label>
+        <div class="tb-ms">
+          {% for mo in yr.months %}
+            {% set cls = ['tb-mo', mo.state, 'now' if mo.now, 'future' if mo.future,
+                          'sel' if sel and sel[0] == yr.y and sel[1] == mo.m]|select|join(' ') %}
+            {% set ns = namespace(tip=mo.name ~ ' · ' ~ mo.emps ~ ' εργαζόμενοι'
+                         ~ (' · ' ~ mo.done ~ ' ολοκληρωμένες · ' ~ mo.open ~ ' ανοικτές · ' ~ mo.late ~ ' εκπρόθεσμες' if mo.state else ' · καμία υποχρέωση')) %}
+            {% for b in mo.badges %}{% set ns.tip = ns.tip ~ '\n' ~ b.icon ~ ' ' ~ b.label ~ (' ×' ~ b.n if b.n > 1 else '') ~ (' ✓' if b.done else ' (εκκρεμεί)') %}{% endfor %}
+            <a class="{{ cls }}" title="{{ ns.tip }}&#10;κλικ για την ανάλυση του μήνα"
+               href="{{ url_for('month.detail', y=yr.y, m=mo.m) }}">
+              {% if mo.badges %}<span class="tb-bdg" aria-hidden="true">
+                {%- for b in mo.badges %}<b class="{{ 'done' if b.done }}">{{ b.icon }}</b>{% endfor %}</span>{% endif %}
+              <span>{{ mo.label }}</span>
+              <span class="tb-row"><small class="tb-emp">{{ mo.emps or '' }}</small><i>{{ (mo.open + mo.late) or '' }}</i></span>
+            </a>
+          {% endfor %}
+        </div>
+      </div>
+    {% endfor %}
+  </div>
+{% endmacro %}

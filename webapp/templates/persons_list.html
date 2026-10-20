@@ -6,5 +6,26 @@
 {% endblock %}
 
 {% block content %}
+  {# Φίλτρα: client-side (persons-filter.js) πάνω στα data-* των γραμμών.
+     ΕΞΩ από το #persons-panel, ώστε να επιβιώνουν τα swaps του htmx. #}
+  <form class="card btnrow" id="persons-filter" onsubmit="return false">
+    <input type="search" name="q" placeholder="🔍 Όνομα, ΑΦΜ, ΑΜΚΑ, ΑΜΑ…"
+           autocomplete="off" style="flex:1;min-width:220px">
+    <select name="status" aria-label="Κατάσταση">
+      <option value="">Όλες οι καταστάσεις</option>
+      <option value="active">Ενεργοί</option>
+      <option value="pending">Εκκρεμής πρόσληψη</option>
+      <option value="terminated">Αποχωρήσαντες</option>
+      <option value="none">Χωρίς πρόσληψη</option>
+    </select>
+    <select name="specialty" aria-label="Ειδικότητα">
+      <option value="">Όλες οι ειδικότητες</option>
+      {% for s in rows|map(attribute='specialty')|select|unique|sort %}
+        <option>{{ s }}</option>
+      {% endfor %}
+    </select>
+    <button type="reset" class="ghost">✖ Καθαρισμός</button>
+    <span class="muted" id="persons-count"></span>
+  </form>
   {% include "partials/_persons_panel.html" %}
 {% endblock %}

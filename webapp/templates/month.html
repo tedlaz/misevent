@@ -1,0 +1,254 @@
+{% extends "base.html" %}
+{% from "_macros.html" import time_bar %}
+{# ΟΘΟΝΗ ΜΗΝΑ — `queries.month_detail`. Μόνο προβολή: οι ενέργειες γίνονται
+   στις σελίδες τους (σύνδεσμοι σε κάθε κάρτα). Στυλ: ενότητα «ΟΘΟΝΗ ΜΗΝΑ»
+   του app.css· κάθε κάρτα μπαίνει κλιμακωτά (--i), οι μπάρες «μεγαλώνουν». #}
+{% set STATE = {
+  'done': ('✓', 'Ολοκληρωμένος', 'Όλες οι υποχρεώσεις του μήνα έχουν κλείσει'),
+  'open': ('⏳', 'Σε εξέλιξη', 'Υπάρχουν ανοικτές υποχρεώσεις, εντός προθεσμίας'),
+  'late': ('⚠', 'Εκπρόθεσμες', 'Υπάρχουν υποχρεώσεις με προθεσμία που πέρασε'),
+  '': ('·', 'Χωρίς υποχρεώσεις', 'Καμία υποχρέωση περιόδου για τον μήνα')} %}
+{% set OB_STATE = {'done': ('✓', 'Ολοκληρώθηκε'), 'open': ('⏳', 'Ανοικτή'), 'late': ('⚠', 'Εκπρόθεσμη')} %}
+{% block title %}{{ d.title }} — misevent{% endblock %}
+{% block heading %}{{ d.title }}{% endblock %}
+{% block subheading %}ανάλυση μήνα{% endblock %}
+{% block timebar %}{{ time_bar(sel=(d.y, d.m)) }}{% endblock %}
+
+{% block content %}
+<div class="mo" id="mo">
+  <div id="modal-host"></div>
+
+  {# ---------------------------------------------------------- HERO #}
+  <section class="mo-hero {{ d.state or 'none' }}">
+    <i class="blob b1"></i><i class="blob b2"></i>
+    <div class="mo-hero-main">
+      <nav class="mo-nav">
+        <a href="{{ url_for('month.detail', y=d.prev[0], m=d.prev[1]) }}" title="{{ d.prev[2] }}">‹ {{ d.prev[2] }}</a>
+        <a href="{{ url_for('month.detail', y=d.next[0], m=d.next[1]) }}" title="{{ d.next[2] }}">{{ d.next[2] }} ›</a>
+      </nav>
+      <h2 class="mo-title">{{ d.title }}</h2>
+      {% set st = STATE[d.state] %}
+      <div class="mo-badges">
+        <span class="mo-chip {{ d.state or 'none' }}" title="{{ st[2] }}">{{ st[0] }} {{ st[1] }}</span>
+        {% if d.now %}<span class="mo-chip now">● Τρέχων μήνας</span>
+        {% elif d.future %}<span class="mo-chip">Μελλοντικός μήνας</span>{% endif %}
+        <span class="mo-chip">{{ 'Εγκεκριμένες παρουσίες' if d.sheet_done else 'Παρουσίες: προσχέδιο' }}</span>
+        <span class="mo-chip">{{ 'Μισθοδοσία υπολογισμένη' if d.pay_done else 'Μισθοδοσία: προεπισκόπηση' }}</span>
+      </div>
+    </div>
+    {# Μικρό ημερολόγιο: Σ/Κ αχνά, αργίες, ημέρες με άδεια (τελεία), σήμερα #}
+    <div class="mo-cal" aria-label="Ημερολόγιο {{ d.title }}">
+      {% for w in ['Δ', 'Τ', 'Τ', 'Π', 'Π', 'Σ', 'Κ'] %}<b>{{ w }}</b>{% endfor %}
+      {% for _ in range(d.first_weekday) %}<span></span>{% endfor %}
+      {% for day in range(1, d.days + 1) %}
+        {% set wd = (d.first_weekday + day - 1) % 7 %}
+        {% set cls = ['we' if wd >= 5, 'hol' if day in d.holidays, 'lv' if day in d.leave_days,
+                      'today' if day == d.today_day]|select|join(' ') %}
+        <span class="{{ cls }}" style="--i:{{ day }}"
+              title="{{ day }}/{{ d.m }}{{ ' · αργία' if day in d.holidays }}{{ ' · άδεια' if day in d.leave_days }}{{ ' · σήμερα' if day == d.today_day }}">{{ day }}</span>
+      {% endfor %}
+    </div>
+  </section>
+
+  {# ---------------------------------------------------------- KPIs #}
+  {% set absent = d.att_tot.leave + d.att_tot.sick + d.att_tot.unpaid %}
+  {% set obn = d.obs|length %}
+  <section class="mo-kpis">
+    <div class="mo-kpi" style="--i:1"><span>Εργαζόμενοι</span><b data-count="{{ d.att|length }}">{{ d.att|length }}</b></div>
+    <div class="mo-kpi" style="--i:2"><span>Ημέρες εργασίας</span><b data-count="{{ d.att_tot.worked }}">{{ d.att_tot.worked }}</b>
+      <small>{{ d.att_tot.efka }} ημέρες ΕΦΚΑ</small></div>
+    <div class="mo-kpi" style="--i:3"><span>Ώρες</span><b data-count="{{ d.att_tot.hours }}" data-dec="1">{{ d.att_tot.hours|hours_gr }}</b></div>
+    <div class="mo-kpi" style="--i:4"><span>Ημέρες απουσίας</span><b data-count="{{ absent }}">{{ absent }}</b>
+      <small>άδεια {{ d.att_tot.leave }} · ασθένεια {{ d.att_tot.sick }} · άνευ {{ d.att_tot.unpaid }}</small></div>
+    <div class="mo-kpi" style="--i:5"><span>Κόστος εργοδότη</span><b data-count="{{ d.pay_cost }}" data-dec="2" data-unit=" €">{{ d.pay_cost|money }} €</b>
+      <small>μικτά + εισφορές εργοδότη{{ '' if d.pay_done else ' (προεπισκόπηση)' }}</small></div>
+    <div class="mo-kpi ring-kpi" style="--i:6">
+      <span>Υποχρεώσεις</span>
+      <div class="mo-ring" style="--p:{{ (d.ob_counts.done / obn * 100)|round(1) if obn else 0 }}"
+           role="img" aria-label="{{ d.ob_counts.done }} από {{ obn }} ολοκληρωμένες">
+        <b>{{ d.ob_counts.done }}<small>/{{ obn }}</small></b></div>
+      <small>{% if d.ob_counts.late %}<em class="late">⚠ {{ d.ob_counts.late }} εκπρόθεσμες</em>{% else %}{{ d.ob_counts.open }} ανοικτές{% endif %}</small>
+    </div>
+  </section>
+
+  <div class="mo-grid">
+    {# ------------------------------------------------- Παρουσίες #}
+    <section class="card mo-card wide" style="--i:1">
+      <h2 class="bar">🕘 Παρουσίες & απουσίες
+        <span class="acts"><a class="ghost sm" href="{{ url_for('attendance.index', y=d.y, m=d.m) }}">Φύλλο παρουσιών ›</a></span></h2>
+      {% if d.att %}
+        <div class="mo-legend">
+          <span><i class="k-work"></i>εργασία</span><span><i class="k-leave"></i>άδεια</span>
+          <span><i class="k-sick"></i>ασθένεια</span><span><i class="k-unpaid"></i>άνευ αποδοχών</span>
+        </div>
+        <div class="mo-att">
+          {% for a in d.att %}
+            {% set tot = a.worked + a.leave + a.sick + a.unpaid %}
+            <a class="mo-att-row" style="--i:{{ loop.index }}"
+               href="{{ url_for('employments.detail', employment_id=a.eid) }}"
+               title="{{ a.name }}: εργασία {{ a.worked }} · άδεια {{ a.leave }} · ασθένεια {{ a.sick }} · άνευ {{ a.unpaid }} ημέρες · {{ a.hours|hours_gr }} ώρες">
+              <span class="nm">{{ a.name }}</span>
+              <span class="mo-stack" style="--w:{{ (tot / d.att_span * 100)|round(2) }}%">
+                {% for k, v in [('work', a.worked), ('leave', a.leave), ('sick', a.sick), ('unpaid', a.unpaid)] if v %}
+                  <i class="k-{{ k }}" style="flex:{{ v }}"></i>
+                {% endfor %}
+              </span>
+              <span class="num">{{ a.worked }}<small>ημ.</small>
+                {% if a.leave + a.sick + a.unpaid %}<em>−{{ a.leave + a.sick + a.unpaid }}</em>{% endif %}</span>
+              <span class="num hrs">{{ a.hours|hours_gr }}<small>ώρ.</small>
+                {% if a.premium_hours %}<em class="prem" title="ώρες με προσαύξηση">+{{ a.premium_hours|hours_gr }}</em>{% endif %}</span>
+            </a>
+          {% endfor %}
+        </div>
+      {% else %}
+        <div class="empty">Κανένας εργαζόμενος στην περίοδο.</div>
+      {% endif %}
+    </section>
+
+    {# ------------------------------------------------- Άδειες #}
+    <section class="card mo-card wide" style="--i:2">
+      <h2 class="bar">🌴 Άδειες του μήνα
+        <span class="acts"><a class="ghost sm" href="{{ url_for('leaves.index', year=d.y) }}">Άδειες ›</a></span></h2>
+      {% if d.leaves %}
+        <div class="mo-gantt" style="--days:{{ d.days }}">
+          <div class="mo-gantt-row axis" aria-hidden="true"><span></span>
+            <div class="mo-gantt-axis">
+              {% for day in range(1, d.days + 1) %}<span class="{{ 'we' if (d.first_weekday + day - 1) % 7 >= 5 }}{{ ' today' if day == d.today_day }}">{{ day if day == 1 or day % 5 == 0 or day == d.days else '' }}</span>{% endfor %}
+            </div>
+          </div>
+          {% for lv in d.leaves %}
+            <div class="mo-gantt-row" style="--i:{{ loop.index }}">
+              <span class="nm">{{ lv.name }}</span>
+              <span class="track">
+                <i class="leave-{{ lv.type }}" style="left:{{ lv.x|round(2) }}%;width:{{ lv.w|round(2) }}%"
+                   title="{{ lv.name }} — {{ lv.label }}: {{ lv.from|date_gr }} – {{ lv.to|date_gr }} ({{ lv.days }} ημ. στον μήνα)">
+                  <span>{{ lv.label }} · {{ lv.days }}ημ.</span></i>
+              </span>
+            </div>
+          {% endfor %}
+        </div>
+      {% else %}
+        <div class="empty">Καμία άδεια μέσα στον μήνα.</div>
+      {% endif %}
+    </section>
+
+    {# ------------------------------------------------- Μισθοδοσία #}
+    <section class="card mo-card wide" style="--i:3">
+      <h2 class="bar">💶 Μισθοδοσία
+        {% if d.pay_done %}<span class="tag ok">Υπολογισμένη</span>{% else %}<span class="tag">Προεπισκόπηση</span>{% endif %}
+        <span class="acts">
+          {% if d.pay_done %}
+            <a class="ghost sm" hx-get="{{ url_for('payroll.analysis_modal', y=d.y, m=d.m) }}"
+               hx-target="#modal-host" hx-swap="innerHTML">🔍 Ανάλυση</a>
+          {% endif %}
+          <a class="ghost sm" href="{{ url_for('payroll.index', gy=d.y) }}">Μισθοδοσία ›</a></span></h2>
+      {% if d.pay %}
+        {% set t = d.pay_tot %}
+        {% set gross = t['Μικτά'] or 1 %}
+        <div class="mo-split" role="img"
+             aria-label="Μικτά {{ t['Μικτά']|money }} €: καθαρά {{ t['Καθαρά']|money }}, ΦΜΥ {{ t['ΦΜΥ']|money }}, ΕΦΚΑ εργαζομένου {{ t['ΕΦΚΑ εργαζ.']|money }}">
+          {% for k, cls in [('Καθαρά', 'k-net'), ('ΦΜΥ', 'k-fmy'), ('ΕΦΚΑ εργαζ.', 'k-efka')] if t[k] %}
+            <i class="{{ cls }}" style="flex:{{ t[k] }}" title="{{ k }}: {{ t[k]|money }} € ({{ (t[k] / gross * 100)|round(1) }}%)"></i>
+          {% endfor %}
+        </div>
+        <div class="mo-split-legend">
+          <span><i class="k-net"></i>Καθαρά <b>{{ t['Καθαρά']|money }} €</b></span>
+          <span><i class="k-fmy"></i>ΦΜΥ <b>{{ t['ΦΜΥ']|money }} €</b></span>
+          <span><i class="k-efka"></i>ΕΦΚΑ εργαζ. <b>{{ t['ΕΦΚΑ εργαζ.']|money }} €</b></span>
+          <span class="sum">= Μικτά <b>{{ t['Μικτά']|money }} €</b> · + ΕΦΚΑ εργοδ. <b>{{ t['ΕΦΚΑ εργοδ.']|money }} €</b></span>
+        </div>
+        <details class="box mo-details">
+          <summary>Ανά εργαζόμενο ({{ d.pay|length }})</summary>
+          {% from "_macros.html" import rows_table %}
+          {{ rows_table(d.pay, d.pay_tot) }}
+        </details>
+      {% else %}
+        <div class="empty">Καμία μισθοδοσία για την περίοδο.</div>
+      {% endif %}
+    </section>
+
+    {# ------------------------------------------------- Δώρα / Επιδόματα #}
+    <section class="card mo-card" style="--i:4">
+      <h2>🎁 Δώρα & επιδόματα</h2>
+      {% if d.extras %}
+        <ul class="mo-list">
+          {% for r in d.extras %}
+            <li class="kind-{{ r.kind }}" style="--i:{{ loop.index }}">
+              <span class="ic">{{ {'easter': '🐣', 'christmas': '🎄', 'allowance': '🏖️', 'severance': '📤', 'leave': '🗓️'}[r.kind] }}</span>
+              <span class="lbl">{{ r.label }}<small>μικτά {{ r.gross|money }} € · κόστος {{ r.cost|money }} €</small></span>
+              <b>{{ r.net|money }} €<small>καθαρά</small></b>
+            </li>
+          {% endfor %}
+        </ul>
+      {% else %}
+        <div class="empty">Κανένα Δώρο, Επίδομα ή αποζημίωση αυτόν τον μήνα.</div>
+      {% endif %}
+    </section>
+
+    {# ------------------------------------------------- Υποβολές & πληρωμές #}
+    <section class="card mo-card" style="--i:5">
+      <h2 class="bar">📤 Υποβολές & πληρωμές
+        <span class="acts"><a class="ghost sm" href="{{ url_for('payments.index') }}">Πληρωμές ›</a></span></h2>
+      {% if d.subs or d.payments %}
+        <ul class="mo-list">
+          {% for s in d.subs %}
+            <li class="sub" style="--i:{{ loop.index }}"><span class="ic">📨</span>
+              <span class="lbl">Υποβολή {{ s.label }}{% if s.ref %}<small>αρ. {{ s.ref }}</small>{% endif %}</span>
+              <b>{{ s.amount|money }} €</b></li>
+          {% endfor %}
+          {% for p in d.payments %}
+            <li class="pay" style="--i:{{ d.subs|length + loop.index }}"><span class="ic">💳</span>
+              <span class="lbl">Πληρωμή {{ p.label }}{% if p.who %}<small>{{ p.who }}</small>{% endif %}</span>
+              <b>{{ p.amount|money }} €</b></li>
+          {% endfor %}
+        </ul>
+        {% if d.payments %}<div class="mo-total">Σύνολο πληρωμών <b>{{ d.paid_total|money }} €</b></div>{% endif %}
+      {% else %}
+        <div class="empty">Καμία υποβολή ή πληρωμή για την περίοδο ακόμη.</div>
+      {% endif %}
+    </section>
+
+    {# ------------------------------------------------- Υποχρεώσεις #}
+    <section class="card mo-card wide" style="--i:6">
+      <h2 class="bar">📌 Υποχρεώσεις περιόδου
+        <span class="acts"><a class="ghost sm" href="{{ url_for('obligations.index', view='all') }}">Υποχρεώσεις ›</a></span></h2>
+      {% if d.obs %}
+        <ol class="mo-tl">
+          {% for o in d.obs %}
+            <li class="{{ o.state }}" style="--i:{{ loop.index }}">
+              <a href="{{ url_for('obligations.index', id=o.id, view='all') }}">
+                <span class="ic">{{ o.icon }}</span>
+                <span class="lbl">{{ o.label }}{% if o.who %}<small>{{ o.who }}</small>{% endif %}</span>
+                <span class="due">έως {{ o.due|date_gr }}{% if o.late %}<small>+{{ o.late }} ημ.</small>{% endif %}</span>
+                <span class="st">{{ OB_STATE[o.state][0] }} {{ OB_STATE[o.state][1] }}</span>
+              </a>
+            </li>
+          {% endfor %}
+        </ol>
+      {% else %}
+        <div class="empty">Καμία υποχρέωση για την περίοδο.</div>
+      {% endif %}
+    </section>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// Αριθμοί των KPI: «μετρούν» από το 0 (σεβόμενοι το reduced-motion).
+(() => {
+  if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  document.querySelectorAll('.mo-kpi b[data-count]').forEach(el => {
+    const end = +el.dataset.count, dec = +(el.dataset.dec || 0), unit = el.dataset.unit || '';
+    const fmt = v => v.toLocaleString('el-GR', {minimumFractionDigits: dec, maximumFractionDigits: dec}) + unit;
+    const t0 = performance.now(), dur = 900;
+    const step = now => {
+      const k = Math.min(1, (now - t0) / dur), e = 1 - Math.pow(1 - k, 3);
+      el.textContent = fmt(end * e);
+      if (k < 1) requestAnimationFrame(step);
+    };
+    requestAnimationFrame(step);
+  });
+})();
+</script>
+{% endblock %}

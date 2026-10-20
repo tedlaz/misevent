@@ -19,6 +19,7 @@
 <script src="{{ url_for('static', filename='time-rail.js') }}" defer></script>
 {# Θυμάται ποιες ομάδες του μενού είναι ανοιχτές, μεταξύ σελίδων #}
 <script src="{{ url_for('static', filename='nav-fold.js') }}" defer></script>
+<script src="{{ url_for('static', filename='persons-filter.js') }}" defer></script>
 <script src="{{ url_for('static', filename='leave-range.js') }}" defer></script>
 <script src="{{ url_for('static', filename='third-country-tab.js') }}" defer></script>
 <script src="{{ url_for('static', filename='employment-relationship.js') }}" defer></script>
@@ -108,6 +109,8 @@
           <button class="ghost" type="submit">Έξοδος</button>
         </form>
       {% endif %}
+      {# Λωρίδα χρόνου: οι σελίδες τη βάζουν με `{{ time_bar() }}` (_macros.html) #}
+      {% block timebar %}{% endblock %}
     </header>
     <main>
       {% block content %}{% endblock %}
@@ -130,6 +133,11 @@ function toast(msg, err){
   toastTimer = setTimeout(() => { t.className = ''; }, 4600);
 }
 document.body.addEventListener('flash', e => toast(e.detail.msg, e.detail.err));
+// Λωρίδα χρόνου στη σελίδα; ο server τη στέλνει ανανεωμένη (OOB) σε κάθε εντολή
+document.body.addEventListener('htmx:configRequest', e => {
+  const open = document.querySelector('#tbar input:checked');  // κρατά το ανοιχτό έτος
+  if (open) e.detail.headers['X-Time-Bar'] = open.id.slice(6);
+});
 </script>
 {% block scripts %}{% endblock %}
 </body>

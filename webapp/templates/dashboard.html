@@ -6,6 +6,8 @@
   {{ min_wage.daily|money }}€/ημέρα
 {% endblock %}
 
+{% block timebar %}{% from "_macros.html" import time_bar %}{{ time_bar() }}{% endblock %}
+
 {% block content %}
 {% if empty %}
   <div class="card">

@@ -28,6 +28,9 @@ Obligation Scheduler & Process Manager.
   Άρα υπάρχουν ΠΟΛΛΑΠΛΕΣ υποχρεώσεις Επιδόματος Αδείας μέσα στο έτος (έως
   12, μία ανά μήνα)· η καθεμία είναι ενιαία (επιπέδου εταιρείας) και καλύπτει
   όσους πήραν την πρώτη τους άδεια εκείνον τον μήνα.
+  ➜ ΥΠΟΧΡΕΩΤΙΚΟ ΤΟΝ ΔΕΚΕΜΒΡΙΟ: όποιος δεν πήρε άδεια μέσα στο έτος (ούτε
+  αποχώρησε) έχει περίοδο τον Δεκέμβριο — η υποχρέωση γεννιέται μόλις
+  κλείσει η μισθοδοσία Νοεμβρίου (`_ensure_year_end_allowance`).
 
 Η μισθοδοσία είναι ΚΥΛΙΟΜΕΝΗ: μόλις ολοκληρωθεί η μισθοδοσία ενός μήνα,
 προγραμματίζεται αυτόματα η περίοδος του επόμενου (και τα Δώρα της νέας
@@ -193,6 +196,8 @@ class ObligationScheduler:
                 self._fulfill("MONTHLY_PAYROLL", y, m)
                 # Κυλιόμενη αλυσίδα: η μισθοδοσία του μήνα «ανοίγει» τον επόμενο
                 self._ensure_period(*_next(y, m))
+                if m == 11:  # κλείνει ο Νοέμβριος -> υποχρεωτικό επίδομα Δεκ.
+                    self._ensure_year_end_allowance(y)
 
         elif isinstance(event, LeaveRecorded):
             if event.leave_type == LeaveType.ANNUAL:
@@ -321,6 +326,30 @@ class ObligationScheduler:
             self._schedule_teka_period(y, m)
 
         self._ensure_gifts(y)
+        if m == 12:
+            self._ensure_year_end_allowance(y)
+
+    def _ensure_year_end_allowance(self, year: int):
+        """ΥΠΟΧΡΕΩΤΙΚΟ Επίδομα Αδείας του Δεκεμβρίου: όποιος δεν πήρε κανονική
+        άδεια μέσα στο έτος (ούτε αποχώρησε) έχει περίοδο επιδόματος τον
+        Δεκέμβριο (`allowance_period_month`).
+
+        ⚠️ Γεννιέται μόλις ΚΛΕΙΣΕΙ η μισθοδοσία ΝΟΕΜΒΡΙΟΥ, όχι με το απλό
+        άνοιγμα του Δεκεμβρίου (ο ορίζοντας τον ανοίγει ήδη από την πρόσληψη):
+        ως τότε μια άδεια μπορεί να μεταφέρει το επίδομα σε άλλον μήνα και η
+        υποχρέωση Δεκεμβρίου θα έμενε χωρίς δικαιούχους — ανοιχτή για πάντα,
+        μπλοκάροντας την ΑΠΔ Ιανουαρίου. Μετά, οι μήνες ως τον Νοέμβριο είναι
+        κλειστοί (§5.6) και ο μόνος δυνατός μήνας είναι ο Δεκέμβριος."""
+        if (year, 12) not in self._company_periods:
+            return
+        nov = [o for o in self.proj.obligations.values()
+               if o.obligation_type == "MONTHLY_PAYROLL"
+               and (o.period_year, o.period_month) == (year, 11)]
+        if any(not o.fulfilled for o in nov):
+            return
+        if any(e.hire_submitted and e.allowance_period_month(year) == 12
+               for e in self.proj.employments.values()):
+            self._ensure_allowance_period(year, 12)
 
     def _ensure_gifts(self, year: int):
         """Οι ετήσιοι τύποι (Δώρα) του έτους — spawn="annual" στο μητρώο.
@@ -454,3 +483,8 @@ class ObligationScheduler:
         end = date(ey, em, 1)
         for y, m in _months(h, end):
             self._ensure_period(y, m)
+        # Πρόσληψη ΜΕΤΑ το άνοιγμα του Δεκεμβρίου: το _ensure_period δεν
+        # ξανατρέχει για υπάρχουσα περίοδο — ο νέος χρωστά κι αυτός επίδομα.
+        for y, m in sorted(self._company_periods):
+            if m == 12 and y >= h.year:
+                self._ensure_year_end_allowance(y)

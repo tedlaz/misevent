@@ -57,6 +57,7 @@ from misevent.domain.events import (
     ObligationTypeConfigured,
     PaymentMade,
     PayrollPeriodReopened,
+    PersonDetailsChanged,
     PersonDetailsCorrected,
     PersonRegistered,
     ScheduleDaysSubmitted,
@@ -236,16 +237,85 @@ class PersonState:
     res_permit_visa_number: str = ""
     res_permit_visa_from: date | None = None
     res_permit_visa_to: date | None = None
+    address: str = ""
+    postal_code: str = ""
+    municipality: str = ""
+    prefecture: str = ""
+    phone: str = ""
+    birth_place: str = ""
     employment_ids: list = field(default_factory=list)
+    # Τέκνα ΑΝΑ ΗΜΕΡΟΜΗΝΙΑ ΙΣΧΥΟΣ: [(None, αρχικά), (από, πλήθος), …] —
+    # ο ΦΜΥ κάθε περιόδου παίρνει όσα ίσχυαν τότε (βλ. children_on).
+    children_history: list = field(default_factory=list)
+    # Ιστορικό μεταβολών (PersonDetailsChanged) για το UI:
+    # [{"effective_from": date, "fields": {πεδίο: (παλιό, νέο)}}]
+    changes: list = field(default_factory=list)
 
     @property
     def full_name(self) -> str:
         return f"{self.last_name} {self.first_name}".strip()
 
+    def children_on(self, d: date | None) -> int:
+        """Τέκνα που ίσχυαν στην `d` (None = τρέχοντα)."""
+        if d is None or not self.children_history:
+            return self.children
+        active = [n for eff, n in self.children_history if eff is None or eff <= d]
+        return active[-1] if active else self.children_history[0][1]
+
     def identity_key(self):
         """Κλειδί ταυτότητας — Επώνυμο/Όνομα/Πατρώνυμο + ημ. γέννησης
         (κλειδί μοναδικότητας, βλ. constraints.identity_key)."""
         return (self.last_name, self.first_name, self.father_name, self.birth_date)
+
+
+# Ελεύθερα κείμενα επικοινωνίας/γέννησης (ίδιο όνομα σε event, state, φόρμα)
+PERSON_TEXT_FIELDS = (
+    "address", "postal_code", "municipality", "prefecture", "phone", "birth_place",
+)
+
+
+def _apply_person_fields(p: "PersonState", fields: dict) -> None:
+    """Γράφει πεδία προσώπου στο state (διόρθωση ή μεταβολή) — τα dates
+    γυρίζουν ως ISO strings από το JSON του event log."""
+    for k, v in fields.items():
+        if k == "children":
+            p.children = int(v)
+        elif k in (
+            "identity_issue_date",
+            "identity_expiry_date",
+            "res_permit_inst_expiry_date",
+            "res_permit_ap_expiry_date",
+            "res_permit_visa_from",
+            "res_permit_visa_to",
+        ):
+            setattr(p, k, date.fromisoformat(v) if isinstance(v, str) else v)
+        elif k in (
+            "last_name",
+            "first_name",
+            "father_name",
+            "mother_name",
+            "afm",
+            "amka",
+            "ama",
+            "email",
+            "sex",
+            "nationality_code",
+            "identity_type",
+            "identity_number",
+            "identity_issuer",
+            "marital_status",
+            "education_level",
+            "res_permit_inst",
+            "res_permit_inst_type",
+            "res_permit_inst_number",
+            "res_permit_ap",
+            "res_permit_ap_type",
+            "res_permit_ap_number",
+            "res_permit_visa",
+            "res_permit_visa_number",
+            *PERSON_TEXT_FIELDS,
+        ):
+            setattr(p, k, v)
 
 
 class ContractTerms(NamedTuple):
@@ -395,6 +465,9 @@ class EmploymentState:
     def children(self) -> int:
         return self.person.children if self.person else 0
 
+    def children_on(self, d: date | None) -> int:
+        return self.person.children_on(d) if self.person else 0
+
     @property
     def sex(self) -> str:
         return self.person.sex if self.person else ""
@@ -532,12 +605,18 @@ class EmploymentState:
         """Ο μήνας-περίοδος του Επιδόματος Αδείας του εργαζόμενου μέσα στο
         έτος: κανονικά ο μήνας της ΠΡΩΤΗΣ κανονικής άδειας· αν δεν πήρε άδεια
         αλλά ΑΠΟΧΩΡΗΣΕ μέσα στο έτος, ο μήνας της αποχώρησης (το επίδομα
-        εκκαθαρίζεται pro-rata στην αποχώρηση). None αν κανένα από τα δύο."""
+        εκκαθαρίζεται pro-rata στην αποχώρηση). Αλλιώς, αν απασχολήθηκε μέσα
+        στο έτος, ο **Δεκέμβριος**: το επίδομα ΠΡΕΠΕΙ να καταβληθεί μέσα στο
+        έτος, άρα όποιος δεν πήρε άδεια το παίρνει υποχρεωτικά τον τελευταίο
+        μήνα. None μόνο για όποιον δεν απασχολήθηκε καθόλου μέσα στο έτος."""
         first = self.first_annual_leave(year)
         if first is not None:
             return first.month
         if self.termination_date is not None and self.termination_date.year == year:
             return self.termination_date.month
+        if (self.hire_date is not None and self.hire_date.year <= year
+                and (self.termination_date is None or self.termination_date.year > year)):
+            return 12
         return None
 
     @property
@@ -1219,6 +1298,7 @@ class Projections:
             p.birth_date = event.birth_date
             p.afm, p.amka, p.ama = event.afm, event.amka, event.ama
             p.children = event.children
+            p.children_history = [(None, event.children)]
             p.email = event.email
             p.sex = event.sex
             p.nationality_code = event.nationality_code
@@ -1242,49 +1322,39 @@ class Projections:
                 "res_permit_visa_number",
                 "res_permit_visa_from",
                 "res_permit_visa_to",
+                *PERSON_TEXT_FIELDS,
             ):
                 setattr(p, k, getattr(event, k))
 
         elif isinstance(event, PersonDetailsCorrected):
             p = self.persons[event.person_id]
-            for k, v in event.fields.items():
-                if k == "children":
-                    p.children = int(v)
-                elif k in (
-                    "identity_issue_date",
-                    "identity_expiry_date",
-                    "res_permit_inst_expiry_date",
-                    "res_permit_ap_expiry_date",
-                    "res_permit_visa_from",
-                    "res_permit_visa_to",
-                ):
-                    setattr(p, k, date.fromisoformat(v) if isinstance(v, str) else v)
-                elif k in (
-                    "last_name",
-                    "first_name",
-                    "father_name",
-                    "mother_name",
-                    "afm",
-                    "amka",
-                    "ama",
-                    "email",
-                    "sex",
-                    "nationality_code",
-                    "identity_type",
-                    "identity_number",
-                    "identity_issuer",
-                    "marital_status",
-                    "education_level",
-                    "res_permit_inst",
-                    "res_permit_inst_type",
-                    "res_permit_inst_number",
-                    "res_permit_ap",
-                    "res_permit_ap_type",
-                    "res_permit_ap_number",
-                    "res_permit_visa",
-                    "res_permit_visa_number",
-                ):
-                    setattr(p, k, v)
+            _apply_person_fields(p, event.fields)
+            if "children" in event.fields:
+                # Διόρθωση = λάθος στην ΤΡΕΧΟΥΣΑ τιμή -> τελευταία εγγραφή
+                eff, _ = p.children_history[-1]
+                p.children_history[-1] = (eff, p.children)
+
+        elif isinstance(event, PersonDetailsChanged):
+            p = self.persons[event.person_id]
+            eff = event.effective_from
+            # Ανά πεδίο: η μεταβολή γίνεται «τρέχουσα» τιμή ΜΟΝΟ αν καμία
+            # νεότερη (σε ισχύ) μεταβολή δεν έχει ήδη αλλάξει το ίδιο πεδίο —
+            # μια αναδρομική καταχώρηση δεν πατά νεότερη.
+            current = {
+                k: v for k, v in event.fields.items()
+                if not any(eff < c["effective_from"] and k in c["fields"]
+                           for c in p.changes)
+            }
+            p.changes.append({
+                "effective_from": eff,
+                "fields": {k: (getattr(p, k, None), v)
+                           for k, v in event.fields.items()},
+            })
+            p.changes.sort(key=lambda c: c["effective_from"])
+            _apply_person_fields(p, current)
+            if "children" in event.fields:
+                p.children_history.append((eff, int(event.fields["children"])))
+                p.children_history.sort(key=lambda h: h[0] or date.min)
 
         elif isinstance(event, EmploymentStarted):
             emp = self.employments.setdefault(event.employment_id, EmploymentState())

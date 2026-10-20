@@ -13,7 +13,8 @@
     </tr></thead>
     <tbody>
       {% for r in rows %}
-        <tr>
+        <tr data-status="{{ r.status }}" data-specialty="{{ r.specialty }}"
+            data-search="{{ r.search }}">
           <td>
             <b>{{ r.person.full_name }}</b>
             <div class="muted mono" style="font-size:11.5px">ΑΦΜ {{ r.person.afm }}</div>
@@ -43,7 +44,10 @@
           </td>
           <td>{{ r.specialty or '—' }}</td>
           <td class="btnrow" style="justify-content:flex-end">
-            <button class="ghost" title="Επεξεργασία στοιχείων"
+            <button class="ghost" title="Μεταβολή στοιχείων (τέκνα, ταυτότητα… από ημερομηνία)"
+                    hx-get="{{ url_for('persons.change_modal', person_id=r.person.person_id) }}"
+                    hx-target="#modal-host" hx-swap="innerHTML">🔄</button>
+            <button class="ghost" title="Διόρθωση στοιχείων (λάθος καταχώρησης)"
                     hx-get="{{ url_for('persons.edit_modal', person_id=r.person.person_id, ctx='list') }}"
                     hx-target="#modal-host" hx-swap="innerHTML">✏️</button>
           </td>
@@ -51,6 +55,7 @@
       {% endfor %}
     </tbody>
   </table>
+  <div class="empty" id="persons-nomatch" hidden>Κανένας εργαζόμενος δεν ταιριάζει στα φίλτρα.</div>
 {% else %}
   <div class="empty">Κανένας εργαζόμενος. Προσθέστε τον πρώτο με «Νέος εργαζόμενος».</div>
 {% endif %}

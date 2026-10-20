@@ -29,7 +29,7 @@ Web UI Μισθοδοσίας — Flask + Jinja2 + htmx.
 import secrets
 from datetime import timedelta
 
-from flask import abort, g, redirect, request, session, url_for
+from flask import abort, g, redirect, render_template_string, request, session, url_for
 
 from . import clock, filters
 from .labels import EMP_LIFECYCLE, MONTHS_GEN, NAV_HOME, nav_for
@@ -72,6 +72,11 @@ def create_app():
     app.jinja_env.globals["EMP_LIFECYCLE"] = EMP_LIFECYCLE
     # Μήνες σε γενική («Μισθοδοσία Ιουνίου 2026») — ΜΙΑ πηγή αλήθειας
     app.jinja_env.globals["months_gen"] = MONTHS_GEN
+    # Λωρίδα χρόνου (`time_bar` του `_macros.html`): υπολογίζεται ΜΟΝΟ στις
+    # σελίδες που τη ζητούν — function, όχι context processor.
+    from . import queries
+
+    app.jinja_env.globals["time_strip"] = lambda: queries.time_strip(clock.today())
 
     from .views import (
         attendance,
@@ -86,6 +91,7 @@ def create_app():
         fmy,
         leaves,
         live,
+        month,
         obligations,
         payments,
         payroll,
@@ -105,6 +111,7 @@ def create_app():
         persons,
         employments,
         live,
+        month,
         attendance,
         leaves,
         work_schedules,
@@ -171,6 +178,26 @@ def create_app():
         set_tenant(chosen)
         g.company_id = chosen
         return None
+
+    @app.after_request
+    def refresh_time_bar(resp):
+        """Κάθε εντολή (htmx μη-GET) από σελίδα με λωρίδα χρόνου: προσθέτει
+        τη λωρίδα ανανεωμένη ως OOB — άμεση ενημέρωση χωρίς κώδικα ανά view.
+        Αν η απάντηση είναι ολόκληρη σελίδα, έχει ήδη τη φρέσκια λωρίδα."""
+        if (
+            request.method != "GET"
+            and request.headers.get("X-Time-Bar")
+            and getattr(g, "tenant", None)
+            and resp.status_code == 200
+            and resp.mimetype == "text/html"
+            and not resp.direct_passthrough
+            and b'id="tbar"' not in resp.get_data()
+        ):
+            resp.set_data(resp.get_data() + render_template_string(
+                '{% from "_macros.html" import time_bar %}{{ time_bar(oob=True, open_y=y) }}',
+                y=request.headers.get("X-Time-Bar", type=int),
+            ).encode())
+        return resp
 
     @app.context_processor
     def inject_globals():

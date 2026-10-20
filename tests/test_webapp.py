@@ -233,8 +233,44 @@ def test_webapp(fresh_system):
     body = check(
         f"/persons/{pid}/info", c.get(f"/persons/{pid}/info"), "Περίοδοι απασχόλησης"
     )
+    # Φίλτρα λίστας: κατάσταση + κανονικοποιημένο κλειδί αναζήτησης ανά γραμμή
+    check("/persons φίλτρα", c.get("/persons/"), 'data-search="ΓΕΩΡΓΙΟΥ ΜΑΡΙΑ')
+    # Βεβαίωση ΑΜΚΑ: λάθος αρχείο -> μήνυμα (όχι 500), η φόρμα κρατά τα στοιχεία
+    check("/persons/new βεβαίωση ΑΜΚΑ", c.get("/persons/new"), "Από βεβαίωση ΑΜΚΑ")
+    r = c.post("/persons/new/amka", content_type="multipart/form-data", data={
+        "ama": "987654321", "amka_pdf": (io.BytesIO(b"not a pdf"), "x.pdf"),
+    })
+    ok = (r.status_code == 200 and json.loads(r.headers["HX-Trigger"])["flash"]["err"]
+          and 'value="987654321"' in r.get_data(as_text=True))
+    print(f"  {'OK  ' if ok else 'FAIL'} βεβαίωση ΑΜΚΑ: λάθος αρχείο")
+    if not ok:
+        fails.append(f"βεβαίωση ΑΜΚΑ: {r.status_code}")
+    # Μεταβολή στοιχείων: modal -> POST -> ιστορικό στο info modal. Μακριά στο
+    # μέλλον, ώστε να μην αγγίξει τις μισθοδοσίες των επόμενων ελέγχων.
+    check(f"/persons/{pid}/change", c.get(f"/persons/{pid}/change"), "Ισχύει από")
+    kids = proj.persons[pid].children
+    marital = proj.persons[pid].marital_status
+    flipped = "0" if marital == "1" else "1"
+    r = c.post(f"/persons/{pid}/change", data={
+        "effective_from": "2099-01-01", "children": kids + 1,
+        "marital_status": flipped,
+    })
+    trig = r.headers.get("HX-Trigger", "")
+    active = next(proj.employments[e] for e in proj.persons[pid].employment_ids
+                  if proj.employments[e].active)
+    warn = "επίδομα γάμου" in json.loads(trig)["flash"]["msg"]
+    ok = (r.status_code == 200 and proj.persons[pid].children_on(_date(2099, 1, 1))
+          == kids + 1 and warn == (active.married != (flipped == "1")))
+    print(f"  {'OK  ' if ok else 'FAIL'} μεταβολή τέκνων/οικογ. κατάστασης")
+    if not ok:
+        fails.append(f"μεταβολή στοιχείων: {r.status_code} {trig}")
+    check(f"/persons/{pid}/info ιστορικό", c.get(f"/persons/{pid}/info"),
+          "Ιστορικό μεταβολών")
+    c.post(f"/persons/{pid}/change", data={  # επαναφορά για τους επόμενους
+        "effective_from": "2099-01-02", "children": kids, "marital_status": marital,
+    })
     eid = proj.persons[pid].employment_ids[0]
-    check(f"/employments/{eid}", c.get(f"/employments/{eid}"), "Ασφαλιστικό προφίλ")
+    check(f"/employments/{eid}",c.get(f"/employments/{eid}"), "Ασφαλιστικό προφίλ")
     check(f"/employments/{eid} επιδότηση", c.get(f"/employments/{eid}"),
           "Επιδότηση εργατικής εισφοράς")
     check(f"/employments/{eid}/modal/childcare",

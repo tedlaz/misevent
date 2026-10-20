@@ -69,6 +69,26 @@ PERSON_FIELDS = (
     "res_permit_inst_expiry_date", "res_permit_ap", "res_permit_ap_type",
     "res_permit_ap_number", "res_permit_ap_expiry_date", "res_permit_visa",
     "res_permit_visa_number", "res_permit_visa_from", "res_permit_visa_to",
+    "address", "postal_code", "municipality", "prefecture", "phone", "birth_place",
+)
+
+# Πεδία που ΑΛΛΑΖΟΥΝ στη ζωή του προσώπου (PersonDetailsChanged, με ημ/νία
+# ισχύος). Ονόματα/ΑΦΜ/ΑΜΚΑ/ΑΜΑ/φύλο/υπηκοότητα ΜΟΝΟ με διόρθωση.
+PERSON_CHANGEABLE_FIELDS = (
+    "children",
+    "marital_status",
+    "email",
+    "identity_type",
+    "identity_number",
+    "identity_issuer",
+    "identity_issue_date",
+    "identity_expiry_date",
+    "education_level",
+    "res_permit_inst", "res_permit_inst_type", "res_permit_inst_number",
+    "res_permit_inst_expiry_date", "res_permit_ap", "res_permit_ap_type",
+    "res_permit_ap_number", "res_permit_ap_expiry_date", "res_permit_visa",
+    "res_permit_visa_number", "res_permit_visa_from", "res_permit_visa_to",
+    "address", "postal_code", "municipality", "prefecture", "phone",
 )
 
 # Κλειδιά μοναδικότητας — τα επιβάλλει το command layer πριν γραφτεί event

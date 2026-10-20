@@ -128,6 +128,16 @@ def form_digital_card_fields(form) -> dict:
     }
 
 
+def form_contact_fields(form, birth_place=True) -> dict:
+    """Επικοινωνία & τόπος γέννησης από φόρμα (`_person_contact_fields.html`).
+    `birth_place=False` στη μεταβολή: ο τόπος γέννησης μόνο διορθώνεται."""
+    names = ("address", "postal_code", "municipality", "prefecture", "phone")
+    out = {k: form.get(k, "") for k in names}
+    if birth_place:
+        out["birth_place"] = form.get("birth_place", "")
+    return out
+
+
 def form_third_country_fields(form) -> dict:
     """Πεδία WebE3N αδειών/θεώρησης πολιτών τρίτων χωρών από φόρμα."""
     return {

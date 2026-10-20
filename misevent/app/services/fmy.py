@@ -7,6 +7,9 @@
 μεταξύ mixins, θα φτιάξεις κύκλους.
 """
 
+from calendar import monthrange
+from datetime import date
+
 import misevent.domain.payroll_engine as pe
 import misevent.rules.obligation_types as ot
 from misevent.domain.events import FMYFileGenerated, FMYSubmitted
@@ -99,6 +102,8 @@ class FmyMixin:
                     item.fmy,
                 )
 
+        # Τέκνα όπως ίσχυαν στο τέλος του μήνα (μεταβολές με ημ/νία ισχύος)
+        month_end = date(year, month, monthrange(year, month)[1])
         rows = []
         for employee_id in order:
             emp = self.proj.employments[employee_id]
@@ -110,7 +115,7 @@ class FmyMixin:
                     first_name=emp.first_name,
                     father_name=emp.father_name,
                     amka=emp.amka,
-                    children=emp.children,
+                    children=emp.children_on(month_end),
                     gross=pe.r2(gross),
                     deductions=pe.r2(deductions),
                     net=pe.r2(taxable),

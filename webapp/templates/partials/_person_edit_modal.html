@@ -1,18 +1,32 @@
 {# Modal επεξεργασίας στοιχείων προσώπου. Κλείνει ΜΟΝΟ με «Αποθήκευση» ή
    «Άκυρο». Επιτυχία -> αντικαθιστά το #person-card (με κενό modal-host).
-   Σε σφάλμα η όψη ξαναγεμίζει με τα δεδομένα του χρήστη (form). #}
+   Σε σφάλμα η όψη ξαναγεμίζει με τα δεδομένα του χρήστη (form).
+   mode="change": ΜΕΤΑΒΟΛΗ με ημ/νία ισχύος (PersonDetailsChanged) — τα
+   στοιχεία ταυτότητας κλειδώνουν (disabled = δεν υποβάλλονται), βλ.
+   constraints.PERSON_CHANGEABLE_FIELDS. #}
 {% set f = form or {} %}
+{% set change = mode == 'change' %}
+{% set lock = 'disabled' if change else '' %}
 {% set current_nationality = f.get('nationality_code', p.nationality_code or '048') %}
 {% set third_country_enabled = current_nationality and current_nationality not in eu_nationality_codes %}
 <div class="modal-backdrop">
   <div class="modal">
     <form data-eu-nationalities="{{ eu_nationality_codes|join(',') }}"
-          hx-post="{{ url_for('persons.correct', person_id=p.person_id) }}"
+          hx-post="{{ url_for('persons.change' if change else 'persons.correct',
+                              person_id=p.person_id) }}"
           hx-target="#persons-panel" hx-swap="outerHTML">
       <div class="mhead">
-        <h3>Επεξεργασία στοιχείων — {{ p.full_name }}</h3>
+        {% if change %}
+        <h3>Μεταβολή στοιχείων — {{ p.full_name }}</h3>
         <span class="muted" style="font-size:12.5px">
-          καταγράφεται ως PersonDetailsCorrected — τα παλιά events μένουν άθικτα</span>
+          ισχύει από την ημερομηνία που δίνετε (π.χ. γέννηση τέκνου, νέα
+          ταυτότητα) — για λάθος καταχώρησης χρησιμοποιήστε τη διόρθωση ✏️</span>
+        {% else %}
+        <h3>Διόρθωση στοιχείων — {{ p.full_name }}</h3>
+        <span class="muted" style="font-size:12.5px">
+          διόρθωση λάθους καταχώρησης («από πάντα») — για πραγματική αλλαγή
+          (τέκνα, ταυτότητα…) χρησιμοποιήστε τη μεταβολή 🔄</span>
+        {% endif %}
       </div>
 
       <div class="mbody">
@@ -27,22 +41,26 @@
         </div>
         <div class="tabpane tp-general">
           <div class="frm cols">
-          <label>Επώνυμο<input name="last_name"
+          {% if change %}
+          <label>Ισχύει από<input type="date" name="effective_from" required
+            value="{{ f.get('effective_from') or today.isoformat() }}"></label>
+          {% endif %}
+          <label>Επώνυμο<input name="last_name" {{ lock }}
             value="{{ f.get('last_name', p.last_name) }}"></label>
-          <label>Όνομα<input name="first_name"
+          <label>Όνομα<input name="first_name" {{ lock }}
             value="{{ f.get('first_name', p.first_name) }}"></label>
-          <label>Πατρώνυμο<input name="father_name"
+          <label>Πατρώνυμο<input name="father_name" {{ lock }}
             value="{{ f.get('father_name', p.father_name) }}"></label>
-          <label>Μητρώνυμο<input name="mother_name"
+          <label>Μητρώνυμο<input name="mother_name" {{ lock }}
             value="{{ f.get('mother_name', p.mother_name) }}"></label>
-          <label>ΑΦΜ<input name="afm" maxlength="9"
+          <label>ΑΦΜ<input name="afm" {{ lock }} maxlength="9"
             value="{{ f.get('afm', p.afm) }}"></label>
-          <label>ΑΜΚΑ<input name="amka" maxlength="11"
+          <label>ΑΜΚΑ<input name="amka" {{ lock }} maxlength="11"
             value="{{ f.get('amka', p.amka) }}"></label>
-          <label>ΑΜΑ<input name="ama" maxlength="9"
+          <label>ΑΜΑ<input name="ama" {{ lock }} maxlength="9"
             value="{{ f.get('ama', p.ama) }}"></label>
           <label>Φύλο
-            <select name="sex" required>
+            <select name="sex" required {{ lock }}>
               {% set sex = f.get('sex', p.sex) %}
               <option value="">— Επιλογή —</option>
               <option value="0" {{ 'selected' if sex == '0' }}>Άνδρας</option>
@@ -68,7 +86,7 @@
             </select></label>
           {% set nationality = current_nationality %}
           <label>Υπηκοότητα
-            <select name="nationality_code" data-nationality-select required>
+            <select name="nationality_code" data-nationality-select required {{ lock }}>
               <option value="">— Επιλογή —</option>
               {% for row in nationalities %}
                 <option value="{{ row.code }}"
@@ -102,6 +120,7 @@
             value="{{ f.get('children', p.children) }}"></label>
           <label>Email<input type="email" name="email" placeholder="name@example.com"
             value="{{ f.get('email', p.email) }}"></label>
+          {% include "partials/_person_contact_fields.html" %}
           <label>Ημ. γέννησης<input value="{{ p.birth_date|date_gr }}" disabled></label>
           </div>
         </div>
@@ -116,7 +135,8 @@
         <button type="button" class="ghost"
                 hx-get="{{ url_for('persons.modal_close') }}"
                 hx-target="#modal-host" hx-swap="innerHTML">Άκυρο</button>
-        <button class="run" type="submit">Αποθήκευση στοιχείων</button>
+        <button class="run" type="submit">{{ 'Καταχώρηση μεταβολής' if change
+                                             else 'Αποθήκευση διόρθωσης' }}</button>
       </div>
     </form>
   </div>

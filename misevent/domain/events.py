@@ -82,6 +82,13 @@ class PersonRegistered(DomainEvent):
     res_permit_visa_from: date | None = None
     res_permit_visa_to: date | None = None
     education_level: str = ""  # WebE3N f_epipedo_morfosis
+    # Επικοινωνία & τόπος γέννησης (π.χ. από τη Βεβαίωση ΑΜΚΑ) — προαιρετικά
+    address: str = ""  # Οδός / αριθμός
+    postal_code: str = ""  # Τ.Κ.
+    municipality: str = ""  # Δήμος διεύθυνσης
+    prefecture: str = ""  # Νομός
+    phone: str = ""
+    birth_place: str = ""  # Δήμος, Νομός, Χώρα γέννησης
 
 
 @dataclass(frozen=True)
@@ -90,6 +97,18 @@ class PersonDetailsCorrected(DomainEvent):
     Επιτρεπόμενα πεδία: βλ. constraints.PERSON_FIELDS."""
 
     person_id: str
+    fields: dict
+
+
+@dataclass(frozen=True)
+class PersonDetailsChanged(DomainEvent):
+    """ΜΕΤΑΒΟΛΗ στοιχείων προσώπου που αλλάζουν στη ζωή του (τέκνα, οικογ.
+    κατάσταση, ταυτότητα, μόρφωση…) ΑΠΟ μια ημερομηνία — σε αντίθεση με τη
+    διόρθωση λάθους (`PersonDetailsCorrected`), που ισχύει «από πάντα».
+    Επιτρεπόμενα πεδία: βλ. constraints.PERSON_CHANGEABLE_FIELDS."""
+
+    person_id: str
+    effective_from: date
     fields: dict
 
 
@@ -1086,6 +1105,7 @@ EVENT_TYPES = {
     for cls in [
         PersonRegistered,
         PersonDetailsCorrected,
+        PersonDetailsChanged,
         EmploymentStarted,
         EmploymentHireDetailsCorrected,
         EmploymentDeleted,

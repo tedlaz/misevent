@@ -1,0 +1,12 @@
+{# Επικοινωνία & τόπος γέννησης — κοινό σε νέο πρόσωπο / διόρθωση / μεταβολή.
+   Θέλει `f` (form) και προαιρετικά `p` (υπάρχον πρόσωπο). Ο τόπος γέννησης
+   ΔΕΝ μεταβάλλεται (μόνο διορθώνεται) -> κλειδώνει με `change`. #}
+{% macro val(name) %}{{ f.get(name, p[name] if p else '') }}{% endmacro %}
+<label>Οδός / αριθμός<input name="address" value="{{ val('address') }}"></label>
+<label>Τ.Κ.<input name="postal_code" maxlength="5" inputmode="numeric"
+  value="{{ val('postal_code') }}"></label>
+<label>Δήμος<input name="municipality" value="{{ val('municipality') }}"></label>
+<label>Νομός<input name="prefecture" value="{{ val('prefecture') }}"></label>
+<label>Τηλέφωνο<input type="tel" name="phone" value="{{ val('phone') }}"></label>
+<label>Τόπος γέννησης<input name="birth_place" placeholder="Δήμος, Νομός, Χώρα"
+  value="{{ val('birth_place') }}" {{ 'disabled' if change }}></label>

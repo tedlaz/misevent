@@ -21,6 +21,8 @@
               <select name="due_kind">
                 <option value="eom" {{ 'selected' if kind == 'eom' }}>
                   Τελ. εργάσιμη περιόδου + k μήνες</option>
+                <option value="eom_cal" {{ 'selected' if kind == 'eom_cal' }}>
+                  Τέλος (ημερολογιακού) μήνα περιόδου + k μήνες</option>
                 <option value="fixed" {{ 'selected' if kind == 'fixed' }}>
                   Σταθερή ημερομηνία (μήνας/ημέρα)</option>
                 <option value="easter_minus"
@@ -30,7 +32,7 @@
             <label>k (μήνες ή ημέρες)
               <input type="number" name="due_k" step="1" min="0"
                 value="{{ f.get('due_k',
-                         due[1] if due[0] in ('eom', 'easter_minus') else 0) }}"></label>
+                         due[1] if due[0] in ('eom', 'eom_cal', 'easter_minus') else 0) }}"></label>
             <label>Μήνας (για σταθερή)
               <input type="number" name="due_month" step="1" min="1" max="12"
                 value="{{ f.get('due_month',

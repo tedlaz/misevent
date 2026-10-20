@@ -321,7 +321,7 @@ class EntitlementsMixin:
         comp_days = round(leave_days * factor, 2)
         daily = emp.daily_wage if emp.pay_type == "daily" else emp.monthly_gross / 25.0
         gross = round(comp_days * daily, 2)
-        fmy = pe.monthly_fmy(gross, emp.children, term, emp.birth_date)
+        fmy = pe.monthly_fmy(gross, emp.children_on(term), term, emp.birth_date)
         return {
             "leave_days": leave_days,
             "comp_days": comp_days,

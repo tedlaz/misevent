@@ -64,7 +64,7 @@ class GiftsMixin:
             emp, terms.wage, terms.weekly_hours, pe.gift_wage_date(gift_type, year))}
         return fn(
             terms.wage,
-            emp.children,
+            emp.children_on(on),
             year,
             emp.hire_date,
             term or emp.termination_date,
@@ -122,7 +122,7 @@ class GiftsMixin:
             emp, wage, emp.weekly_hours, date(year, 7, 31))}
         return fn(
             wage,
-            emp.children,
+            emp.children_on(date(year, 7, 31)),
             year,
             emp.hire_date,
             term=term or emp.termination_date,

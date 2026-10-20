@@ -23,6 +23,7 @@
 ανάγνωση), οπότε αλλαγή στο `requires` επηρεάζει αμέσως και τα παλιά.
 """
 
+from calendar import monthrange
 from dataclasses import dataclass, field, replace
 from datetime import date, timedelta
 
@@ -41,6 +42,8 @@ from misevent.rules.calendar_gr import last_working_day_of_month, orthodox_easte
 #
 # `due` — κανόνας προθεσμίας (κλειστό λεξιλόγιο, βλ. `due_date()`):
 #   ("eom", k)          τελευταία εργάσιμη της περιόδου + k μήνες
+#   ("eom_cal", k)      τελευταία ΗΜΕΡΟΛΟΓΙΑΚΗ ημέρα της περιόδου + k μήνες
+#                       (28/29/30/31 — ακόμη κι αν είναι αργία/Σαββατοκύριακο)
 #   ("fixed", mm, dd)   σταθερή ημερομηνία μέσα στο έτος
 #   ("easter_minus", k) k ημέρες πριν το Ορθόδοξο Πάσχα (Μ. Τετάρτη = 4)
 #   ("as_source",)      ίδια με την υποχρέωση-πηγή (καταβολές)
@@ -94,7 +97,9 @@ TYPES: dict[str, ObligationType] = {t.code: t for t in [
        extension={"allowed": True, "max_days": 10}),
 
     _t("MONTHLY_PAYROLL", "Υπολογισμός μισθοδοσίας", "🧮",
-       spawn="period", due=("eom", 0), command="run_monthly_payroll",
+       # Τέλος ΗΜΕΡΟΛΟΓΙΑΚΟΥ μήνα, όχι η τελ. εργάσιμη: ο μήνας μισθοδοσίας
+       # κλείνει στις 30/31 (28/29 τον Φεβρουάριο) — ποτέ νωρίτερα.
+       spawn="period", due=("eom_cal", 0), command="run_monthly_payroll",
        # Η προσαρμογή ΓΣΣΕ υπάρχει ΜΟΝΟ σε περιόδους αλλαγής κατώτατου —
        # μη-strict: δεν μπλοκάρει όταν δεν έχει προγραμματιστεί
        requires=(("ATTENDANCE_APPROVAL", "same"),
@@ -210,6 +215,7 @@ _OVERRIDES: dict[str, dict] = {}
 
 DUE_KINDS = {
     "eom": ("Τελ. εργάσιμη περιόδου + k μήνες", 1),
+    "eom_cal": ("Τελ. ημερολογιακή ημέρα περιόδου + k μήνες", 1),
     "fixed": ("Σταθερή ημερομηνία (μήνας, ημέρα)", 2),
     "easter_minus": ("k ημέρες πριν το Πάσχα", 1),
 }
@@ -253,7 +259,7 @@ def validate_due_rule(rule: tuple) -> None:
         raise ValueError(f"Ο κανόνας «{kind}» θέλει {DUE_KINDS[kind][1]} αριθμό/ούς")
     if any(not isinstance(a, int) for a in args):
         raise ValueError("Οι παράμετροι του κανόνα προθεσμίας είναι ακέραιοι")
-    if kind == "eom" and not (0 <= args[0] <= 12):
+    if kind in ("eom", "eom_cal") and not (0 <= args[0] <= 12):
         raise ValueError("Μετατόπιση μηνών εκτός ορίων (0–12)")
     if kind == "fixed" and not (1 <= args[0] <= 12 and 1 <= args[1] <= 28):
         raise ValueError("Σταθερή ημερομηνία εκτός ορίων (μήνας 1–12, ημέρα 1–28)")
@@ -305,6 +311,9 @@ def due_date(code: str, y: int, m: int, source_due: date | None = None) -> date:
     if kind == "eom":
         ny, nm = _shift(y, m or 12, rule[1])
         return last_working_day_of_month(ny, nm)
+    if kind == "eom_cal":
+        ny, nm = _shift(y, m or 12, rule[1])
+        return date(ny, nm, monthrange(ny, nm)[1])
     if kind == "fixed":
         return date(y, rule[1], rule[2])
     if kind == "easter_minus":

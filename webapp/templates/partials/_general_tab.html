@@ -115,9 +115,9 @@
         <b>Στοιχεία ταυτότητας</b>
         <span class="fs-hint">το φυσικό πρόσωπο — καταχωρείται μία φορά</span></div>
       <div class="frm cols">
-        <label>Επώνυμο<input name="last_name" placeholder="ΓΕΩΡΓΙΟΥ" required
+        <label>Επώνυμο<input name="last_name" required
           value="{{ fv.get('last_name') or (term if term and not term[0].isdigit() else '') }}"></label>
-        <label>Όνομα<input name="first_name" placeholder="ΜΑΡΙΑ" required
+        <label>Όνομα<input name="first_name" required
           value="{{ fv.get('first_name', '') }}"></label>
         <label>Πατρώνυμο<input name="father_name" required
           value="{{ fv.get('father_name', '') }}"></label>

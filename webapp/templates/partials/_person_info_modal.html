@@ -38,6 +38,18 @@
         <label>Λήξη ισχύος<input value="{{
           person.identity_expiry_date|date_gr if person.identity_expiry_date else '—'
         }}" disabled></label>
+        <label>Τέκνα<input value="{{ person.children }}" disabled></label>
+      </div>
+
+      <b class="sec">Επικοινωνία & γέννηση</b>
+      <div class="frm cols">
+        <label>Διεύθυνση<input value="{{ [person.address, person.postal_code,
+          person.municipality, person.prefecture]|select|join(', ') or '—' }}"
+          disabled></label>
+        <label>Τηλέφωνο<input value="{{ person.phone or '—' }}" disabled></label>
+        <label>Email<input value="{{ person.email or '—' }}" disabled></label>
+        <label>Τόπος γέννησης<input value="{{ person.birth_place or '—' }}"
+          disabled></label>
       </div>
 
       {% if person.res_permit_inst or person.res_permit_ap or person.res_permit_visa %}
@@ -50,6 +62,23 @@
           <label>Θεώρηση εισόδου<input value="{{
             person.res_permit_visa_number or '—' }}" disabled></label>
         </div>
+      {% endif %}
+
+      {% if changes %}
+        <b class="sec">Ιστορικό μεταβολών</b>
+        <table class="tbl">
+          <thead><tr><th>Ισχύει από</th><th>Στοιχείο</th><th>Από</th><th>Σε</th></tr></thead>
+          <tbody>
+            {% for c in changes %}{% for label, old, new in c.rows %}
+              <tr>
+                <td class="mono">{{ c.effective_from|date_gr if loop.first }}</td>
+                <td>{{ label }}</td>
+                <td class="muted">{{ old }}</td>
+                <td><b>{{ new }}</b></td>
+              </tr>
+            {% endfor %}{% endfor %}
+          </tbody>
+        </table>
       {% endif %}
 
       <b class="sec">Περίοδοι απασχόλησης</b>

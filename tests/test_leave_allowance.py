@@ -27,7 +27,8 @@ from misevent.persistence.database import Database
 FULL_WEEK = {d: "09:00-17:00" for d in ("MON", "TUE", "WED", "THU", "FRI")}
 
 
-def setup(hire: date, monthly_gross: float = 1200.0, schedule: bool = True):
+def setup(hire: date, monthly_gross: float = 1200.0, schedule: bool = True,
+          horizon: int = 1):
     """Εταιρεία με έναν εργαζόμενο — ό,τι χρειάζεται ο υπολογισμός.
 
     `schedule=False`: χωρίς χρονολόγιο υποχρεώσεων, ώστε η αποχώρηση να μη
@@ -38,7 +39,7 @@ def setup(hire: date, monthly_gross: float = 1200.0, schedule: bool = True):
     store.subscribe(proj.handle)
     if schedule:
         store.subscribe(
-            ObligationScheduler(store, proj, horizon_months=1).handle)
+            ObligationScheduler(store, proj, horizon_months=horizon).handle)
     svc = PayrollService(store, proj)
     svc.confirm_default_parameters()
     svc.register_company(ame="1234567890", afm="999888771", legal_name="ΔΟΚΙΜΗ ΑΕ")
@@ -174,3 +175,49 @@ def test_warning_and_postponement(fresh_system):
             assert "τέλος του έτους" in str(e)
         svc.extend_obligation(ob.obligation_id, date(year, 12, 31), "αναμονή")
         assert proj.obligations[ob.obligation_id].due_date == date(year, 12, 31)
+
+
+def _allowance_obs(proj, year):
+    return {(o.period_month, o.fulfilled) for o in proj.obligations.values()
+            if o.obligation_type == "LEAVE_ALLOWANCE" and o.period_year == year}
+
+
+def test_no_leave_in_the_year_means_mandatory_december_allowance():
+    """Το επίδομα ΠΡΕΠΕΙ να καταβληθεί μέσα στο έτος: όποιος δεν πήρε άδεια
+    (ούτε αποχώρησε) το παίρνει ΥΠΟΧΡΕΩΤΙΚΑ τον Δεκέμβριο — η υποχρέωση
+    γεννιέται με την περίοδο Δεκεμβρίου, χωρίς καμία LeaveRecorded."""
+    svc, proj, eid = setup(date(2026, 12, 1))  # horizon 1 -> ανοίγει ο Δεκέμβριος
+    emp = proj.employments[eid]
+    assert emp.allowance_period_month(2026) == 12
+    assert emp.allowance_period_month(2025) is None  # δεν απασχολήθηκε
+    assert _allowance_obs(proj, 2026) == {(12, False)}
+    assert [e.employment_id for e in svc.allowance_beneficiaries(2026, 12)] == [eid]
+
+    svc.run_leave_allowance(2026, 12)
+    assert _allowance_obs(proj, 2026) == {(12, True)}
+    assert svc._allowance_apd_period(eid, 2026) == (2027, 1)  # ΑΠΔ Ιανουαρίου
+
+
+def _close_november(svc, eid, year):
+    """Ό,τι κάνει ο τακτικός υπολογισμός Νοεμβρίου για τον scheduler."""
+    from misevent.domain.events import MonthlyPayrollCalculated
+    svc.store.append(eid, MonthlyPayrollCalculated(
+        eid, year, 11, gross=1200, efka_employee=0, efka_employer=0,
+        taxable=1200, fmy=0, net=1200))
+
+
+def test_december_obligation_waits_for_november_payroll():
+    """Με ορίζοντα 12 μηνών ο Δεκέμβριος ανοίγει ΗΔΗ από την πρόσληψη — αλλά
+    το επίδομα Δεκεμβρίου γεννιέται ΜΟΝΟ όταν κλείσει ο Νοέμβριος· ως τότε
+    μια άδεια θα το μετέφερε και η υποχρέωση θα έμενε χωρίς δικαιούχους."""
+    svc, proj, eid = setup(date(2026, 1, 5), horizon=12)
+    assert _allowance_obs(proj, 2026) == set()
+    _close_november(svc, eid, 2026)
+    assert _allowance_obs(proj, 2026) == {(12, False)}
+
+
+def test_leave_taken_during_the_year_means_no_december_obligation():
+    svc, proj, eid = setup(date(2026, 1, 5), horizon=12)
+    svc.record_leave(eid, LeaveType.ANNUAL, date(2026, 3, 16), date(2026, 3, 20))
+    _close_november(svc, eid, 2026)
+    assert _allowance_obs(proj, 2026) == {(3, False)}  # μόνο ο μήνας της άδειας

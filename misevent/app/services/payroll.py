@@ -575,7 +575,7 @@ class PayrollMixin:
             res = pe.calc_monthly_daily(
                 emp.daily_wage,
                 ins_days,
-                emp.children,
+                emp.children_on(period_end),
                 period_end,
                 sick=sick,
                 premiums=premium["total"],
@@ -586,7 +586,7 @@ class PayrollMixin:
         else:
             res = pe.calc_monthly(
                 emp.monthly_gross,
-                emp.children,
+                emp.children_on(period_end),
                 period_end,
                 unpaid_days=unpaid,
                 sick=sick,

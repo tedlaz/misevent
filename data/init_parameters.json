@@ -329,7 +329,7 @@
     {
       "code": "MONTHLY_PAYROLL",
       "due": [
-        "eom",
+        "eom_cal",
         0
       ],
       "extension": {

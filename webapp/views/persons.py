@@ -13,10 +13,11 @@ from flask import Blueprint, abort, render_template, request, send_file
 
 from misevent.integrations import ergani_parameters as ergani_params
 
-from .. import clock
+from .. import amka_pdf, clock
 from .. import queries as q
 from ..helpers import (
     flash_to,
+    form_contact_fields,
     form_date,
     form_digital_card_fields,
     form_employment_relationship,
@@ -54,6 +55,35 @@ def new_modal():
         education_levels=ergani_params.education_levels(),
         eu_nationality_codes=ergani_params.eu_nationality_codes(),
     )
+
+
+@bp.post("/new/amka")
+def new_from_amka():
+    """Προσυμπλήρωση του modal από Βεβαίωση ΑΜΚΑ (PDF). ΔΕΝ καταχωρεί τίποτα:
+    ξαναζωγραφίζει τη φόρμα — ό,τι είχε ήδη γράψει ο χρήστης μένει, όσα
+    βρέθηκαν στη βεβαίωση το αντικαθιστούν. Η καταχώρηση περνά μετά από τους
+    κανονικούς ελέγχους του `create`."""
+    form = request.form.to_dict()
+    f = request.files.get("amka_pdf")
+    try:
+        if f is None or not f.filename:
+            raise ValueError("Επιλέξτε το PDF της Βεβαίωσης ΑΜΚΑ")
+        found = amka_pdf.read(f.read())
+        if not found:
+            raise ValueError("Δεν βρέθηκαν στοιχεία στη βεβαίωση")
+        form.update(found)
+        ok, msg = True, (f"Συμπληρώθηκαν {len(found)} πεδία από τη βεβαίωση ΑΜΚΑ — "
+                         "ελέγξτε τα και συμπληρώστε τα υπόλοιπα")
+    except ValueError as exc:
+        ok, msg = False, str(exc)
+    html = render_template(
+        "partials/_person_modal.html", form=form,
+        identity_types=ergani_params.identity_types(),
+        nationalities=ergani_params.nationalities(),
+        education_levels=ergani_params.education_levels(),
+        eu_nationality_codes=ergani_params.eu_nationality_codes(),
+    )
+    return flash_to(html, msg, err=not ok)
 
 
 @bp.get("/modal/close")
@@ -133,6 +163,7 @@ def create():
             identity_issue_date=form_optional_date(f, "identity_issue_date"),
             identity_expiry_date=form_optional_date(f, "identity_expiry_date"),
             education_level=f.get("education_level", ""),
+            **form_contact_fields(f),
             **form_third_country_fields(f),
         )
         return (f"Καταχωρήθηκε ο εργαζόμενος {f.get('last_name')} "
@@ -219,6 +250,7 @@ def correct(person_id):
             identity_issue_date=form_optional_date(f, "identity_issue_date"),
             identity_expiry_date=form_optional_date(f, "identity_expiry_date"),
             education_level=f.get("education_level"),
+            **form_contact_fields(f),
             **form_third_country_fields(f),
         )
         return "Ενημερώθηκαν τα στοιχεία του προσώπου"
@@ -233,6 +265,73 @@ def correct(person_id):
     p = proj.persons.get(person_id)
     html = render_template(
         "partials/_person_edit_modal.html", p=p, form=request.form,
+        identity_types=ergani_params.identity_types(),
+        nationalities=ergani_params.nationalities(),
+        education_levels=ergani_params.education_levels(),
+        eu_nationality_codes=ergani_params.eu_nationality_codes(),
+    )
+    resp = flash_to(html, msg, err=True)
+    resp.headers["HX-Retarget"] = "#modal-host"
+    resp.headers["HX-Reswap"] = "innerHTML"
+    return resp
+
+
+# ------------------------------------- Μεταβολή στοιχείων (με ημ/νία ισχύος)
+# Ίδιο modal με τη διόρθωση, σε mode="change": τα στοιχεία ταυτότητας
+# κλειδώνουν και προστίθεται το «Ισχύει από» (PersonDetailsChanged).
+@bp.get("/<person_id>/change")
+def change_modal(person_id):
+    p = proj.persons.get(person_id)
+    if p is None:
+        abort(404)
+    return render_template(
+        "partials/_person_edit_modal.html", p=p, mode="change",
+        identity_types=ergani_params.identity_types(),
+        nationalities=ergani_params.nationalities(),
+        education_levels=ergani_params.education_levels(),
+        eu_nationality_codes=ergani_params.eu_nationality_codes(),
+    )
+
+
+@bp.post("/<person_id>/change")
+def change(person_id):
+    def cmd():
+        f = request.form
+        p = proj.persons.get(person_id)
+        was_married = p is not None and p.marital_status == "1"
+        svc.change_person_details(
+            person_id,
+            form_date(f, "effective_from"),
+            children=f.get("children"),
+            email=f.get("email"),
+            identity_type=f.get("identity_type"),
+            identity_number=f.get("identity_number"),
+            identity_issuer=f.get("identity_issuer"),
+            identity_issue_date=form_optional_date(f, "identity_issue_date"),
+            identity_expiry_date=form_optional_date(f, "identity_expiry_date"),
+            education_level=f.get("education_level"),
+            **form_contact_fields(f, birth_place=False),
+            **form_third_country_fields(f),
+        )
+        msg = "Καταχωρήθηκε η μεταβολή στοιχείων"
+        # Η οικογ. κατάσταση ΔΕΝ αλλάζει αυτόματα το επίδομα γάμου της
+        # απασχόλησης (όρος σύμβασης) — μόνο προειδοποίηση.
+        married = p.marital_status == "1"
+        emp = next((proj.employments[e] for e in p.employment_ids
+                    if e in proj.employments and proj.employments[e].active), None)
+        if married != was_married and emp is not None and emp.married != married:
+            msg += (" · ⚠️ άλλαξε η οικογενειακή κατάσταση — ελέγξτε το "
+                    "επίδομα γάμου στην καρτέλα απασχόλησης")
+        return msg
+
+    ok, msg = run_command(cmd)
+    if ok:
+        html = render_template("partials/_persons_panel.html", rows=q.person_rows())
+        return flash_to(html, msg, err=False)
+
+    p = proj.persons.get(person_id)
+    html = render_template(
+        "partials/_person_edit_modal.html", p=p, mode="change", form=request.form,
         identity_types=ergani_params.identity_types(),
         nationalities=ergani_params.nationalities(),
         education_levels=ergani_params.education_levels(),

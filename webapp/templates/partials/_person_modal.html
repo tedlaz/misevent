@@ -14,6 +14,17 @@
         <span class="muted" style="font-size:12.5px">
           καταχωρούνται ΜΟΝΟ τα στοιχεία ταυτότητας (μία φορά)· η ΠΡΟΣΛΗΨΗ
           γίνεται μετά, από το badge «πρόσληψη» της γραμμής του</span>
+        <div class="req-note">Τα πεδία με <b>*</b> είναι υποχρεωτικά</div>
+        {# Προσυμπλήρωση από Βεβαίωση ΑΜΚΑ: στέλνει ΚΑΙ ό,τι έχει ήδη γραφτεί
+           στη φόρμα (htmx περιλαμβάνει το γονικό form) και ξαναζωγραφίζει το
+           modal — δεν καταχωρεί τίποτα. #}
+        <label class="ghost" style="margin-top:8px"
+               title="Συμπλήρωση στοιχείων από το PDF της βεβαίωσης (amka.gr)">
+          📄 Από βεβαίωση ΑΜΚΑ
+          <input type="file" name="amka_pdf" accept=".pdf,application/pdf" hidden
+                 hx-post="{{ url_for('persons.new_from_amka') }}"
+                 hx-trigger="change" hx-encoding="multipart/form-data"
+                 hx-target="#modal-host" hx-swap="innerHTML"></label>
       </div>
 
       <div class="mbody">
@@ -28,9 +39,9 @@
         </div>
         <div class="tabpane tp-general">
           <div class="frm cols">
-          <label>Επώνυμο<input name="last_name" placeholder="ΓΕΩΡΓΙΟΥ"
+          <label>Επώνυμο<input name="last_name"
             value="{{ f.get('last_name', '') }}" autofocus required></label>
-          <label>Όνομα<input name="first_name" placeholder="ΜΑΡΙΑ"
+          <label>Όνομα<input name="first_name"
             value="{{ f.get('first_name', '') }}" required></label>
           <label>Πατρώνυμο<input name="father_name"
             value="{{ f.get('father_name', '') }}" required></label>
@@ -99,6 +110,7 @@
             value="{{ f.get('children', '0') }}"></label>
           <label>Email<input type="email" name="email" placeholder="name@example.com"
             value="{{ f.get('email', '') }}"></label>
+          {% include "partials/_person_contact_fields.html" %}
           </div>
         </div>
         <div class="tabpane tp-foreign">

@@ -6,6 +6,8 @@
   {{ counts.problem }} με πρόβλημα · {{ counts.done }} ολοκληρωμένες
 {% endblock %}
 
+{% block timebar %}{% from "_macros.html" import time_bar %}{{ time_bar() }}{% endblock %}
+
 {% block content %}
   {% include "partials/_ob_panel.html" %}
 {% endblock %}

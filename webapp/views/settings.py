@@ -86,6 +86,9 @@ def _due_text(rule) -> str:
     if kind == "eom":
         return ("τελ. εργάσιμη περιόδου" if not rule[1]
                 else f"τελ. εργάσιμη +{rule[1]} μήνα/ες")
+    if kind == "eom_cal":
+        return ("τέλος μήνα περιόδου" if not rule[1]
+                else f"τέλος μήνα +{rule[1]} μήνα/ες")
     if kind == "fixed":
         return f"σταθερά {rule[2]}/{rule[1]}"
     if kind == "easter_minus":
@@ -676,8 +679,8 @@ def obtype_save(code):
         due = None
         if ot.TYPES.get(code) and ot.TYPES[code].due != ("as_source",):
             kind = f.get("due_kind", "")
-            if kind == "eom":
-                due = ("eom", form_int(f, "due_k"))
+            if kind in ("eom", "eom_cal"):
+                due = (kind, form_int(f, "due_k"))
             elif kind == "fixed":
                 due = ("fixed", form_int(f, "due_month"), form_int(f, "due_day"))
             elif kind == "easter_minus":

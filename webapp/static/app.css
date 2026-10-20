@@ -150,7 +150,7 @@ button.run.danger{background:var(--prob)}
   margin:8px 0}
 /* Κλεισμένη περίοδος: ίδιο μωβ με τις κλειδωμένες ζώνες των grid */
 .warnbox.closedbox{background:#F1EAFA;border-color:#9771C9;color:#5F4788}
-button.ghost,a.ghost{font:inherit;border:1px solid var(--line);
+button.ghost,a.ghost,label.ghost{font:inherit;border:1px solid var(--line);
   background:var(--card);border-radius:9px;padding:7px 14px;cursor:pointer;
   display:inline-block}
 button.ghost.on{background:var(--ink);color:var(--card);border-color:var(--ink);
@@ -291,6 +291,15 @@ table.tbl a.lnk:hover{border-color:var(--ink)}
 .frm input[type=checkbox],.frm input[type=radio]{width:auto;flex:none;
   padding:0;margin:0;border-radius:0}
 .frm small{color:var(--warn);font-size:11.5px}
+/* Υποχρεωτικά πεδία: «Ετικέτα *» — βγαίνει ΜΟΝΟ από το `required` του πεδίου
+   (μία πηγή αλήθειας, κανένα template δεν σημαδεύει με το χέρι). Grid ώστε
+   το * να κάθεται δίπλα στο κείμενο και το πεδίο να πέφτει από κάτω. */
+.frm label:not(.chk):has(> :required){display:grid;grid-template-columns:max-content 1fr;
+  column-gap:3px;color:var(--ink);font-weight:600}
+.frm label:not(.chk):has(> :required)::after{content:"*";color:var(--prob)}
+.frm label:not(.chk):has(> :required) > *{grid-column:1/-1;order:1;font-weight:400}
+.req-note{font-size:12px;color:var(--muted)}
+.req-note b{color:var(--prob)}
 .frm .dayrow{display:flex;gap:8px;align-items:center;margin:3px 0}
 .frm .dayrow b{width:34px;font-size:12px;color:var(--muted)}
 .frm .row{display:flex;gap:6px}
@@ -2423,3 +2432,236 @@ body.authpage{background:var(--paper);min-height:100vh;display:flex;
 .authbox{width:min(430px,100%)}
 .authbox .authbrand{font-size:18px;font-weight:700;margin-bottom:10px}
 .authbox .warnbox{margin-bottom:10px}
+
+/* --- ΛΩΡΙΔΑ ΧΡΟΝΟΥ (macro time_bar, block timebar του header) -----------
+   Έτη σε μία γραμμή, παλαιότερο αριστερά· το ανοιχτό απλώνει (flex-grow)
+   και δείχνει τους 12 μήνες. Χρώμα = κατάσταση υποχρεώσεων περιόδου. */
+.tbar{flex-basis:100%;display:flex;gap:6px;align-items:stretch;user-select:none;
+  font-size:12px;--tb-on:#2D7DD2}
+.tb-y{flex:0 0 auto;min-width:0;display:flex;gap:4px;padding:2px;border:1px solid transparent;
+  border-radius:9px;transition:flex-grow .45s var(--ease),background-color .3s,border-color .3s}
+.tb-y:has(> input:checked){flex-grow:1;border-color:var(--tb-on);background:#EEF4FB}
+.tb-yc{display:flex;flex-direction:column;align-items:center;justify-content:center;min-width:48px;
+  padding:3px 8px;cursor:pointer;background:var(--card);border:1.5px solid var(--line);border-radius:7px;
+  box-shadow:inset 0 3px 0 var(--done)}
+.tb-yc:hover{border-color:var(--tb-on)}
+.tb-yc b{font:700 12.5px var(--mono)}
+.tb-yc i,.tb-mo i{font:600 11px var(--mono);font-style:normal;min-height:1.2em;line-height:1.2}
+.tb-ms{display:none;flex:1;min-width:0}
+.tb-y:has(> input:checked) .tb-ms{display:flex;animation:tb-in .35s var(--ease) both}
+@keyframes tb-in{from{opacity:0;transform:translateX(-8px)}}
+.tb-mo{flex:1 1 0;min-width:0;display:flex;flex-direction:column;align-items:center;justify-content:center;
+  padding:2px 1px;color:var(--ink);text-decoration:none;border-left:1px solid var(--line);
+  box-shadow:inset 0 -3px 0 transparent}
+.tb-mo:first-child{border-left:0}
+.tb-mo > span{font-size:10.5px;font-weight:700;text-transform:uppercase;white-space:nowrap;overflow:hidden;max-width:100%}
+
+.tb-mo.future{opacity:.45}
+.tb-mo.now{background:var(--card);border-radius:6px;box-shadow:inset 0 0 0 2px var(--tb-on)}
+/* Κατάσταση: γραμμή κάτω (μήνας) / πάνω (έτος) */
+.tb-mo.done{box-shadow:inset 0 -3px 0 var(--ready)}
+.tb-mo.open{box-shadow:inset 0 -3px 0 var(--warn)}
+.tb-mo.late{box-shadow:inset 0 -3px 0 var(--prob)}
+.tb-mo.now.done{box-shadow:inset 0 0 0 2px var(--tb-on),inset 0 -3px 0 var(--ready)}
+.tb-mo.now.open{box-shadow:inset 0 0 0 2px var(--tb-on),inset 0 -3px 0 var(--warn)}
+.tb-mo.now.late{box-shadow:inset 0 0 0 2px var(--tb-on),inset 0 -3px 0 var(--prob)}
+.tb-mo.late i,.tb-yc.late i{color:var(--prob)}
+.tb-mo.open i,.tb-yc.open i{color:var(--warn)}
+.tb-yc.done{box-shadow:inset 0 3px 0 var(--ready)}
+.tb-yc.open{box-shadow:inset 0 3px 0 var(--warn)}
+.tb-yc.late{box-shadow:inset 0 3px 0 var(--prob)}
+@media (prefers-reduced-motion:reduce){ .tb-y{transition:none} .tb-ms{animation:none!important} }
+/* Στενή οθόνη: το ανοιχτό έτος σε δική του γραμμή */
+@media (max-width:900px){ .tbar{flex-wrap:wrap} .tb-y:has(> input:checked){flex-basis:100%} }
+
+.tb-mo:hover,.tb-mo:focus-visible{background:var(--card);outline:none}
+.tb-mo.sel{background:#2D7DD2;color:#fff;border-radius:6px;opacity:1}
+.tb-mo.sel i{color:#fff!important}
+
+/* --- ΟΘΟΝΗ ΜΗΝΑ (month.html · queries.month_detail) ---------------------
+   Χρώματα: εργασία/άδειες = τα --lv-* της εφαρμογής, μισθοδοσία = τα
+   χρώματα του .payslip (ΦΜΥ σκουρότερο για αντίθεση) — ελεγμένα με τον
+   validator παλέτας (CVD 6–8 → πάντα με ετικέτες/ποσά δίπλα). Κατάσταση =
+   --ready/--warn/--prob ΜΕ εικονίδιο και κείμενο, ποτέ μόνο χρώμα. */
+.mo{--k-work:#3D7EB8;--k-leave:var(--lv-annual);--k-sick:var(--lv-sick);--k-unpaid:var(--lv-unpaid);
+  --k-net:#1F9D55;--k-fmy:#C77408;--k-efka:#12958A;display:flex;flex-direction:column;gap:18px}
+.mo-hero{--mo-a:#1D4E89;--mo-b:#2D7DD2}
+.mo-hero.done{--mo-a:#0F5E3C;--mo-b:#1F9D55}
+.mo-hero.open{--mo-a:#7A4A06;--mo-b:#D27C0B}
+.mo-hero.late{--mo-a:#7E1F1F;--mo-b:#D64545}
+@keyframes mo-rise{from{opacity:0;transform:translateY(14px) scale(.985)}}
+@keyframes mo-grow{from{transform:scaleX(0)}}
+@keyframes mo-pop{from{opacity:0;transform:scale(.6)}}
+@keyframes mo-float{50%{transform:translate(28px,-16px) scale(1.12)}}
+
+/* Hero: διαβάθμιση στο χρώμα της κατάστασης του μήνα */
+.mo-hero{position:relative;overflow:hidden;display:flex;flex-wrap:wrap;gap:24px;align-items:center;
+  justify-content:space-between;padding:24px 28px;border-radius:20px;color:#fff;box-shadow:var(--sh-3);
+  background:radial-gradient(130% 150% at 0% 0%,var(--mo-b) 0%,var(--mo-a) 55%,#14212C 100%);
+  animation:mo-rise .55s var(--ease) both}
+.mo-hero .blob{position:absolute;border-radius:50%;filter:blur(48px);opacity:.42;pointer-events:none;
+  animation:mo-float 12s ease-in-out infinite}
+.mo-hero .b1{width:300px;height:300px;background:var(--mo-b);top:-150px;right:18%}
+.mo-hero .b2{width:220px;height:220px;background:#7A5AF8;bottom:-140px;left:30%;opacity:.25;animation-delay:-6s}
+.mo-hero-main{position:relative;display:flex;flex-direction:column;gap:10px;min-width:0}
+.mo-nav{display:flex;gap:8px;flex-wrap:wrap}
+.mo-nav a{color:rgba(255,255,255,.85);text-decoration:none;font-size:12.5px;font-weight:600;padding:4px 10px;
+  border-radius:999px;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.18);transition:background-color .2s}
+.mo-nav a:hover{background:rgba(255,255,255,.22);color:#fff}
+.mo-title{margin:0;font-size:clamp(26px,4vw,40px);font-weight:700;letter-spacing:-.02em;line-height:1.1}
+.mo-badges{display:flex;flex-wrap:wrap;gap:6px}
+.mo-chip{font-size:12px;font-weight:600;padding:4px 10px;border-radius:999px;color:#fff;
+  background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.2);animation:mo-pop .4s var(--spring) both .25s}
+.mo-chip.done,.mo-chip.open,.mo-chip.late{background:#fff;color:var(--mo-a);border-color:#fff}
+.mo-chip.now{background:rgba(255,255,255,.22)}
+/* Μικρό ημερολόγιο */
+.mo-cal{position:relative;display:grid;grid-template-columns:repeat(7,30px);gap:3px;padding:10px;border-radius:14px;
+  background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.14);font:500 12px var(--mono)}
+.mo-cal b{font:600 10px var(--mono);text-align:center;color:rgba(255,255,255,.6)}
+.mo-cal span{position:relative;height:26px;display:grid;place-items:center;border-radius:7px;
+  background:rgba(255,255,255,.08);animation:mo-pop .35s var(--ease) both;animation-delay:calc(var(--i, 0) * 12ms + .2s)}
+.mo-cal span:empty{background:none}
+.mo-cal span.we{color:rgba(255,255,255,.5);background:rgba(255,255,255,.03)}
+.mo-cal span.hol{background:rgba(255,200,87,.3);color:#FFE3A3;font-weight:700}
+.mo-cal span.lv::after{content:"";position:absolute;bottom:2px;width:5px;height:5px;border-radius:50%;background:#7CE0A7}
+.mo-cal span.today{background:#fff;color:var(--mo-a);font-weight:700;box-shadow:0 0 0 3px rgba(255,255,255,.35)}
+
+/* KPIs */
+.mo-kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px}
+.mo-kpi{position:relative;overflow:hidden;display:flex;flex-direction:column;gap:4px;padding:14px 16px;border-radius:14px;
+  background:var(--card);border:1px solid var(--line);box-shadow:var(--sh-1);
+  animation:mo-rise .5s var(--ease) both;animation-delay:calc(var(--i) * 60ms + .1s);
+  transition:transform .26s var(--spring),box-shadow .26s var(--ease)}
+.mo-kpi:hover{transform:translateY(-3px);box-shadow:var(--sh-2)}
+.mo-kpi::before{content:"";position:absolute;inset:0 0 auto;height:3px;background:linear-gradient(90deg,#2D7DD2,#7A5AF8)}
+.mo-kpi > span{font-size:11.5px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.mo-kpi > b{font:600 clamp(18px,1.7vw,26px)/1.1 var(--mono);font-variant-numeric:tabular-nums;color:var(--ink);white-space:nowrap}
+.mo-kpi small{font-size:11.5px;color:var(--muted)}
+.mo-kpi em.late{font-style:normal;font-weight:700;color:var(--prob)}
+@property --pp{syntax:"<number>";inherits:false;initial-value:0}
+@keyframes mo-ring{from{--pp:0}}
+.mo-ring{--pp:var(--p);width:64px;height:64px;border-radius:50%;display:grid;place-items:center;
+  background:conic-gradient(var(--ready) calc(var(--pp) * 1%),var(--line) 0);animation:mo-ring 1.1s var(--ease) both .3s}
+.mo-ring b{width:50px;height:50px;border-radius:50%;background:var(--card);display:grid;place-items:center;
+  font:700 15px var(--mono)}
+.mo-ring b small{font-size:10px;color:var(--muted);margin-left:1px}
+
+/* Κάρτες */
+.mo-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px}
+.mo-card{margin:0;animation:mo-rise .55s var(--ease) both;animation-delay:calc(var(--i) * 80ms + .25s)}
+.mo-card.wide{grid-column:1 / -1}
+.mo-legend,.mo-split-legend{display:flex;flex-wrap:wrap;gap:6px 16px;font-size:12px;color:var(--muted);margin-bottom:10px}
+.mo-legend i,.mo-split-legend i{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:6px;vertical-align:-1px}
+.k-work{background:var(--k-work)}.k-leave{background:var(--k-leave)}.k-sick{background:var(--k-sick)}
+.k-unpaid{background:var(--k-unpaid)}.k-net{background:var(--k-net)}.k-fmy{background:var(--k-fmy)}.k-efka{background:var(--k-efka)}
+
+/* Παρουσίες: μία στοιβαγμένη μπάρα ανά εργαζόμενο (κενό 2px μεταξύ τμημάτων) */
+.mo-att{display:flex;flex-direction:column;gap:2px}
+.mo-att-row{display:grid;grid-template-columns:minmax(120px,220px) 1fr 86px 96px;gap:12px;align-items:center;
+  padding:7px 8px;border-radius:9px;color:var(--ink);text-decoration:none;
+  animation:mo-rise .45s var(--ease) both;animation-delay:calc(var(--i) * 40ms + .4s);transition:background-color .2s}
+.mo-att-row:hover{background:var(--paper)}
+.mo-att-row .nm{font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.mo-stack{display:flex;gap:2px;width:var(--w);height:14px;transform-origin:left;
+  animation:mo-grow .8s var(--ease) both;animation-delay:calc(var(--i) * 40ms + .5s)}
+.mo-stack i{min-width:3px;height:100%}
+.mo-stack i:first-child{border-radius:4px 0 0 4px}
+.mo-stack i:last-child{border-radius:0 4px 4px 0}
+.mo-stack i:only-child{border-radius:4px}
+.mo-att-row .num{font:600 13px var(--mono);text-align:right;white-space:nowrap}
+.mo-att-row .num small{font-size:10.5px;color:var(--muted);margin-left:2px;font-family:inherit}
+.mo-att-row .num em{font-style:normal;font-size:11px;color:var(--prob);margin-left:5px}
+.mo-att-row .num em.prem{color:#7A5AF8}
+
+/* Άδειες: Gantt του μήνα */
+.mo-gantt{display:flex;flex-direction:column;gap:6px}
+.mo-gantt-row{display:grid;grid-template-columns:minmax(120px,220px) 1fr;gap:12px;align-items:center;
+  animation:mo-rise .45s var(--ease) both;animation-delay:calc(var(--i) * 50ms + .45s)}
+.mo-gantt-axis{display:grid;grid-template-columns:repeat(var(--days),1fr)}
+.mo-gantt-axis span{font:500 10.5px var(--mono);color:var(--muted);text-align:center;border-bottom:2px solid var(--line);padding-bottom:3px}
+.mo-gantt-axis span.we{background:var(--paper)}
+.mo-gantt-axis span.today{color:#2D7DD2;border-bottom-color:#2D7DD2;font-weight:700}
+.mo-gantt-row .nm{font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.mo-gantt-row .track{position:relative;height:24px;border-radius:7px;background:var(--paper)}
+.mo-gantt-row .track i{position:absolute;top:2px;bottom:2px;border-radius:5px;color:#fff;overflow:hidden;
+  transform-origin:left;animation:mo-grow .7s var(--ease) both;animation-delay:calc(var(--i) * 50ms + .55s);
+  box-shadow:0 0 0 2px var(--card)}
+.mo-gantt-row .track i span{display:block;padding:2px 7px;font-size:11px;font-weight:600;white-space:nowrap;
+  overflow:hidden;text-overflow:ellipsis;line-height:16px}
+
+/* Μισθοδοσία: σύνθεση των μικτών */
+.mo-split{display:flex;gap:2px;height:22px;margin:4px 0 10px;transform-origin:left;
+  animation:mo-grow .9s var(--ease) both .5s}
+.mo-split i{min-width:3px;transition:filter .2s}
+.mo-split i:hover{filter:brightness(1.12)}
+.mo-split i:first-child{border-radius:5px 0 0 5px}
+.mo-split i:last-child{border-radius:0 5px 5px 0}
+.mo-split-legend b{color:var(--ink);font-family:var(--mono);font-weight:600;margin-left:4px}
+.mo-split-legend .sum{margin-left:auto}
+.mo-details{margin-top:6px}
+
+/* Λίστες (Δώρα, υποβολές, πληρωμές) */
+.mo-list{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px}
+.mo-list li{display:flex;align-items:center;gap:12px;padding:10px 12px;border-radius:11px;background:var(--paper);
+  border-left:4px solid #2D7DD2;animation:mo-rise .45s var(--ease) both;animation-delay:calc(var(--i) * 60ms + .5s)}
+.mo-list li.kind-easter{border-left-color:#D9679D}
+.mo-list li.kind-christmas{border-left-color:#D64545}
+.mo-list li.kind-allowance{border-left-color:var(--lv-annual)}
+.mo-list li.sub{border-left-color:#7A5AF8}
+.mo-list li.pay{border-left-color:var(--ready)}
+.mo-list .ic{font-size:18px}
+.mo-list .lbl{flex:1;min-width:0;font-size:13px;font-weight:600;display:flex;flex-direction:column}
+.mo-list small{font-size:11.5px;color:var(--muted);font-weight:400}
+.mo-list b{font:600 13.5px var(--mono);text-align:right;display:flex;flex-direction:column}
+.mo-total{margin-top:10px;text-align:right;font-size:13px;color:var(--muted)}
+.mo-total b{font-family:var(--mono);color:var(--ink);margin-left:6px}
+
+/* Υποχρεώσεις: κατακόρυφο χρονολόγιο με κουκκίδα κατάστασης */
+.mo-tl{list-style:none;margin:0;padding:0 0 0 14px;position:relative}
+.mo-tl::before{content:"";position:absolute;left:5px;top:6px;bottom:6px;width:2px;background:var(--line);border-radius:2px}
+.mo-tl li{position:relative;animation:mo-rise .45s var(--ease) both;animation-delay:calc(var(--i) * 45ms + .55s);
+  --c:var(--warn);--cb:var(--warn-bg)}
+.mo-tl li.done{--c:var(--ready);--cb:var(--ready-bg)}
+.mo-tl li.late{--c:var(--prob);--cb:var(--prob-bg)}
+.mo-tl li::before{content:"";position:absolute;left:-14px;top:50%;width:12px;height:12px;margin-top:-6px;border-radius:50%;
+  background:var(--c);box-shadow:0 0 0 3px var(--card)}
+.mo-tl li.late::before{animation:mo-pulse 1.8s ease-in-out infinite}
+@keyframes mo-pulse{50%{box-shadow:0 0 0 3px var(--card),0 0 0 7px color-mix(in srgb,var(--prob) 25%,transparent)}}
+.mo-tl a{display:grid;grid-template-columns:28px 1fr auto auto;gap:12px;align-items:center;margin:3px 0 3px 8px;
+  padding:9px 12px;border-radius:10px;color:var(--ink);text-decoration:none;transition:background-color .2s,transform .2s var(--spring)}
+.mo-tl a:hover{background:var(--paper);transform:translateX(3px)}
+.mo-tl .ic{font-size:17px;text-align:center}
+.mo-tl .lbl{font-size:13px;font-weight:600;display:flex;flex-direction:column;min-width:0}
+.mo-tl .lbl small{font-weight:400;color:var(--muted);font-size:11.5px}
+.mo-tl .due{font:500 12px var(--mono);color:var(--muted);text-align:right;display:flex;flex-direction:column}
+.mo-tl .due small{color:var(--prob);font-weight:700}
+.mo-tl .st{font-size:11.5px;font-weight:700;padding:3px 9px;border-radius:999px;color:var(--c);background:var(--cb);white-space:nowrap}
+
+@media (max-width:900px){
+  .mo-grid{grid-template-columns:minmax(0,1fr)}
+  .mo-att-row{grid-template-columns:1fr 70px 80px}
+  .mo-att-row .mo-stack{grid-column:1 / -1;grid-row:2}
+  .mo-gantt-axis{display:none}
+  .mo-tl a{grid-template-columns:24px 1fr auto}
+  .mo-tl .due{display:none}
+}
+@media (prefers-reduced-motion:reduce){
+  .mo,.mo *{animation:none!important;transition:none!important}
+}
+
+/* Λωρίδα χρόνου: εργαζόμενοι του μήνα + σήματα Δώρων/Επιδόματος/αποζημιώσεων */
+.tb-mo{position:relative}
+.tb-row{display:flex;gap:5px;align-items:baseline;justify-content:center;min-height:1.2em}
+.tb-emp{font:600 10.5px var(--mono);color:var(--muted);white-space:nowrap}
+.tb-emp:not(:empty)::before{content:"👤";font-size:8px;margin-right:1px;filter:grayscale(1);opacity:.7}
+.tb-mo.sel .tb-emp{color:#fff}
+.tb-mo > .tb-bdg{position:absolute;top:-9px;right:1px;display:flex;gap:1px;pointer-events:none;overflow:visible;max-width:none}
+.tb-bdg b{display:grid;place-items:center;width:19px;height:19px;border-radius:50%;font-size:12px;line-height:1;
+  background:var(--card);box-shadow:0 0 0 1.5px var(--warn),0 1px 3px rgba(23,36,47,.18);
+  animation:mo-pop .35s var(--spring) both}
+.tb-bdg b.done{box-shadow:0 0 0 1.5px var(--ready),0 1px 3px rgba(23,36,47,.18)}
+@media (prefers-reduced-motion:reduce){ .tb-bdg b{animation:none} }
+.tb-row > i:not(:empty){padding:0 4px;border-radius:999px;font-size:10px;line-height:14px;
+  background:color-mix(in srgb,var(--warn) 16%,transparent)}
+.tb-mo.late .tb-row > i:not(:empty){background:color-mix(in srgb,var(--prob) 16%,transparent)}
+.tb-mo.sel .tb-row > i:not(:empty){background:rgba(255,255,255,.25)}

@@ -24,12 +24,14 @@ from .labels import (
     DUE_SOON_DAYS,
     ET_LABELS,
     LEAVE_LABELS,
+    MARITAL_LABELS,
     MONTHS_GEN,
     MONTHS_NOM,
     MONTHS_SHORT,
     OB_ICONS,
     OB_LABELS,
     OB_TRACKS,
+    PERSON_FIELD_LABELS,
 )
 from .system import proj, store, svc
 
@@ -223,6 +225,13 @@ def person_rows():
                 "active_emp": active_emp,
                 "specialty": specialty,
                 "rehirable": active == 0,
+                # Για τα φίλτρα της οθόνης Εργαζόμενοι (persons-filter.js)
+                "status": (active_emp.lifecycle if active_emp
+                           else "terminated" if emps else "none"),
+                "search": " ".join(
+                    [constraints.norm_name(f"{p.full_name} {p.father_name or ''}"),
+                     p.afm or "", p.amka or "", p.ama or ""]
+                ),
             }
         )
     return sorted(out, key=lambda r: r["person"].full_name)
@@ -447,7 +456,26 @@ def person_info(person_id: str, year: int):
             if last_sick is None or lv.date_from > last_sick["date_from"]:
                 last_sick = {"date_from": lv.date_from, "date_to": lv.date_to}
 
-    return {"person": p, "employments": emps, "leave": leave, "last_sick": last_sick}
+    # Ιστορικό μεταβολών (PersonDetailsChanged) — νεότερη ισχύς πρώτη
+    def shown(k, v):
+        if k == "marital_status":
+            return MARITAL_LABELS.get(v, v)
+        if isinstance(v, str) and k.endswith(("_date", "_from", "_to")) and v:
+            v = date.fromisoformat(v)
+        return config.gr_date(v) if isinstance(v, date) else (v if v != "" else "—")
+
+    changes = [
+        {
+            "effective_from": c["effective_from"],
+            "rows": [
+                (PERSON_FIELD_LABELS.get(k, k), shown(k, old), shown(k, new))
+                for k, (old, new) in c["fields"].items()
+            ],
+        }
+        for c in reversed(p.changes)
+    ]
+    return {"person": p, "employments": emps, "leave": leave,
+            "last_sick": last_sick, "changes": changes}
 
 
 # ------------------------------------------------------------ Μισθοδοσία
@@ -493,11 +521,11 @@ def payroll_rows(y: int, m: int, preview: bool):
         if e.pay_type == "daily":
             if days == 0:
                 continue  # καμία παρουσία -> καμία μισθοδοσία
-            r = pe.calc_monthly_daily(e.daily_wage, days, e.children, end,
+            r = pe.calc_monthly_daily(e.daily_wage, days, e.children_on(end), end,
                                       sick=sick, premiums=premium,
                                       rates=rates)
         else:
-            r = pe.calc_monthly(e.monthly_gross, e.children, end,
+            r = pe.calc_monthly(e.monthly_gross, e.children_on(end), end,
                                 unpaid_days=unpaid, sick=sick,
                                 premiums=premium, rates=rates,
                                 base_days=pe.monthly_insurance_days(
@@ -674,6 +702,178 @@ def next_payroll_period():
         and svc.period_has_employment(o.period_year, o.period_month)
     ]
     return min(pend) if pend else None
+
+
+def time_strip(ref: date) -> dict:
+    """Λωρίδα χρόνου του header: τα έτη χρήσης ΚΑΙ (πάντα) το προηγούμενο και
+    το επόμενο της ημερομηνίας αναφοράς, με κατάσταση ανά μήνα από τις
+    υποχρεώσεις ΠΕΡΙΟΔΟΥ, πλήθος εργαζομένων και σήματα έκτακτων καταβολών."""
+    exits = [(ev.termination_date, kind)
+             for kind, events in (("severance", proj.severances),
+                                  ("leave_comp", proj.leave_compensations))
+             for ev in events]
+    return build_time_strip(ref, proj.obligations.values(),
+                            proj.employments.values(), exits)
+
+
+# Σήματα μήνα (λωρίδα χρόνου): τύπος -> (εικονίδιο, ετικέτα). Τα Δώρα είναι
+# ΕΤΗΣΙΕΣ υποχρεώσεις (χωρίς μήνα περιόδου) -> μπαίνουν στον μήνα της
+# προθεσμίας τους (Μ. Τετάρτη / 21 Δεκ.)· το Επίδομα Αδείας έχει περίοδο.
+STRIP_BADGES = {
+    "EASTER_GIFT": ("🥚", "Δώρο Πάσχα"),
+    "CHRISTMAS_GIFT": ("🎄", "Δώρο Χριστουγέννων"),
+    "LEAVE_ALLOWANCE": ("🏖️", "Επίδομα Αδείας"),
+    "severance": ("📤", "Αποζημίωση απόλυσης"),
+    "leave_comp": ("🗓️", "Αποζημίωση αδείας"),
+}
+
+
+def _active_in(e, first: date, last: date) -> bool:
+    """Ίδιος κανόνας με το `period_has_employment`: αναγγελμένη απασχόληση
+    που ήταν ενεργή έστω μία ημέρα του μήνα."""
+    return (e.hire_submitted and e.hire_date is not None and e.hire_date <= last
+            and (e.termination_date is None or e.termination_date >= first))
+
+
+def build_time_strip(ref: date, obligations, employments=(), exits=()) -> dict:
+    """Ανά μήνα: «done» (όλες ολοκληρωμένες), «late» (ανοικτή με προθεσμία
+    πριν το `ref`), «open» (ανοικτή εμπρόθεσμη), «» (καμία υποχρέωση)·
+    `emps` = ενεργοί εργαζόμενοι, `badges` = Δώρα/Επίδομα/αποζημιώσεις
+    (`exits`: (ημερομηνία αποχώρησης, είδος))."""
+    months, badges = {}, {}
+
+    def badge(y, m, kind, done):
+        b = badges.setdefault((y, m), {}).setdefault(
+            kind, {"kind": kind, "icon": STRIP_BADGES[kind][0],
+                   "label": STRIP_BADGES[kind][1], "n": 0, "done": True})
+        b["n"] += 1
+        b["done"] = b["done"] and done
+
+    for o in obligations:
+        if o.obligation_type in STRIP_BADGES:
+            y, m = ((o.period_year, o.period_month) if o.period_month
+                    else (o.due_date.year, o.due_date.month))
+            badge(y, m, o.obligation_type, o.fulfilled)
+        if not o.period_month:
+            continue  # ετήσιες (π.χ. Δώρα): δεν μετρούν στην κατάσταση μήνα
+        c = months.setdefault((o.period_year, o.period_month), {"open": 0, "late": 0, "done": 0})
+        c["done" if o.fulfilled else "late" if o.due_date < ref else "open"] += 1
+    for d, kind in exits:
+        badge(d.year, d.month, kind, True)
+    employments = list(employments)
+    def state(c):  # η χειρότερη κατάσταση κερδίζει
+        return next((k for k in ("late", "open", "done") if c[k]), "")
+
+    # Πάντα και το προηγούμενο και το επόμενο έτος — ακόμη κι αν είναι κενά
+    span = [y for y, _ in months] + [ref.year - 1, ref.year + 1]
+    now = (ref.year, ref.month)
+    years = []
+    for y in range(min(span), max(span) + 1):
+        ms = []
+        for m in range(1, 13):
+            c = months.get((y, m), {"open": 0, "late": 0, "done": 0})
+            first, last = date(y, m, 1), date(y, m, monthrange(y, m)[1])
+            ms.append({
+                "m": m, "label": MONTHS_SHORT[m], "name": f"{MONTHS_NOM[m]} {y}", **c,
+                "state": state(c),
+                "now": (y, m) == now, "future": (y, m) > now,
+                "emps": sum(_active_in(e, first, last) for e in employments),
+                "badges": list(badges.get((y, m), {}).values()),
+            })
+        tot = {k: sum(x[k] for x in ms) for k in ("open", "late", "done")}
+        years.append({"y": y, "months": ms, **tot, "state": state(tot)})
+    return {"years": years, "open_y": ref.year}
+
+
+def month_detail(y: int, m: int, ref: date) -> dict:
+    """ΟΘΟΝΗ ΜΗΝΑ (κλικ σε μήνα της λωρίδας χρόνου): ό,τι αφορά την περίοδο —
+    παρουσίες/απουσίες, άδειες, μισθοδοσία, έκτακτες καταβολές, υποχρεώσεις,
+    υποβολές και πληρωμές. Μόνο ανάγνωση· ξαναχρησιμοποιεί τα υπάρχοντα
+    ερωτήματα, ώστε οι αριθμοί να είναι ΙΔΙΟΙ με τις υπόλοιπες σελίδες."""
+    first, last = date(y, m, 1), date(y, m, monthrange(y, m)[1])
+
+    sheet = attendance_sheet(y, m)
+    att = []
+    for r in sheet["rows"]:
+        hours = round(sum(r[f] for f in work_hours.SHEET_HOUR_FIELDS), 2)
+        att.append({
+            "eid": r["eid"], "name": r["name"], "worked": r["worked"],
+            "leave": r["leave"], "sick": r["sick_days"], "unpaid": r["unpaid"],
+            "efka": r["efka_days"], "hours": hours, "premium_hours": r["premium_hours"],
+        })
+    span = max([a["worked"] + a["leave"] + a["sick"] + a["unpaid"] for a in att] + [1])
+
+    leaves = []
+    for e in proj.employments.values():
+        for lv in e.active_leaves():
+            if lv.date_to < first or lv.date_from > last:
+                continue
+            a, b = max(lv.date_from, first), min(lv.date_to, last)
+            code = getattr(lv.leave_type, "value", lv.leave_type)
+            leaves.append({
+                "name": e.full_name, "type": code, "label": LEAVE_LABELS.get(code, code),
+                "from": lv.date_from, "to": lv.date_to, "days": (b - a).days + 1,
+                # θέση στον μήνα (%) για τη γραμμή χρόνου
+                "x": (a.day - 1) / last.day * 100, "w": ((b - a).days + 1) / last.day * 100,
+            })
+    leaves.sort(key=lambda lv: (lv["from"], lv["name"]))
+
+    actual = payroll_rows(y, m, preview=False)
+    pay = actual or payroll_rows(y, m, preview=True)
+    pay_tot = money_totals(pay, ["Μικτά", "ΕΦΚΑ εργαζ.", "ΕΦΚΑ εργοδ.", "ΦΜΥ", "Καθαρά"])
+
+    extras = [r for r in payroll_ledger(y) if r["month"] == m and r["kind"] != "payroll"]
+
+    obs = []
+    for o in sorted(proj.obligations.values(), key=lambda o: (o.due_date, o.obligation_type)):
+        if (o.period_year, o.period_month) != (y, m):
+            continue
+        obs.append({
+            "id": o.obligation_id, "label": OB_LABELS.get(o.obligation_type, o.obligation_type),
+            "icon": OB_ICONS.get(o.obligation_type, "📌"),
+            "track": OB_TRACKS.get(o.obligation_type, "payroll"),
+            "due": o.due_date, "who": emp_name(o.employee_id) if o.employee_id else "",
+            "state": "done" if o.fulfilled else "late" if o.due_date < ref else "open",
+            "late": days_late(o, ref),
+        })
+
+    subs = [{"label": f"ΑΠΔ {s.fund}", "amount": s.total_contributions, "ref": s.reference}
+            for s in proj.apd_submissions if (s.period_year, s.period_month) == (y, m)]
+    subs += [{"label": "ΦΜΥ", "amount": s.total_fmy, "ref": s.reference}
+             for s in proj.fmy_submissions if (s.period_year, s.period_month) == (y, m)]
+    payments = [{"label": PAYMENT_KIND_LABELS.get(p.payment_type, p.payment_type.upper()),
+                 "amount": p.amount, "who": emp_name(p.beneficiary)
+                 if p.beneficiary in proj.employments else p.beneficiary}
+                for p in proj.payments if (p.period_year, p.period_month) == (y, m)]
+
+    counts = {k: sum(o["state"] == k for o in obs) for k in ("done", "open", "late")}
+    py, pm = (y, m - 1) if m > 1 else (y - 1, 12)
+    ny, nm = (y, m + 1) if m < 12 else (y + 1, 1)
+    return {
+        "y": y, "m": m, "title": f"{MONTHS_NOM[m]} {y}", "days": last.day,
+        "first_weekday": first.weekday(),
+        "holidays": sorted(d.day for d in public_holidays(y) if d.month == m),
+        "today_day": ref.day if (ref.year, ref.month) == (y, m) else None,
+        # ίδιος κανόνας με τη λωρίδα: η χειρότερη κατάσταση κερδίζει
+        "state": next((k for k in ("late", "open", "done") if counts[k]), ""),
+        "now": (y, m) == (ref.year, ref.month), "future": (y, m) > (ref.year, ref.month),
+        "prev": (py, pm, f"{MONTHS_NOM[pm]} {py}"), "next": (ny, nm, f"{MONTHS_NOM[nm]} {ny}"),
+        "att": att, "att_span": span, "sheet_done": sheet["done"],
+        "att_tot": {k: round(sum(a[k] for a in att), 2)
+                    for k in ("worked", "leave", "sick", "unpaid", "efka", "hours")},
+        "leaves": leaves,
+        # ημέρες του μήνα με έστω μία άδεια — τελεία στο μικρό ημερολόγιο
+        "leave_days": sorted({
+            d for lv in leaves
+            for d in range(max(lv["from"], first).day, min(lv["to"], last).day + 1)
+        }),
+        "pay": pay, "pay_done": bool(actual), "pay_tot": pay_tot,
+        "pay_cost": round(pay_tot.get("Μικτά", 0) + pay_tot.get("ΕΦΚΑ εργοδ.", 0), 2),
+        "extras": extras, "obs": obs,
+        "ob_counts": counts,
+        "subs": subs, "payments": payments,
+        "paid_total": round(sum(p["amount"] for p in payments), 2),
+    }
 
 
 def payroll_warnings(y: int, m: int):
@@ -1831,10 +2031,11 @@ def _forecast_payroll(emp, y: int, m: int) -> tuple[float, float, float]:
     if terms.pay_type == "daily":
         if days == 0:
             return 0.0, 0.0, 0.0
-        r = pe.calc_monthly_daily(terms.wage, days, emp.children, end, rates=rates)
+        r = pe.calc_monthly_daily(terms.wage, days, emp.children_on(end), end,
+                                  rates=rates)
     else:
         r = pe.calc_monthly(
-            terms.wage, emp.children, end, unpaid_days=base_days - days,
+            terms.wage, emp.children_on(end), end, unpaid_days=base_days - days,
             rates=rates, base_days=base_days,
         )
     return round(r.gross + r.efka_employer, 2), round(r.gross, 2), round(r.net, 2)
