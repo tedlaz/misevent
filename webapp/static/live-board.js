@@ -329,6 +329,7 @@
         min > today[0][1] && min < today[today.length - 1][0];
       let cls = "off", txt = "εκτός ωραρίου";
       if (onLeave) { cls = "leave"; txt = "σε άδεια"; tally.leave++; }
+      else if (row.dataset.hol === "1") { cls = "rest"; txt = "αργία"; }
       else if (!today.length) { cls = "rest"; txt = "ρεπό"; }
       // Ιστορική ημέρα: δεν υπάρχει «τώρα» — καμία στιγμιαία κατάσταση
       else if (!live) { cls = "off"; txt = "—"; }
@@ -400,6 +401,7 @@
         if (view.anim) { view.anim.from += d; view.anim.to += d; }
       }
       view.lastMin = -1;                       // ξαναγράψε τις καταστάσεις
+      markPick();                              // επιλογή αρχής νέας άδειας
     } catch (err) {
       /* προβολή μόνο: μια αποτυχία δικτύου δεν χαλά την τρέχουσα εικόνα */
     } finally {
@@ -558,7 +560,128 @@
     }, { passive: false });
   }
 
-  let zoomSeq = 0;                 // ταυτότητα του τελευταίου ζουμ (§setZoom)
+  /** Ημέρα + γραμμή κάτω από το double click (null εκτός λωρίδας).
+   *  ⚠️ Όχι e.target: στην ελεύθερη μετακίνηση το σύρσιμο κάνει pointer
+   *  capture στο grid και το dblclick φτάνει με target το ίδιο το grid. */
+  function dayAt(el, e) {
+    const hit = document.elementFromPoint(e.clientX, e.clientY);
+    if (!hit || hit.closest(".lb-name")) return null;
+    const track = hit.closest(".lb-lane")?.querySelector(".lb-track");
+    const w = win();
+    if (!track || !w) return null;
+    const ppm = parseFloat(getComputedStyle(el).getPropertyValue("--ppm")) || 1;
+    const min = (e.clientX - track.getBoundingClientRect().left) / ppm;
+    const b = baseDate(w);
+    return {
+      d: new Date(b.getFullYear(), b.getMonth(),
+                  b.getDate() + Math.floor(min / DAY)),
+      eid: hit.closest(".lb-row")?.dataset.eid,
+    };
+  }
+
+  /** ΕΒΔΟΜΑΔΑ: double click σε ημέρα -> «Πρόγραμμα ημέρας» (η οθόνη με τις
+   *  συρόμενες μπάρες του Προγράμματος)· σε γραμμή εργαζομένου εστιάζει σε
+   *  αυτόν. ΜΗΝΑΣ: νέα άδεια — βλ. `leavePick`. */
+  function dayOpen(el) {
+    const grid = el.querySelector(".lb-grid");
+    if (!grid) return;
+    grid.addEventListener("dblclick", (e) => {
+      const key = zoomLevel().key;
+      if (key === "month") { leavePick(el, e); return; }
+      if (key !== "week" || !el.dataset.dayUrl) return;
+      const at = dayAt(el, e);
+      if (!at) return;
+      const url = new URL(el.dataset.dayUrl, window.location.origin);
+      url.searchParams.set("date", iso(at.d));
+      url.searchParams.set("back", "live");
+      if (at.eid) url.searchParams.set("focus", at.eid);
+      htmx.ajax("GET", url.toString(), { target: "#modal-host", swap: "innerHTML" });
+    });
+  }
+
+  // ΝΕΑ ΑΔΕΙΑ (μήνας): 1ο double click στη γραμμή εργαζομένου = ΑΡΧΗ (η
+  // ημέρα σημαδεύεται), 2ο στην ίδια γραμμή = ΤΕΛΟΣ -> μενού τύπου άδειας.
+  // Esc / κλικ εκτός μενού ακυρώνει. Η επιλογή ζει εδώ ({eid, from}) και το
+  // σημάδι ξαναζωγραφίζεται μετά από κάθε φόρτωση παραθύρου (`markPick`).
+  let pick = null;
+
+  function leavePick(el, e) {
+    const at = dayAt(el, e);
+    if (!at || !at.eid || !el.dataset.leaveUrl) return;
+    if (!pick || pick.eid !== at.eid) {
+      pick = { eid: at.eid, from: iso(at.d) };
+      markPick();
+      toast("Αρχή άδειας σημειώθηκε — double click στην ημέρα λήξης (Esc: ακύρωση)");
+      return;
+    }
+    const [from, to] = [pick.from, iso(at.d)].sort();
+    const menu = document.getElementById("lb-leave-menu");
+    const name = document.querySelector(
+      `.lb-row[data-eid="${at.eid}"] .lb-name a`)?.textContent || "";
+    const dm = (s) => s.slice(8) + "/" + s.slice(5, 7);
+    menu.querySelector(".lb-menu-head").textContent =
+      `Νέα άδεια · ${name} · ${dm(from)}${from === to ? "" : " – " + dm(to)}`;
+    menu.dataset.url = el.dataset.leaveUrl.replace("__EID__", at.eid);
+    menu.dataset.from = from;
+    menu.dataset.to = to;
+    menu.hidden = false;
+    // Στο σημείο του κλικ, χωρίς να βγαίνει έξω από το παράθυρο
+    menu.style.left = Math.min(e.clientX, innerWidth - menu.offsetWidth - 8) + "px";
+    menu.style.top = Math.min(e.clientY, innerHeight - menu.offsetHeight - 8) + "px";
+    pick.to = to;
+    markPick();
+  }
+
+  /** Σημάδι επιλογής: από `pick.from` έως `pick.to` (ή μόνο η ημέρα αρχής). */
+  function markPick() {
+    document.querySelectorAll(".lb-pick").forEach((n) => n.remove());
+    const w = win();
+    if (!pick || !w) return;
+    const track = document.querySelector(
+      `.lb-row[data-eid="${pick.eid}"] .lb-track`);
+    if (!track) return;
+    const off = (s) => {
+      const [y, m, d] = s.split("-").map(Number);
+      return Math.round((new Date(y, m - 1, d) - baseDate(w)) / 86400000) * DAY;
+    };
+    const [a, b] = [pick.from, pick.to || pick.from].sort();
+    const span = document.createElement("span");
+    span.className = "lb-pick";
+    span.style.setProperty("--s", off(a));
+    span.style.setProperty("--d", off(b) - off(a) + DAY);
+    track.appendChild(span);
+  }
+
+  function cancelPick() {
+    pick = null;
+    document.getElementById("lb-leave-menu").hidden = true;
+    markPick();
+  }
+
+  function leaveMenu() {
+    const menu = document.getElementById("lb-leave-menu");
+    if (!menu) return;
+    menu.addEventListener("click", (e) => {
+      const b = e.target.closest("button[data-type]");
+      if (!b) return;
+      htmx.ajax("POST", menu.dataset.url, {
+        target: "#modal-host", swap: "innerHTML",
+        values: { leave_type: b.dataset.type, date_from: menu.dataset.from,
+                  date_to: menu.dataset.to, back: "live" },
+      });
+      cancelPick();
+    });
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "Escape" && pick) cancelPick();
+    });
+    // Κλικ εκτός μενού ακυρώνει ΜΟΝΟ όταν το μενού είναι ανοιχτό — στο
+    // ενδιάμεσο (αρχή επιλεγμένη) ο χρήστης πρέπει να μπορεί να μετακινηθεί
+    document.addEventListener("pointerdown", (e) => {
+      if (!menu.hidden && !menu.contains(e.target)) cancelPick();
+    });
+  }
+
+  let zoomSeq = 0;                // ταυτότητα του τελευταίου ζουμ (§setZoom)
 
   function zoomUI() {
     const el = board();
@@ -652,6 +775,8 @@
     const next = document.getElementById("lb-next");
     if (next) next.addEventListener("click", () => step(1));
     drag(el);
+    dayOpen(el);
+    leaveMenu();
 
     // Βρόχος καρέ: κάθε καρέ ΜΟΝΟ όταν υπάρχει κίνηση (σύρσιμο/αδράνεια/
     // animation). Στη ζωντανή κύλιση η μετατόπιση είναι ~1,7px/λεπτό, οπότε

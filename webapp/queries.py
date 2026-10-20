@@ -9,6 +9,7 @@ import json
 from calendar import monthrange
 from datetime import date, datetime, timedelta
 
+from misevent.app.services.apd import apd_missing_ama
 from misevent.domain import dependencies as deps
 from misevent.domain import payroll_engine as pe
 from misevent.domain import work_hours
@@ -16,7 +17,11 @@ from misevent.integrations import apd_files
 from misevent.integrations import card_punches as cp
 from misevent.rules import config, constraints
 from misevent.rules import obligation_types as ot
-from misevent.rules.calendar_gr import last_working_day_of_month, public_holidays
+from misevent.rules.calendar_gr import (
+    holiday_names,
+    last_working_day_of_month,
+    public_holidays,
+)
 
 from .filters import money
 from .labels import (
@@ -2815,6 +2820,11 @@ def detail_payload(ob_id: str, ref: date):
             # ΠΡΙΝ την υποβολή: συμφωνούν τα ποσοστά της ΑΠΔ με αυτά που
             # πλήρωσε η μισθοδοσία; (αλλιώς το λάθος το βρίσκει ο ΕΦΚΑ)
             d["steps"] += [f"⚠️ {w}" for w in apd_warnings(y, m)]
+            if not err and (missing := apd_missing_ama(
+                    svc.build_apd_rows(y, m).get(fund, []))):
+                d["steps"].append(
+                    "⚠️ Λείπει ο ΑΜΑ (υποχρεωτικός στην ΑΠΔ) για: "
+                    f"{', '.join(missing)} — η υποβολή θα απορριφθεί.")
 
     elif t in (
         "SALARY_PAYMENT",
@@ -3236,6 +3246,70 @@ def _year_marks(e, dates, base: date):
     return _merge_runs(work_days), _merge_runs(att_days), bands
 
 
+def balance_tone(balance: float, accrued: float) -> str:
+    """Τόνος υπολοίπου κανονικής άδειας — κοινός για Άδειες, Πρόγραμμα,
+    Ζωντανά."""
+    if balance < -0.005:
+        return "danger"
+    if balance <= max(1.0, accrued * 0.2):
+        return "warn"
+    return "good"
+
+
+def _accrued_on(e, d: date) -> int:
+    """Σωρευμένο δικαίωμα κανονικής άδειας ΣΕ ΕΠΙΠΕΔΟ ΗΜΕΡΑΣ.
+
+    Ο κανόνας (`svc.annual_leave_accrued`) δίνει ακέραιη μερίδα ανά ΜΗΝΑ —
+    από την 1η του μήνα ολόκληρη (πρόσληψη 1/1 -> «2» ήδη την 1/1). Εδώ η
+    μερίδα του μήνα μοιράζεται αναλογικά στις ημέρες του (από την πρόσληψη,
+    αν έγινε μέσα στον μήνα), ώστε στο ΤΕΛΟΣ του μήνα η τιμή να συμπίπτει
+    ακριβώς με τον κανόνα. Όταν το πλήρες δικαίωμα ισχύει από 1/1 (3ο έτος
+    και μετά), δεν υπάρχει τίποτα να μοιραστεί."""
+    eid = e.employment_id
+    full_now = svc.annual_leave_accrued(eid, date(d.year, 1, 1))
+    if full_now >= svc.annual_leave_entitlement(eid, d.year):
+        return full_now
+    month_end = date(d.year, d.month, monthrange(d.year, d.month)[1])
+    start = date(d.year, d.month, 1)
+    prev = (svc.annual_leave_accrued(eid, start - timedelta(days=1))
+            if d.month > 1 else 0)          # νέο έτος: η σώρευση ξεκινά από 0
+    if e.hire_date and e.hire_date > start:
+        start = e.hire_date
+    if d < start:
+        return prev
+    share = svc.annual_leave_accrued(eid, month_end) - prev
+    # Μόνο ΩΡΙΜΕΣ ΟΛΟΚΛΗΡΕΣ ημέρες (1,9 -> 1): κλάσμα ημέρας δεν παίρνεται
+    return prev + share * ((d - start).days + 1) // ((month_end - start).days + 1)
+
+
+def _leave_balance(e, dates, base: date, agg: bool) -> list:
+    """ΥΠΟΛΟΙΠΟ ΚΑΝΟΝΙΚΗΣ ΑΔΕΙΑΣ (δικαίωμα − ληφθείσες) στο ΤΕΛΟΣ κάθε
+    ημέρας του παραθύρου — στην προβολή έτους στο τέλος κάθε μήνα (μια
+    ημέρα εκεί είναι ~2px). Ίδιος υπολογισμός με το Πρόγραμμα/τις Άδειες.
+    [{"s", "e", "date", "acc", "taken", "bal", "tone"}] σε λεπτά από τη base."""
+    if agg:
+        periods, cur, end = [], dates[0], dates[-1]
+        while cur <= end:
+            last = min(date(cur.year, cur.month,
+                            monthrange(cur.year, cur.month)[1]), end)
+            periods.append((cur, last))
+            cur = last + timedelta(days=1)
+    else:
+        periods = [(d, d) for d in dates]
+    out = []
+    for a, b in periods:
+        if not (e.active_on(a) or e.active_on(b)):
+            continue
+        acc = _accrued_on(e, b)
+        taken = svc.annual_leave_taken_until(e.employment_id, b)
+        bal = round(acc - taken, 2)
+        out.append({"s": (a - base).days * 24 * 60,
+                    "e": ((b - base).days + 1) * 24 * 60,
+                    "date": b, "acc": acc, "taken": taken, "bal": bal,
+                    "tone": balance_tone(bal, acc)})
+    return out
+
+
 def _month_marks(base: date, end: date, day: date) -> list:
     """Σημάνσεις ΜΗΝΑ για τον χάρακα (προβολή έτους) — 365 ετικέτες ημερών
     θα πατούσαν η μία πάνω στην άλλη."""
@@ -3299,18 +3373,24 @@ def live_board(day: date, base: date | None = None, days: int = 3) -> dict:
             if not e.active_on(d):
                 continue
             plan = _day_segments(e, d)
+            a, p = _day_punches(e, d, plan, off)
+            # ΑΡΓΙΑ χωρίς παρουσία: κλειστά — η βάρδια δεν αναμένεται
+            closed = not a and e.holiday_off(d)
             for seg in plan:
                 segs.append({"s": off + seg["start"],
                              "e": min(off + seg["end"], span),
                              "tele": seg["telework"], "text": seg["text"],
                              "h": round((seg["end"] - seg["start"]) / 60, 2),
-                             "cont": False})
-            a, p = _day_punches(e, d, plan, off)
+                             "cont": False, "hol": closed})
             actual += [{**iv, "e": min(iv["e"], span)} for iv in a]
             if detail:
                 punches += [pu for pu in p if pu["m"] <= span]
             band_label, band_type = _leave_on(e, d)
-            if band_label:
+            if band_label and bands and bands[-1]["e"] == off \
+                    and bands[-1]["type"] == band_type:
+                # ΣΥΝΕΧΟΜΕΝΗ μπάρα αρχή→τέλος, όχι ένα κουτάκι ανά ημέρα
+                bands[-1]["e"] = off + 24 * 60
+            elif band_label:
                 bands.append({"s": off, "e": off + 24 * 60,
                               "label": band_label, "type": band_type})
         # Ουρά νυχτερινής βάρδιας της ΠΡΟΗΓΟΥΜΕΝΗΣ του παραθύρου. Χωρίς
@@ -3336,6 +3416,7 @@ def live_board(day: date, base: date | None = None, days: int = 3) -> dict:
                     segs.insert(0, {"s": 0, "e": seg["end"] - 24 * 60,
                                     "tele": seg["telework"],
                                     "text": seg["text"], "cont": True,
+                                    "hol": False,
                                     "h": round((seg["end"] - 24 * 60) / 60, 2)})
         # --- Στοιχεία της ΗΜΕΡΑΣ ΑΝΑΦΟΡΑΣ (στήλη ονομάτων & ταξινόμηση).
         # ⚠️ Υπολογίζονται από την ΙΔΙΑ την ημέρα αναφοράς, ΟΧΙ από το
@@ -3372,6 +3453,12 @@ def live_board(day: date, base: date | None = None, days: int = 3) -> dict:
         ref_iv = [{"s": s["s"], "e": (s["e"] if s["e"] is not None
                                       else 2 * 24 * 60)}
                   for s in ref_sh if s["s"] is not None]
+        # ΑΡΓΙΑ σήμερα χωρίς παρουσία: η επιχείρηση είναι κλειστή — το
+        # πρόγραμμα της ημέρας δεν αναμένεται, άρα ΟΥΤΕ «ασυμφωνία με κάρτα»
+        # (μένει μόνο η ουρά νυχτερινής βάρδιας της χθεσινής)
+        ref_hol = ref_on and not ref_iv and e.holiday_off(day)
+        if ref_hol:
+            ref_status_segs = ref_status_segs[:len(ref_prev_segs)]
         rows.append({
             "eid": e.employment_id,
             "name": e.full_name,
@@ -3384,7 +3471,10 @@ def live_board(day: date, base: date | None = None, days: int = 3) -> dict:
             # Προβολή έτους: σερί ημερών προγράμματος (το `actual` κρατά τα
             # σερί ημερών με πραγματική παρουσία)
             "combs": combs,
+            # Υπόλοιπο κανονικής άδειας: λωρίδα στο κάτω μέρος της γραμμής
+            "accr": _leave_balance(e, dates, base, agg),
             "leave": ref_leave,
+            "hol": ref_hol,
             "leave_type": ref_leave_type,
             "hours": round(
                 sum(s["end"] - s["start"] for s in ref_segs) / 60, 2),
@@ -3407,21 +3497,30 @@ def live_board(day: date, base: date | None = None, days: int = 3) -> dict:
         })
     # Πρώτα όσοι έχουν πρόγραμμα την ημέρα αναφοράς (κατά ώρα έναρξης)
     rows.sort(key=lambda r: (r["start"] is None, r["start"] or 0, r["name"]))
+    # Επίσημες ΑΡΓΙΕΣ του παραθύρου (λεπτά από `base`): στήλη σε όλες τις
+    # γραμμές + σήμανση στον χάρακα
+    hol = {}
+    for y in range(base.year, end.year + 1):
+        hol.update(holiday_names(y))
+    hols = [i * 24 * 60 for i, d in enumerate(dates) if d in hol]
     # Σημάνσεις χάρακα: ΗΜΕΡΕΣ κανονικά, ΜΗΝΕΣ στην προβολή έτους
     if agg:
         marks = _month_marks(base, end, day)
     else:
         marks = [
             {"off": i * 24 * 60, "span": 24 * 60,
-             "today": d == day, "alt": d.weekday() >= 5,
+             "today": d == day, "alt": d.weekday() >= 5, "hol": hol.get(d),
              # τρεις εκδοχές ετικέτας — ποια φαίνεται το κρίνει το εύρος zoom
              "full": f"{DAY_NAMES[d.weekday()]} {d.strftime('%d/%m/%Y')}",
              "mid": f"{DAY_NAMES[d.weekday()]} {d.strftime('%d/%m')}",
              "short": str(d.day)}
             for i, d in enumerate(dates)
         ]
+    # Επάνω επίπεδο χάρακα στην προβολή μήνα: ο ΜΗΝΑΣ πάνω από τις ημερομηνίες
+    months = [] if agg else _month_marks(base, end, day)
     return {"day": day, "base": base, "days": days, "span": span,
-            "marks": marks, "hours": span // 60, "detail": detail,
+            "marks": marks, "months": months, "hols": hols,
+            "hours": span // 60, "detail": detail,
             "agg": agg, "rows": rows}
 
 

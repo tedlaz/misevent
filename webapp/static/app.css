@@ -2051,7 +2051,7 @@ button.pick>span:first-of-type{flex:1}
    λεπτό) και --shift (κύλιση), οπότε κάθε λεπτό αλλάζει ΜΙΑ μεταβλητή. */
 /* --lb-h: ΜΙΑ γραμμή ανά εργαζόμενο — σε πραγματική χρήση είναι πολλοί,
    οπότε το ύψος μένει μικρό και όλη η πληροφορία ζει ΠΑΝΩ στη μπάρα */
-.lboard{--lb-name:244px;--lb-h:32px;--ppm:.9;--shift:0px;
+.lboard{--lb-name:244px;--lb-h:48px;--lb-acc:15px;--ppm:.9;--shift:0px;
   --plan:#3D7EB8;--plan-bg:#E8F1F9;--tele:#0E9A93;--act:#63C98B;
   padding:14px 16px 12px}
 @media(max-width:820px){.lboard{--lb-name:132px}}
@@ -2180,6 +2180,12 @@ button.pick>span:first-of-type{flex:1}
   white-space:nowrap}
 .lb-dayspan.we{background:rgba(23,36,47,.04)}
 .lb-dayspan.today b{color:var(--ink)}
+/* ΑΡΓΙΑ: ροδί, ΟΧΙ πορτοκαλί (= ασυμφωνία με κάρτα, βλ. .lb-leaveband) */
+.lb-dayspan.hol{background:rgba(190,40,80,.09)}
+.lb-dayspan.hol b{color:#A3264A}
+.lb-holband{position:absolute;top:0;bottom:0;z-index:0;pointer-events:none;
+  left:calc(var(--s) * var(--ppm) * 1px);
+  width:calc(var(--d) * var(--ppm) * 1px);background:rgba(190,40,80,.06)}
 .lb-dayspan.today{background:var(--ready-bg)}
 /* Μία εκδοχή ετικέτας ανά επίπεδο zoom (πλήρης / σύντομη / αριθμός ημέρας) */
 .lb-dayspan b i{font-style:normal;display:none}
@@ -2188,32 +2194,65 @@ button.pick>span:first-of-type{flex:1}
 .lboard.z-year .lb-dayspan b .d-m,
 .lboard.z-month .lb-dayspan b .d-s{display:inline}
 .lboard.z-month .lb-dayspan{padding-left:4px}
+/* ΜΗΝΑΣ: δύο επίπεδα — πάνω ο μήνας, κάτω ο αριθμός ημέρας */
+.lb-month{display:none}
+.lboard.z-month .lb-month{display:flex}
+.lboard.z-month .lb-dayspan:not(.lb-month){top:24px}
+.lb-month b{color:var(--ink)}
+/* ΥΠΟΛΟΙΠΟ ΚΑΝΟΝΙΚΗΣ ΑΔΕΙΑΣ: λωρίδα ύψους --lb-acc στο κάτω μέρος κάθε
+   γραμμής, ένα κομμάτι ανά ημέρα (έτος: μήνα), ο αριθμός στη ΔΕΞΙΑ άκρη =
+   «στο τέλος της ημέρας». Τόνοι όπως η .leave-accrual-month του Προγράμματος */
+.lb-accr{position:absolute;bottom:0;height:var(--lb-acc);z-index:1;
+  left:calc(var(--s) * var(--ppm) * 1px);
+  width:calc(var(--d) * var(--ppm) * 1px);
+  display:flex;align-items:center;justify-content:flex-end;overflow:hidden;
+  box-sizing:border-box;border-top:2px solid #54A978;
+  border-right:1px solid rgba(180,194,206,.45);
+  background:#F2FAF6;color:#426050}
+.lb-accr b{font-family:var(--mono);font-size:9px;font-weight:700;
+  padding-right:3px;white-space:nowrap}
+.lb-accr.tone-warn{background:#FFF8E9;color:#8A671E;border-top-color:#DEA63F}
+.lb-accr.tone-danger{background:#FFF0F0;color:#A73333;border-top-color:#D85A5A}
+/* ΝΕΑ ΑΔΕΙΑ (μήνας): σημάδι επιλεγμένων ημερών + μενού τύπου άδειας */
+.lb-pick{position:absolute;top:2px;bottom:2px;z-index:3;pointer-events:none;
+  left:calc(var(--s) * var(--ppm) * 1px);
+  width:calc(var(--d) * var(--ppm) * 1px);
+  background:color-mix(in srgb,var(--lv-any) 25%,transparent);
+  box-shadow:inset 0 0 0 2px var(--lv-any)}
+.lboard:not(.z-month) .lb-pick{display:none}
+.lb-menu{position:fixed;z-index:50;min-width:210px;padding:6px;
+  display:flex;flex-direction:column;background:var(--card);
+  border:1px solid var(--line);border-radius:10px;
+  box-shadow:0 8px 24px rgba(23,36,47,.18)}
+.lb-menu[hidden]{display:none}
+.lb-menu-head{font-size:11.5px;color:var(--muted);padding:4px 8px 6px;
+  font-weight:600}
+.lb-menu button{all:unset;cursor:pointer;font-size:12.5px;padding:6px 8px;
+  border-radius:6px}
+.lb-menu button:hover,.lb-menu button:focus-visible{background:var(--paper)}
+/* Στον μήνα οι μπάρες είναι λίγα pixel: ορθές γωνίες, όχι «σταγόνες» */
+.lboard.z-month .lb-bar,
+.lboard.z-month .lb-act,
+.lboard.z-month .lb-leaveband{border-radius:0}
 /* Προβολή έτους: τα «dayspan» είναι ΜΗΝΕΣ (εναλλάξ απόχρωση) */
 .lboard.z-year .lb-dayspan.today{background:var(--ready-bg)}
 .lboard.z-year .lb-dayspan b{font-size:10.5px}
-/* ΓΡΑΜΜΗ ΑΝΑ ΗΜΕΡΑ ΕΡΓΑΣΙΑΣ (μόνο στο έτος): πυκνές γραμμές = κανονική
-   εργασία, κενά = ρεπό/αργίες. Σκούρα = υπήρξε πραγματική παρουσία.
-   ⚠️ ΕΝΑ στοιχείο ανά ΣΕΡΙ ημερών με ΡΙΓΑ περιόδου μιας ημέρας — όχι ένα
-   στοιχείο ανά ημέρα: κάθε ξεχωριστό στοιχείο στρογγυλοποιείται μόνο του σε
-   ακέραιο pixel και σε πλάτος ημέρας ~2px άλλες γραμμές κολλούσαν (συμπαγής
-   μάζα) και άλλες χώριζαν. Η ρίγα καλύπτει το 42% της ημέρας, ώστε το κενό
-   να μένει ορατό σε κάθε κλίμακα. */
-.lb-comb{position:absolute;top:5px;bottom:5px;
+/* ΣΕΡΙ ΗΜΕΡΩΝ ΕΡΓΑΣΙΑΣ (μόνο στο έτος): ΣΥΜΠΑΓΗΣ μπάρα ανά σερί
+   συνεχόμενων ημερών, κενά = ρεπό/αργίες. Πράσινο = πραγματική παρουσία.
+   ⚠️ ΕΝΑ στοιχείο ανά ΣΕΡΙ (όχι ανά ημέρα): κάθε στοιχείο στρογγυλοποιείται
+   μόνο του σε ακέραιο pixel και σε πλάτος ημέρας ~2px οι ημέρες ενός σερί
+   άλλοτε κολλούσαν κι άλλοτε χώριζαν. */
+.lb-comb{position:absolute;top:5px;bottom:calc(var(--lb-acc) + 5px);
   left:calc(var(--s) * var(--ppm) * 1px);
   width:calc(var(--d) * var(--ppm) * 1px);z-index:1;opacity:.55;
-  background:repeating-linear-gradient(90deg,
-    var(--plan) 0 calc(1440 * var(--ppm) * .42px),
-    transparent calc(1440 * var(--ppm) * .42px) calc(1440 * var(--ppm) * 1px))}
-.lb-comb.att{opacity:.85;z-index:2;
-  background:repeating-linear-gradient(90deg,
-    var(--act) 0 calc(1440 * var(--ppm) * .42px),
-    transparent calc(1440 * var(--ppm) * .42px) calc(1440 * var(--ppm) * 1px))}
+  background:var(--plan)}
+.lb-comb.att{opacity:.85;z-index:2;background:var(--act)}
 /* Στο έτος οι μπάρες αδειών είναι ΔΙΑΣΤΗΜΑΤΑ ημερών: ορθές γωνίες, ώστε
    δύο διαδοχικά διαστήματα να διαβάζονται ως συνεχόμενα */
 /* ⚠️ ΣΥΜΠΑΓΕΣ χρώμα εδώ (όχι ρίγες): ένα διήμερο άδειας είναι ~5px — οι
    ρίγες θα ήταν αόρατες. Δεν υπάρχει κίνδυνος σύγχυσης με το πορτοκαλί της
    ασυμφωνίας: σε αυτό το επίπεδο δεν υπάρχουν μπάρες ωραρίου να βαφτούν. */
-.lboard.z-year .lb-leaveband{border-radius:0;top:4px;bottom:4px;
+.lboard.z-year .lb-leaveband{border-radius:0;top:4px;bottom:calc(var(--lb-acc) + 4px);
   background:color-mix(in srgb,var(--lv) 55%,#fff)}
 /* Σταθερή ένδειξη ημέρας στην αριστερή άκρη (δεν μετακινείται με τη λωρίδα) */
 .lb-daynow{position:absolute;left:6px;top:3px;z-index:3;font-size:11px;
@@ -2238,6 +2277,8 @@ button.pick>span:first-of-type{flex:1}
 .lb-bar.tele em{color:var(--tele)}
 .lb-bar.cont{border-top-left-radius:0;border-bottom-left-radius:0;
   border-left-style:dotted}
+/* ΑΡΓΙΑ χωρίς παρουσία: η βάρδια του προγράμματος ΔΕΝ αναμένεται */
+.lb-bar.hol{opacity:.35}
 /* ΑΣΥΜΦΩΝΙΑ ΜΕ ΤΗΝ ΚΑΡΤΑ (χωρίς χτύπημα / έχει ήδη χτυπήσει έξοδο ενώ το
    πρόγραμμα τρέχει): ΠΟΡΤΟΚΑΛΙ μπάρα — αντικαθιστά την παλιά ετικέτα */
 .lb-bar.miss{background:var(--warn-bg);border-color:var(--warn)}
@@ -2248,7 +2289,7 @@ button.pick>span:first-of-type{flex:1}
   width:calc(var(--d) * var(--ppm) * 1px);
   background:var(--act);border-radius:3px;opacity:.82;z-index:1}
 /* ΧΤΥΠΗΜΑ ΚΑΡΤΑΣ: κάθετη γραμμή ακριβώς στο χρονικό σημείο */
-.lb-punch{position:absolute;top:3px;bottom:3px;width:2px;
+.lb-punch{position:absolute;top:3px;bottom:calc(var(--lb-acc) + 3px);width:2px;
   left:calc(var(--s) * var(--ppm) * 1px);margin-left:-1px;
   background:var(--act);z-index:3;border-radius:1px}
 /* Το «πτερύγιο» δείχνει τη ΦΟΡΑ της διέλευσης στο επάνω μέρος — είσοδος
@@ -2278,7 +2319,7 @@ button.pick>span:first-of-type{flex:1}
    παλέτα των «Αδειών» (--lv-*). ⚠️ ΠΟΤΕ πορτοκαλί εδώ: το πορτοκαλί σημαίνει
    ΑΣΥΜΦΩΝΙΑ ΜΕ ΤΗΝ ΚΑΡΤΑ (.lb-bar.miss) — τα δύο δεν επιτρέπεται να
    μοιράζονται χρώμα. */
-.lb-leaveband{--lv:var(--lv-any);position:absolute;top:3px;bottom:3px;
+.lb-leaveband{--lv:var(--lv-any);position:absolute;top:3px;bottom:calc(var(--lb-acc) + 3px);
   left:calc(var(--s) * var(--ppm) * 1px);
   width:calc(var(--d) * var(--ppm) * 1px);border-radius:5px;z-index:0;
   background:#EFF4F1;  /* fallback χωρίς color-mix — η ζώνη δεν εξαφανίζεται */
@@ -2677,3 +2718,162 @@ body.authpage{background:var(--paper);min-height:100vh;display:flex;
 .ss-menu li{padding:5px 10px;cursor:pointer}
 .ss-menu li.on,.ss-menu li:hover{background:var(--ready-bg)}
 .ss-menu li.ss-more{color:var(--muted);font-style:italic;cursor:default;background:none}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   ΣΤΡΩΣΗ ΣΧΕΔΙΑΣΜΟΥ v2 — τυπογραφία, πεδία, ηρεμότερα κουμπιά.
+   ΤΕΛΕΥΤΑΙΑ στο αρχείο: μόνο εμφάνιση, καμία αλλαγή δομής. Οι βάσεις των
+   πεδίων/κουμπιών μπαίνουν με :where() (μηδενική ειδικότητα), ώστε ΚΑΘΕ
+   υπάρχων κανόνας συστατικού (.frm input, table.kpk-rates input…) να νικά.
+   ═══════════════════════════════════════════════════════════════════════ */
+:root{
+  --accent:#2D7DD2; --accent-bg:#EAF2FC;
+  --line-soft:#EDF1F5;
+  --ring:0 0 0 3px rgba(45,125,210,.22);
+}
+html{-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
+body{font-size:14.5px;line-height:1.45}
+::selection{background:#CFE2F8;color:var(--ink)}
+*{scrollbar-width:thin;scrollbar-color:#C6D0DB transparent}
+
+/* ---------------------------------------------- Πεδία (βάση για ΟΛΑ) */
+/* Τα «γυμνά» input/select (φίλτρα, έτος, επιλογείς) έπεφταν σε Arial με
+   native όψη· τώρα μιλούν την ίδια γλώσσα με τα πεδία των φορμών. */
+:where(input:not([type=checkbox],[type=radio],[type=range],[type=color],
+  [type=file],[type=hidden],[type=submit],[type=button]),select,textarea){
+  font:inherit;font-size:13.5px;color:var(--ink);background-color:var(--card);
+  border:1px solid #D8E0E8;border-radius:8px;padding:6px 10px;
+  transition:border-color .2s var(--ease),box-shadow .2s var(--ease)}
+:where(input,select,textarea):hover{border-color:#BFCAD6}
+:where(input,select,textarea):focus{outline:none;border-color:var(--accent);
+  box-shadow:var(--ring)}
+::placeholder{color:#9AA6B1;opacity:1}
+/* Ένα, ίδιο βελάκι σε κάθε μονό select (το native διέφερε ανά browser) */
+select:not([multiple],[size]){appearance:none;-webkit-appearance:none;
+  padding-right:30px;cursor:pointer;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%235D6B78' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat:no-repeat;background-position:right 11px center}
+input[type=checkbox],input[type=radio]{accent-color:var(--ready);cursor:pointer}
+/* Επιλογή αρχείου: το native κουμπί ντύνεται σαν .ghost */
+input[type=file]{font:inherit;font-size:12.5px;color:var(--muted)}
+input[type=file]::file-selector-button{font:inherit;font-size:12.5px;
+  font-weight:500;color:var(--ink);background:var(--card);
+  border:1px solid #D8E0E8;border-radius:7px;padding:5px 11px;margin-right:9px;
+  cursor:pointer;transition:border-color .2s var(--ease),background-color .2s var(--ease)}
+input[type=file]::file-selector-button:hover{border-color:#9FAEBD;
+  background:var(--paper)}
+.frm input:focus,.frm select:focus,input[type=date]:focus{
+  border-color:var(--accent);box-shadow:var(--ring)}
+
+/* ---------------------------------------------------------- Κουμπιά */
+:where(button.run,a.run,button.ghost,a.ghost,label.ghost){font-size:13.5px;
+  line-height:1.35}
+button.ghost,a.ghost,label.ghost{font-weight:500;border-color:#D8E0E8}
+button.run,a.run{background:linear-gradient(180deg,#23A85E,var(--ready-d));
+  box-shadow:0 1px 2px rgba(23,134,74,.25),inset 0 1px 0 rgba(255,255,255,.18)}
+button.run.danger{background:linear-gradient(180deg,#DC5252,var(--prob-d))}
+/* Λιγότερο «χοροπηδητό»: 1px ανασήκωμα, χωρίς λάμψη που σαρώνει */
+button.run::after,a.run::after{content:none}
+button.run:hover:not(:disabled),a.run:hover,
+button.ghost:hover,a.ghost:hover,label.ghost:hover{transform:translateY(-1px)}
+button.ghost:hover,a.ghost:hover,label.ghost:hover{border-color:#9FAEBD;
+  background-color:#FBFCFD}
+button.run:focus-visible,a.run:focus-visible,button.ghost:focus-visible,
+a.ghost:focus-visible{box-shadow:0 0 0 2px var(--card),0 0 0 4px var(--accent)}
+:focus-visible{outline-color:var(--accent)}
+/* Κουμπιά μέσα σε τίτλο κάρτας: όχι ΚΕΦΑΛΑΙΑ με αραιά γράμματα */
+.card h2 :is(a,button,label).ghost,.card h2 :is(a,button).run{
+  text-transform:none;letter-spacing:0}
+
+/* ---------------------------------------------------------- Πλοήγηση */
+nav.side{background:linear-gradient(180deg,#FFFFFF,#FBFCFE);
+  border-right-color:var(--line-soft)}
+nav.side .brand{display:flex;align-items:center;gap:10px;width:auto;
+  background:none;color:var(--ink);font-size:17px;letter-spacing:-.01em;
+  padding:2px 10px 6px}
+nav.side .brand::before{content:'μ';display:grid;place-items:center;
+  width:30px;height:30px;border-radius:9px;flex:none;color:#fff;
+  font-size:17px;font-weight:700;
+  background:linear-gradient(135deg,var(--accent),#1B4F8A);
+  box-shadow:0 3px 10px rgba(45,125,210,.35),inset 0 1px 0 rgba(255,255,255,.25)}
+nav.side .co{padding-left:50px;margin-top:-6px;font-weight:500}
+nav.side form.cosel{padding:4px 10px 16px}
+nav.side a.nl{font-size:13.5px;padding:8px 10px}
+nav.side a.nl:hover{background:#F2F5F9}
+nav.side a.nl.on{background:var(--accent-bg);color:#16426F}
+nav.side a.nl.on::before{background:var(--accent)}
+nav.side summary.navgrp-h{font-size:10.5px;letter-spacing:.11em}
+nav.side summary.navgrp-h:hover{background:#F2F5F9}
+
+/* ------------------------------------------------------------ Header */
+header{padding:12px 24px;gap:12px 14px;border-bottom-color:var(--line-soft);
+  background:rgba(255,255,255,.82)}
+header h1{font-size:18px;letter-spacing:-.01em}
+header form.clock{padding:3px;gap:6px;border-radius:11px;background:var(--paper);
+  box-shadow:inset 0 0 0 1px var(--line-soft)}
+header form.clock button.ghost,header form.userbox button.ghost{
+  font-size:12.5px;padding:5px 11px;box-shadow:none}
+header form.clock input[type=date],header form.clock .dgr-text{
+  font-size:12.5px;padding:5px 8px}
+
+/* ------------------------------------------------- Κάρτες & πίνακες */
+.card{border-color:var(--line-soft);padding:20px}
+.card h2{color:#6B7986}
+/* Συμπαγείς απαλές γραμμές αντί για διακεκομμένες: λιγότερος οπτικός θόρυβος */
+table.tbl td,.detail td,.detail .fact,.emp{border-bottom-style:solid;
+  border-bottom-color:var(--line-soft)}
+table.tbl th{color:#7A8794;font-size:11px;padding-top:9px;padding-bottom:9px}
+table.tbl tbody tr:hover{background:#F7F9FC}
+table.tbl tr.tot td{background:#F4F7FA}
+
+/* Κάρτες κατάστασης: ουδέτερο περίγραμμα + απαλό χρώμα από πάνω */
+.stat{border-color:var(--line-soft);padding:16px 18px}
+.stat b{font-size:28px;font-weight:500;letter-spacing:-.02em}
+.stat.s-ready{background:linear-gradient(180deg,var(--ready-bg),var(--card) 75%)}
+.stat.s-warn{background:linear-gradient(180deg,var(--warn-bg),var(--card) 75%)}
+.stat.s-prob{background:linear-gradient(180deg,var(--prob-bg),var(--card) 75%)}
+.stat.s-done{background:linear-gradient(180deg,var(--done-bg),var(--card) 75%)}
+.stat::before{transform:scaleX(1);opacity:.85}
+
+/* Καρτέλες */
+.tabbar{border-bottom-color:var(--line-soft)}
+.tabbar label{border-radius:9px 9px 0 0;transition:color .2s var(--ease),
+  background-color .2s var(--ease)}
+.tabbar label:hover{background:#F2F5F9}
+
+/* Modal */
+.modal{border:0;border-radius:16px}
+.modal .mhead{border-radius:16px 16px 0 0;padding:16px 22px}
+.modal .mfoot{border-radius:0 0 16px 16px;background:#F8FAFC}
+.modal-backdrop{background:rgba(17,28,40,.38)}
+
+#toast{border-radius:12px;padding:12px 18px;font-weight:500}
+
+/* ----------------------------------------- Σύνδεση (σελίδες εκτός app) */
+body.authpage{background:
+  radial-gradient(900px 500px at 15% 0%,#E3EEFB 0%,transparent 60%),
+  radial-gradient(800px 500px at 100% 100%,#E5F5EC 0%,transparent 55%),
+  var(--paper)}
+.authbox{width:min(420px,100%)}
+.authbox .card{padding:30px 30px 26px;border:0;border-radius:18px;
+  box-shadow:0 1px 2px rgba(23,36,47,.05),0 20px 50px rgba(23,36,47,.10);
+  animation:pop .45s var(--spring) both}
+.authbox .authbrand{display:flex;align-items:center;gap:11px;font-size:21px;
+  letter-spacing:-.01em;margin-bottom:18px}
+.authbox .authbrand::before{content:'μ';display:grid;place-items:center;
+  width:38px;height:38px;border-radius:11px;color:#fff;font-size:21px;
+  background:linear-gradient(135deg,var(--accent),#1B4F8A);
+  box-shadow:0 4px 14px rgba(45,125,210,.35)}
+.authbox .frm{gap:12px}
+.authbox .frm input:not([type=file]){padding:9px 11px;font-size:14px}
+.authbox .btnrow{margin-top:4px}
+.authbox button.run{padding:9px 18px}
+/* Η επαναφορά από backup: δεύτερη, χωριστή ενότητα */
+.authbox form.frm + form.frm{margin-top:22px;padding-top:20px;
+  border-top:1px solid var(--line-soft)}
+.authbox h3{font-size:14.5px}
+.authbox .muted{font-size:12.5px;color:var(--muted)}
+/* Οι κάρτες κατάστασης κρατούν το χρώμα στη λωρίδα/φόντο, όχι στο περίγραμμα·
+   οι ουδέτερες (πλήθη) δεν παίρνουν λωρίδα καθόλου */
+.stat[class*=s-]{border-color:var(--line-soft)}
+.stat:not([class*=s-])::before{content:none}
+nav.side .co{font-size:11.5px}

@@ -27,20 +27,25 @@ def holy_wednesday(year: int) -> date:
 
 
 def public_holidays(year: int) -> set[date]:
+    return set(holiday_names(year))
+
+
+def holiday_names(year: int) -> dict[date, str]:
+    """Οι επίσημες αργίες με το όνομά τους (για εμφάνιση)."""
     easter = orthodox_easter(year)
     return {
-        date(year, 1, 1),  # Πρωτοχρονιά
-        date(year, 1, 6),  # Θεοφάνια
-        easter - timedelta(days=48),  # Καθαρά Δευτέρα
-        date(year, 3, 25),  # 25η Μαρτίου
-        easter - timedelta(days=2),  # Μεγάλη Παρασκευή
-        easter + timedelta(days=1),  # Δευτέρα του Πάσχα
-        date(year, 5, 1),  # Πρωτομαγιά (απλοποίηση: αν μετατεθεί)
-        easter + timedelta(days=50),  # Αγίου Πνεύματος
-        date(year, 8, 15),  # Δεκαπενταύγουστος
-        date(year, 10, 28),  # 28η Οκτωβρίου
-        date(year, 12, 25),  # Χριστούγεννα
-        date(year, 12, 26),  # Σύναξη Θεοτόκου
+        date(year, 1, 1): "Πρωτοχρονιά",
+        date(year, 1, 6): "Θεοφάνια",
+        easter - timedelta(days=48): "Καθαρά Δευτέρα",
+        date(year, 3, 25): "25η Μαρτίου",
+        easter - timedelta(days=2): "Μεγάλη Παρασκευή",
+        easter + timedelta(days=1): "Δευτέρα του Πάσχα",
+        date(year, 5, 1): "Πρωτομαγιά",  # απλοποίηση: αν μετατεθεί
+        easter + timedelta(days=50): "Αγίου Πνεύματος",
+        date(year, 8, 15): "Δεκαπενταύγουστος",
+        date(year, 10, 28): "28η Οκτωβρίου",
+        date(year, 12, 25): "Χριστούγεννα",
+        date(year, 12, 26): "Σύναξη Θεοτόκου",
     }
 
 

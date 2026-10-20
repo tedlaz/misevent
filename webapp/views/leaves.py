@@ -1,5 +1,6 @@
 """Κεντρικός ετήσιος προγραμματισμός αδειών."""
 
+import json
 from calendar import monthrange
 from datetime import date, timedelta
 
@@ -11,6 +12,7 @@ from misevent.rules.calendar_gr import is_working_day, working_days_in_range
 from ..clock import today
 from ..helpers import flash_to, form_date, run_command
 from ..labels import LEAVE_LABELS
+from ..queries import balance_tone as _balance_tone
 from ..system import proj, svc
 
 bp = Blueprint("leaves", __name__, url_prefix="/leaves")
@@ -35,14 +37,6 @@ def _leave_or_404(employment_id, leave_id):
 def _days_label(date_from: date, date_to: date) -> str:
     """Πλήθος εργάσιμων ημερών άδειας σύμφωνα με το ημερολόγιο."""
     return str(working_days_in_range(date_from, date_to))
-
-
-def _balance_tone(balance: float, accrued: float) -> str:
-    if balance < -0.005:
-        return "danger"
-    if balance <= max(1.0, accrued * 0.2):
-        return "warn"
-    return "good"
 
 
 def _accrual(employment, year: int, reference_date: date) -> dict:
@@ -240,18 +234,33 @@ def _panel(year: int):
 
 
 def _back() -> str:
-    """Από ποια σελίδα άνοιξε το modal: "work" = πρόγραμμα εργασίας."""
-    return "work" if request.values.get("back") == "work" else ""
+    """Από ποια σελίδα άνοιξε το modal: "work" = πρόγραμμα εργασίας,
+    "live" = Ζωντανά (εκεί δεν υπάρχει panel — κλείνει το modal)."""
+    back = request.values.get("back")
+    return back if back in ("work", "live") else ""
 
 
 def _return_panel(year: int):
     """Το panel που ανανεώνεται μετά την αποθήκευση — της σελίδας προέλευσης."""
+    if _back() == "live":
+        return ""
     if _back():
         # lazy: το work_schedules εισάγει το `_accrual` από εδώ
         from .work_schedules import _panel as work_panel
 
         return work_panel(year)
     return _panel(year)
+
+
+def _saved(year: int, message: str):
+    """Επιτυχία: panel της σελίδας προέλευσης + toast· στα Ζωντανά και
+    εντολή ανανέωσης του grid (`lb-refresh`)."""
+    resp = flash_to(_return_panel(year), message)
+    if _back() == "live":
+        resp.headers["HX-Trigger"] = json.dumps(
+            {"flash": {"msg": message, "err": False}, "lb-refresh": True}
+        )
+    return resp
 
 
 @bp.get("/")
@@ -323,7 +332,7 @@ def create_leave(employment_id):
 
     ok, message = run_command(command)
     if ok:
-        return flash_to(_return_panel(year), message)
+        return _saved(year, message)
     selected = form_date(request.form, "date_from", date(year, 1, 1))
     html = render_template(
         "partials/_leave_create_modal.html",
@@ -366,7 +375,7 @@ def update_leave(employment_id, leave_id):
 
     ok, message = run_command(command)
     if ok:
-        return flash_to(_return_panel(year), message)
+        return _saved(year, message)
     employment, leave = _leave_or_404(employment_id, leave_id)
     html = render_template(
         "partials/_leave_edit_modal.html",

@@ -496,7 +496,7 @@
     "save_zip": false,
     "show_employer_cost": true,
     "keep_wage_excess": false,
-    "auto_payments": false
+    "auto_payments": true
   },
   "kpks": [
     {

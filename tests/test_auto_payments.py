@@ -32,7 +32,10 @@ def test_auto_payments(fresh_system):
         return {o["track"] for o in q.obligation_list(today(), show_locked=True)}
 
     with app.test_request_context("/"):
-        assert "payment" in tracks()  # προεπιλογή: εμφανίζονται
+        assert "payment" not in tracks()  # προεπιλογή: ενεργή
+
+        assert run_command(svc.set_misc_settings, auto_payments=False)[0]
+        assert "payment" in tracks()
 
         assert run_command(svc.set_misc_settings, auto_payments=True)[0]
         assert "payment" not in tracks()

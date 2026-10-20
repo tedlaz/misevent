@@ -26,11 +26,13 @@ from datetime import date, timedelta
 
 from flask import Blueprint, jsonify, render_template, request
 
+from misevent.domain.events import LeaveType
 from misevent.integrations import card_punches as cp
 
 from .. import queries as q
 from ..clock import is_simulated, today
 from ..helpers import flash_to, form_date, run_command
+from ..labels import LEAVE_LABELS
 from ..system import svc
 
 bp = Blueprint("live", __name__, url_prefix="/live")
@@ -57,7 +59,9 @@ def _context():
 
 @bp.get("/")
 def index():
-    return render_template("live.html", **_context())
+    # Μενού τύπου άδειας (μήνας: double click αρχή -> double click τέλος)
+    leave_types = [(k.name, LEAVE_LABELS[k.value]) for k in LeaveType]
+    return render_template("live.html", leave_types=leave_types, **_context())
 
 
 @bp.get("/rows")

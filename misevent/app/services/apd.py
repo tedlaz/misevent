@@ -25,6 +25,14 @@ from misevent.rules.calendar_gr import last_working_day_of_month
 from ._base import ApdEarnings
 
 
+def apd_missing_ama(pairs) -> list[str]:
+    """Ονόματα ασφαλισμένων χωρίς ΑΜΑ. Ο ΑΜΑ είναι προαιρετικός στην
+    πρόσληψη (μπορεί να μην έχει εκδοθεί ακόμη), αλλά ΥΠΟΧΡΕΩΤΙΚΟΣ στην ΑΠΔ
+    (No 21) — ο έλεγχος γίνεται εδώ, όχι στο `constraints`."""
+    return sorted({f"{i.last_name} {i.first_name}".strip()
+                   for i, _ in pairs if not (i.ama or "").strip()})
+
+
 class ApdMixin:
     # -------------------------------------------- Υποβολές & πληρωμές
     def submit_apd(self, year: int, month: int, fund="efka", reference=""):
@@ -469,6 +477,11 @@ class ApdMixin:
         pairs = self.build_apd_rows(year, month).get(fund)
         if not pairs:
             return None
+        if missing := apd_missing_ama(pairs):
+            raise ValueError(
+                f"Λείπει ο ΑΜΑ (υποχρεωτικός στην ΑΠΔ {fund.upper()}) για: "
+                + ", ".join(missing) + ". Συμπλήρωσέ τον στα στοιχεία προσώπου."
+            )
         b = APDFileBuilder(
             fund,
             employer or self.employer_info(),

@@ -409,6 +409,7 @@ def day_overview():
     return render_template(
         "partials/_work_schedule_day_overview.html",
         **_day_context(selected, request.args.get("focus")),
+        back=request.args.get("back"),
     )
 
 
@@ -416,6 +417,9 @@ def day_overview():
 def update_day_overview():
     selected = form_date(request.form, "date")
     focus_id = request.form.get("focus") or None
+    # back=live: ανοίχτηκε από τα «Ζωντανά» — εκεί δεν υπάρχει panel
+    # προγράμματος· κλείνει το modal και ξαναφορτώνει το grid (lb-refresh)
+    back = request.form.get("back") or None
     supplied = {
         employment_id: request.form.get(f"hours_{employment_id}", "").strip()
         for employment_id in proj.employments
@@ -435,11 +439,18 @@ def update_day_overview():
         return f"Αποθηκεύτηκαν {changed} μεταβολές για {selected.strftime('%d/%m/%Y')}"
 
     ok, message = run_command(command)
+    if ok and back == "live":
+        response = flash_to("", message)
+        response.headers["HX-Trigger"] = json.dumps(
+            {"flash": {"msg": message, "err": False}, "lb-refresh": True}
+        )
+        return response
     if ok:
         return flash_to(_panel(selected.year), message)
     html = render_template(
         "partials/_work_schedule_day_overview.html",
         **_day_context(selected, focus_id, supplied),
+        back=back,
     )
     response = flash_to(html, message, err=True)
     response.headers["HX-Retarget"] = "#modal-host"

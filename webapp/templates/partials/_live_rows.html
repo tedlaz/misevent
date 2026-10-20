@@ -22,11 +22,17 @@
            το εύρος (ημέρα / εβδομάδα / μήνας): αλλιώς στον μήνα οι 30
            ημερομηνίες θα πατούσαν η μία πάνω στην άλλη #}
         {% for m in marks %}
-          <span class="lb-dayspan {{ 'today' if m.today }} {{ 'we' if m.alt }}"
-                style="--s:{{ m.off }};--d:{{ m.span }}" title="{{ m.full }}">
+          <span class="lb-dayspan {{ 'today' if m.today }} {{ 'we' if m.alt }} {{ 'hol' if m.hol }}"
+                style="--s:{{ m.off }};--d:{{ m.span }}"
+                title="{{ m.full }}{{ ' · ' ~ m.hol if m.hol }}">
             <b><i class="d-f">{{ m.full }}</i><i class="d-m">{{ m.mid }}</i><i
                class="d-s">{{ m.short }}</i></b>
           </span>
+        {% endfor %}
+        {# Μήνες: επάνω επίπεδο του χάρακα — το CSS τους δείχνει ΜΟΝΟ στον μήνα #}
+        {% for m in months %}
+          <span class="lb-dayspan lb-month {{ 'we' if m.alt }}"
+                style="--s:{{ m.off }};--d:{{ m.span }}"><b>{{ m.mid }}</b></span>
         {% endfor %}
         {# Ωριαίος χάρακας ΜΟΝΟ σε στενό παράθυρο (βλ. queries.DETAIL_MAX_DAYS):
            σε προβολή μήνα οι ώρες είναι 0,02px η μία — μόνο κόστος #}
@@ -35,7 +41,7 @@
             {% set hh = h % 24 %}
             <span class="lb-tick {{ 'd0' if hh == 0 }} {{ 'h3' if hh % 3 == 0 }}
                          {{ 'h6' if hh % 6 == 0 }}" style="--s:{{ h * 60 }}">
-              <i>{{ '%02d:00'|format(hh) }}</i>
+              <i>{{ hh }}</i>
             </span>
           {% endfor %}
         {% endif %}
@@ -51,7 +57,7 @@
   <div class="lb-row {{ 'onleave' if r.leave }}" data-eid="{{ r.eid }}"
        data-segs="{{ r.segs|map(attribute='s')|join(',') }}"
        data-ends="{{ r.segs|map(attribute='e')|join(',') }}"
-       data-leave="{{ 1 if r.leave else 0 }}"
+       data-leave="{{ 1 if r.leave else 0 }}" data-hol="{{ 1 if r.hol else 0 }}"
        {# Πρόγραμμα/παρουσία της ΗΜΕΡΑΣ ΑΝΑΦΟΡΑΣ σε λεπτά της ημέρας — από
           αυτά (και ΜΟΝΟ) βγαίνει η κατάσταση «τώρα»: οι μπάρες του
           παραθύρου μπορεί να είναι εβδομαδιαία σύνολα ή άλλης ημερομηνίας #}
@@ -67,7 +73,7 @@
        live-board.js — και οι ώρες προγράμματος γράφονται ΠΑΝΩ στη μπάρα. #}
     <div class="lb-name">
       <span class="lb-dot {{ 'st-leave' if r.leave else ('st-rest' if r.start is none) }}"
-            title="{% if r.leave %}σε άδεια{% elif r.start is none %}ρεπό{% endif %}"></span>
+            title="{% if r.leave %}σε άδεια{% elif r.hol %}αργία{% elif r.start is none %}ρεπό{% endif %}"></span>
       <a class="lnk" href="{{ url_for('employments.detail', employment_id=r.eid) }}"
          title="{{ r.name }}{% if r.specialty %} · {{ r.specialty }}{% endif %}
 {{ day|date_gr }}: {% if r.leave %}{{ r.leave }}{% elif r.start is none %}ρεπό{% else %}πρόγραμμα {{ '%g'|format(r.hours) }}ω{% if r.worked %} · παρουσία {{ '%g'|format(r.worked) }}ω{% endif %}{% endif %}">{{ r.name }}</a>
@@ -83,6 +89,11 @@
         {# Τα όρια ημερών (μεσάνυχτα) και οι ώρες είναι ΥΠΟΒΑΘΡΟ (gradient του
            .lb-track), όχι στοιχεία: σε προβολή μήνα θα ήταν χιλιάδες spans #}
 
+        {# Επίσημες αργίες — αχνή στήλη ΠΙΣΩ από όλα #}
+        {% for h in hols %}
+          <span class="lb-holband" style="--s:{{ h }};--d:1440"></span>
+        {% endfor %}
+
         {# Ημέρες άδειας — σε προβολή έτους ΔΙΑΣΤΗΜΑ συνεχόμενων ημερών #}
         {% for b in r.bands %}
           <span class="lb-leaveband lv-{{ b.type }}"
@@ -90,19 +101,18 @@
                 title="{{ b.label }}"></span>
         {% endfor %}
 
-        {# ΠΡΟΒΟΛΗ ΕΤΟΥΣ: κάθετη γραμμή ανά ημέρα εργασίας — ΕΝΑ στοιχείο ανά
-           ΣΕΡΙ ημερών με ρίγα περιόδου μιας ημέρας (βλ. queries._year_marks:
-           ένα στοιχείο ανά ημέρα στρογγυλοποιούνταν άνισα σε pixel). Οι
-           ημέρες με άδεια δεν παίρνουν γραμμή — μιλάει η μπάρα. #}
+        {# ΠΡΟΒΟΛΗ ΕΤΟΥΣ: ΣΥΜΠΑΓΗΣ μπάρα ανά ΣΕΡΙ συνεχόμενων ημερών εργασίας
+           (βλ. queries._year_marks: ένα στοιχείο ανά ημέρα στρογγυλοποιούνταν
+           άνισα σε pixel). Οι ημέρες με άδεια δεν μπαίνουν — μιλάει η μπάρα. #}
         {% for c in r.combs %}
           <span class="lb-comb" style="--s:{{ c.s }};--d:{{ c.e - c.s }}"></span>
         {% endfor %}
 
         {# Πρόγραμμα #}
         {% for s in r.segs %}
-          <span class="lb-bar {{ 'tele' if s.tele }} {{ 'cont' if s.cont }}"
+          <span class="lb-bar {{ 'tele' if s.tele }} {{ 'cont' if s.cont }} {{ 'hol' if s.hol }}"
                 style="--s:{{ s.s }};--d:{{ s.e - s.s }}"
-                title="Πρόγραμμα {{ s.text }} ({{ '%g'|format(s.h) }}ω){{ ' · τηλεεργασία' if s.tele }}{{ ' · συνέχεια από την προηγούμενη ημέρα' if s.cont }}">
+                title="Πρόγραμμα {{ s.text }} ({{ '%g'|format(s.h) }}ω){{ ' · τηλεεργασία' if s.tele }}{{ ' · συνέχεια από την προηγούμενη ημέρα' if s.cont }}{{ ' · αργία (κλειστά)' if s.hol }}">
             <em>{{ s.text }} <b>({{ '%g'|format(s.h) }}ω)</b></em>
           </span>
         {% endfor %}
@@ -124,6 +134,13 @@
                   title="{{ 'Σε εξέλιξη — χωρίς έξοδο ακόμη' if a.open
                             else 'Παρουσία ' ~ a.text ~ ' (' ~ ('%g'|format(a.h)) ~ 'ω)' }}"></span>
           {% endif %}
+        {% endfor %}
+
+        {# ΥΠΟΛΟΙΠΟ ΚΑΝΟΝΙΚΗΣ ΑΔΕΙΑΣ στο τέλος κάθε ημέρας (στο έτος: μήνα) —
+           λωρίδα στο κάτω μέρος, ο αριθμός στη δεξιά άκρη του διαστήματος #}
+        {% for a in r.accr %}
+          <span class="lb-accr tone-{{ a.tone }}" style="--s:{{ a.s }};--d:{{ a.e - a.s }}"
+                title="Κανονική άδεια έως {{ a.date|date_gr }} · Δικαίωμα {{ '%g'|format(a.acc) }} · Άδειες {{ '%g'|format(a.taken) }} · Υπόλοιπο {{ '%g'|format(a.bal) }}"><b>{{ '%g'|format(a.bal) }}</b></span>
         {% endfor %}
 
         {# ΧΤΥΠΗΜΑΤΑ ΚΑΡΤΑΣ: κάθετη γραμμή στο χρονικό σημείο της διέλευσης,

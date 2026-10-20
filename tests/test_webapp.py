@@ -83,9 +83,21 @@ def test_webapp(fresh_system):
     check("/persons     Εργαζόμενοι", c.get("/persons/"), "Εργαζόμενοι")
     check("/live        Ζωντανά", c.get("/live/"), "Ζωντανή εικόνα ημέρας")
     check("/live/rows   γραμμές (htmx)", c.get("/live/rows"))
+    check("/live/rows   αργία 28/10", c.get("/live/rows?base=2026-10-27&days=3"),
+          "28η Οκτωβρίου")
+    # Αργία χωρίς παρουσία = κλειστά: ούτε πρόγραμμα «τώρα» (άρα ούτε
+    # ασυμφωνία με κάρτα), μπάρες σημειωμένες ως αργία
+    hb = q.live_board(_date(2026, 10, 28))
+    if not any(r["hol"] and not r["ref"]["segs"] for r in hb["rows"]) or not any(
+        s["hol"] for r in hb["rows"] for s in r["segs"]
+    ):
+        fails.append("Ζωντανά: η αργία χωρίς παρουσία δεν εμφανίζεται κλειστή")
     check("/work-schedules Πρόγραμμα", c.get("/work-schedules/?year=2026"), "Ετήσιο πρόγραμμα")
     check("/work-schedules/day Ημέρα",
           c.get("/work-schedules/day?date=2026-07-14"), "Πρόγραμμα ημέρας")
+    check("/work-schedules/day από Ζωντανά",
+          c.get("/work-schedules/day?date=2026-07-14&back=live"),
+          'name="back" value="live"')
     check("/attendance  Παρουσίες", c.get("/attendance/"), "Παρουσίες")
     check("/leaves      Άδειες", c.get("/leaves/?year=2026"), "Ετήσιο πλάνο")
     check("/payroll     Μισθοδοσία", c.get("/payroll/"), "Σύνολα ανά περίοδο")

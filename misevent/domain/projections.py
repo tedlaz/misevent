@@ -148,7 +148,7 @@ MISC_DEFAULTS = {
     # Αυτόματη εξόφληση πληρωμών: οι υποχρεώσεις στήλης «Πληρωμές» δεν
     # εμφανίζονται στο χρονολόγιο και εξοφλούνται μόλις ξεκλειδώσουν
     # (webapp/actions.auto_settle_payments).
-    "auto_payments": False,
+    "auto_payments": True,
 }
 
 
@@ -988,6 +988,16 @@ class EmploymentState:
                     break
         return out
 
+    def holiday_off(self, d: date) -> bool:
+        """Καθημερινή ΑΡΓΙΑ όπου η εργασία ΔΕΝ τεκμαίρεται (η επιχείρηση
+        κλείνει, ο μισθός πληρώνεται) — θέλει ρητή δήλωση παρουσίας. Η
+        Κυριακή εξαιρείται (το πρόγραμμα τη δηλώνει), όπως και η ημέρα
+        πρόσληψης (θεωρείται ότι εργάστηκε)."""
+        from misevent.rules.calendar_gr import public_holidays
+
+        return (d.weekday() != 6 and d in public_holidays(d.year)
+                and d != self.hire_date)
+
     def scheduled_shifts_in_month(self, year: int, month: int) -> dict:
         """Τεκμαρτές ΒΑΡΔΙΕΣ από το πρόγραμμα για τις προγραμματισμένες ημέρες
         του μήνα ΧΩΡΙΣ αναλυτική καταγραφή κάρτας και χωρίς άδεια.
@@ -1004,20 +1014,13 @@ class EmploymentState:
         ρητή δήλωση στις παρουσίες (κάρτα/χειροκίνητα). ΕΞΑΙΡΕΣΗ: αν η ίδια η
         **ημέρα πρόσληψης** πέφτει σε αργία, θεωρείται ότι εργάστηκε."""
         from misevent.rules import constraints
-        from misevent.rules.calendar_gr import public_holidays
 
         leave_days = set(self.leave_days_in_month(year, month))
         out = {}
         for d in self.scheduled_days_in_month(year, month):
             if d in self.attendance or d in leave_days:
                 continue
-            # Καθημερινή αργία (όχι Κυριακή) που ΔΕΝ είναι η ημέρα πρόσληψης:
-            # δεν τεκμαίρεται εργασία — θέλει ρητή δήλωση.
-            if (
-                d.weekday() != 6
-                and d in public_holidays(d.year)
-                and d != self.hire_date
-            ):
+            if self.holiday_off(d):
                 continue
             try:
                 segs = constraints.parse_day_schedule(self.day_schedule(d))

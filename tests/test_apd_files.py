@@ -220,3 +220,14 @@ def test_no36_special_case():
         assert ln[18:20] == case, (case, ln[18:20])
         assert ln[154:156] == (aux or "  "), (case, ln[154:156])
     print("OK No 36: 09 ΤΕΚΑ / 10 επικουρική ΕΦΚΑ / 00 καμία")
+
+
+def test_missing_ama_listed():
+    """ΑΜΑ προαιρετικός στην πρόσληψη, υποχρεωτικός στην ΑΠΔ (No 21)."""
+    from dataclasses import replace
+
+    from misevent.app.services.apd import apd_missing_ama
+
+    no_ama = replace(INS, ama="")
+    assert apd_missing_ama([(INS, None)]) == []
+    assert apd_missing_ama([(no_ama, None), (no_ama, None)]) == ["ΓΕΩΡΓΙΟΥ ΜΑΡΙΑ"]

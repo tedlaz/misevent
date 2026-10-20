@@ -2,9 +2,12 @@
   <div class="modal work-day-modal" data-work-day-editor
        data-start="{{ timeline_start }}" data-end="{{ timeline_end }}"
        data-step="15">
+    {# back=live: ανοίχτηκε από τα «Ζωντανά» — η αποθήκευση κλείνει το modal #}
     <form hx-post="{{ url_for('work_schedules.update_day_overview') }}"
-          hx-target="#work-schedule-panel" hx-swap="outerHTML">
+          {% if back == 'live' %}hx-target="#modal-host" hx-swap="innerHTML"
+          {% else %}hx-target="#work-schedule-panel" hx-swap="outerHTML"{% endif %}>
       <input type="hidden" name="date" value="{{ selected.isoformat() }}">
+      <input type="hidden" name="back" value="{{ back or '' }}">
       <input type="hidden" name="focus" value="{{ focus_id or '' }}">
       <div class="mhead work-day-title">
         <div>
@@ -13,10 +16,10 @@
         </div>
         <div class="work-day-nav">
           <button type="button" class="ghost"
-                  hx-get="{{ url_for('work_schedules.day_overview', date=previous_day.isoformat()) }}"
+                  hx-get="{{ url_for('work_schedules.day_overview', date=previous_day.isoformat(), back=back) }}"
                   hx-target="#modal-host" hx-swap="innerHTML" aria-label="Προηγούμενη ημέρα">◀</button>
           <button type="button" class="ghost"
-                  hx-get="{{ url_for('work_schedules.day_overview', date=next_day.isoformat()) }}"
+                  hx-get="{{ url_for('work_schedules.day_overview', date=next_day.isoformat(), back=back) }}"
                   hx-target="#modal-host" hx-swap="innerHTML" aria-label="Επόμενη ημέρα">▶</button>
         </div>
       </div>

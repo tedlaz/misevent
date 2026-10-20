@@ -13,7 +13,12 @@
          data-rows-url="{{ url_for('live.rows') }}"
          {# ΣΦΥΓΜΟΣ ψηφιακής κάρτας: ένας αριθμός που αλλάζει σε κάθε νέα
             διέλευση — το JS τον ρωτά και ξαναζητά γραμμές ΜΟΝΟ όταν άλλαξε #}
-         data-pulse-url="{{ url_for('live.pulse') }}">
+         data-pulse-url="{{ url_for('live.pulse') }}"
+         {# Double click σε ημέρα (εβδομάδα): ΙΔΙΑ οθόνη «Πρόγραμμα ημέρας»
+            με το Πρόγραμμα εργασίας (work-schedule-planner.js) #}
+         data-day-url="{{ url_for('work_schedules.day_overview') }}"
+         {# Μήνας: νέα άδεια με double click αρχή + double click τέλος #}
+         data-leave-url="{{ url_for('leaves.create_leave', employment_id='__EID__') }}">
 
   <div class="lb-top">
     <div class="lb-clock">
@@ -95,9 +100,18 @@
   {# Μοτίβο MODAL (§9): ο host ζει ΜΕΣΑ στην κάρτα και το κενό περιεχόμενο
      είναι το «κλειστό» modal #}
   <div id="modal-host"></div>
+
+  {# Τύπος νέας άδειας — εμφανίζεται στο σημείο του 2ου double click #}
+  <div class="lb-menu" id="lb-leave-menu" role="menu" hidden>
+    <b class="lb-menu-head"></b>
+    {% for name, label in leave_types %}
+      <button type="button" role="menuitem" data-type="{{ name }}">{{ label }}</button>
+    {% endfor %}
+  </div>
 </section>
 {% endblock %}
 
 {% block scripts %}
 <script src="{{ url_for('static', filename='live-board.js') }}" defer></script>
+<script src="{{ url_for('static', filename='work-schedule-planner.js', v=15) }}" defer></script>
 {% endblock %}

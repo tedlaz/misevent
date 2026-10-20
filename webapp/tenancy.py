@@ -205,3 +205,8 @@ class Registry:
         χρήστης μετά τη σύνδεση."""
         if not self.auth.companies:
             self.create_company(DEFAULT_COMPANY_NAME)
+        # Πρώτο τρέξιμο: οι αρχικές τιμές (data/init_parameters.json) γράφονται
+        # αυτόματα — ΚΟΙΝΑ events, οπότε αρκεί μία οποιαδήποτε εταιρεία.
+        svc = self.tenant(next(iter(self.auth.companies))).svc
+        if not svc.parameters_confirmed():
+            svc.confirm_default_parameters()
