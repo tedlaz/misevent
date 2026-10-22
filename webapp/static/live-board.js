@@ -593,9 +593,29 @@
       if (!at) return;
       const url = new URL(el.dataset.dayUrl, window.location.origin);
       url.searchParams.set("date", iso(at.d));
-      url.searchParams.set("back", "live");
       if (at.eid) url.searchParams.set("focus", at.eid);
       htmx.ajax("GET", url.toString(), { target: "#modal-host", swap: "innerHTML" });
+    });
+  }
+
+  /** ΕΠΕΞΕΡΓΑΣΙΑ ΑΔΕΙΑΣ: κλικ σε ζώνη άδειας -> modal τύπου/περιόδου.
+   *  elementsFromPoint (όχι e.target): οι μπάρες προγράμματος είναι από πάνω
+   *  και στην ελεύθερη μετακίνηση το grid κρατά pointer capture. Κλικ που
+   *  τελείωσε σύρσιμο δεν μετράει. */
+  function leaveEdit(el) {
+    const grid = el.querySelector(".lb-grid");
+    if (!grid || !el.dataset.leaveEditUrl) return;
+    let x0 = 0;
+    grid.addEventListener("pointerdown", (e) => { x0 = e.clientX; });
+    grid.addEventListener("click", (e) => {
+      if (Math.abs(e.clientX - x0) > 4) return;
+      const band = document.elementsFromPoint(e.clientX, e.clientY)
+        .find((n) => n.matches(".lb-leaveband[data-lid]"));
+      const eid = band?.closest(".lb-row")?.dataset.eid;
+      if (!band || !eid || !band.dataset.lid) return;
+      const url = el.dataset.leaveEditUrl
+        .replace("__EID__", eid).replace("__LID__", band.dataset.lid);
+      htmx.ajax("GET", url, { target: "#modal-host", swap: "innerHTML" });
     });
   }
 
@@ -667,7 +687,7 @@
       htmx.ajax("POST", menu.dataset.url, {
         target: "#modal-host", swap: "innerHTML",
         values: { leave_type: b.dataset.type, date_from: menu.dataset.from,
-                  date_to: menu.dataset.to, back: "live" },
+                  date_to: menu.dataset.to },
       });
       cancelPick();
     });
@@ -776,6 +796,7 @@
     if (next) next.addEventListener("click", () => step(1));
     drag(el);
     dayOpen(el);
+    leaveEdit(el);
     leaveMenu();
 
     // Βρόχος καρέ: κάθε καρέ ΜΟΝΟ όταν υπάρχει κίνηση (σύρσιμο/αδράνεια/

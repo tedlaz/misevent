@@ -187,6 +187,15 @@ TYPES: dict[str, ObligationType] = {t.code: t for t in [
        spawn="reactive", due=("eom", 0),
        command="apply_minimum_adjustments"),
 
+    # Απολογιστική δήλωση ωραρίου: αντιδραστικό — γεννιέται με την ΕΓΚΡΙΣΗ
+    # ΠΑΡΟΥΣΙΩΝ ενός μήνα που ήταν σε απολογιστικό σύστημα (ScheduleSystem-
+    # Declared). Δηλώνει στο ΕΡΓΑΝΗ τις ημέρες όπου η κάρτα απέκλινε από το
+    # δηλωμένο πρόγραμμα, έως το τέλος του ΕΠΟΜΕΝΟΥ ημερολογιακού μήνα
+    # (ΥΑ 32689/2025, άρθρο 2Α Ε). Μετά την έγκριση: δηλώνεται ό,τι εγκρίθηκε.
+    _t("RETRO_SCHEDULE", "Απολογιστική δήλωση ωραρίου", "🕘", track="submission",
+       spawn="reactive", due=("eom_cal", 1), command="submit_retro_schedule",
+       requires=(("ATTENDANCE_APPROVAL", "same"),)),
+
     # ------------------------------------------- Καταβολές Δώρων/Επιδόματος
     _t("EASTER_GIFT_PAYMENT", "Καταβολή Δώρου Πάσχα", "💶", track="payment",
        spawn="on_source", payout_source="EASTER_GIFT",
@@ -301,6 +310,19 @@ ICONS = {t.code: t.icon for t in TYPES.values()}
 def _shift(y: int, m: int, k: int) -> tuple[int, int]:
     total = (y * 12 + (m - 1)) + k
     return total // 12, total % 12 + 1
+
+
+# Τύποι που εμφανίζονται ΠΡΩΤΟΙ μέσα στον μήνα της προθεσμίας τους: η
+# προσαρμογή στον κατώτατο προηγείται πάντα (παρουσίες, μισθοδοσία, Δώρα).
+FIRST_IN_MONTH = frozenset({"WAGE_ADJUSTMENT"})
+
+
+def sort_key(ob) -> tuple:
+    """Σειρά εμφάνισης υποχρεώσεων: κατά προθεσμία, με τα `FIRST_IN_MONTH`
+    στην κορυφή του μήνα τους."""
+    d = ob.due_date
+    return (d.year, d.month, ob.obligation_type not in FIRST_IN_MONTH,
+            d, ob.obligation_type)
 
 
 def due_date(code: str, y: int, m: int, source_due: date | None = None) -> date:

@@ -92,14 +92,12 @@ def test_webapp(fresh_system):
         s["hol"] for r in hb["rows"] for s in r["segs"]
     ):
         fails.append("Ζωντανά: η αργία χωρίς παρουσία δεν εμφανίζεται κλειστή")
-    check("/work-schedules Πρόγραμμα", c.get("/work-schedules/?year=2026"), "Ετήσιο πρόγραμμα")
+    check("/work-schedules Πρόγραμμα → ΕΡΓΑΝΗ", c.get("/work-schedules/"), "Εκκρεμείς υποβολές")
+    # Ιστορικό: και οι εβδομαδιαίες υποβολές (π.χ. το αρχικό πρόγραμμα)
+    check("/work-schedules ιστορικό εβδομαδιαίων", c.get("/work-schedules/"), "Εβδομαδιαίο")
     check("/work-schedules/day Ημέρα",
           c.get("/work-schedules/day?date=2026-07-14"), "Πρόγραμμα ημέρας")
-    check("/work-schedules/day από Ζωντανά",
-          c.get("/work-schedules/day?date=2026-07-14&back=live"),
-          'name="back" value="live"')
     check("/attendance  Παρουσίες", c.get("/attendance/"), "Παρουσίες")
-    check("/leaves      Άδειες", c.get("/leaves/?year=2026"), "Ετήσιο πλάνο")
     check("/payroll     Μισθοδοσία", c.get("/payroll/"), "Σύνολα ανά περίοδο")
     check("/payments    Πληρωμές", c.get("/payments/"), "Πληρωμές περιόδου")
     check("/eapd        Αρχεία ΑΠΔ", c.get("/eapd/"), "Παραχθέντα αρχεία")
@@ -116,6 +114,11 @@ def test_webapp(fresh_system):
     check("/ergani      ΕΡΓΑΝΗ", c.get("/ergani/"), "Υποβολές εντύπων",
           iso_ok=True)  # ωμό JSON payload ΕΡΓΑΝΗ
     check("/company     Εταιρεία", c.get("/company/"), "Στοιχεία εργοδότη")
+    # Σύστημα δήλωσης αλλαγών ωραρίου (ανά εταιρεία, από τον επόμενο μήνα)
+    check("/company σύστημα δήλωσης", c.post("/company/schedule-system", data={
+        "month": "2026-09-01", "system": "retro"}), "09/2026")
+    if proj.schedule_system_on(_date(2026, 9, 1)) != "retro":
+        fails.append("Σύστημα δήλωσης: δεν καταγράφηκε το απολογιστικό")
     check("/settings    Παράμετροι", c.get("/settings/"), "Αλυσίδα υποχρεώσεων")
     check("/audit       Audit log", c.get("/audit/"), "Event log",
           iso_ok=True)  # ωμό JSON payload ΕΡΓΑΝΗ στα events
@@ -291,7 +294,103 @@ def test_webapp(fresh_system):
         "effective_from": "2099-01-02", "children": kids, "marital_status": marital,
     })
     eid = proj.persons[pid].employment_ids[0]
-    check(f"/employments/{eid}",c.get(f"/employments/{eid}"), "Ασφαλιστικό προφίλ")
+    check(f"/employments/{eid}",c.get(f"/employments/{eid}"), "Ψηφιακή κάρτα εργασίας")
+    svc.record_card_punch(eid, _date(2026, 8, 20), "08:00", "in")
+    svc.record_card_punch(eid, _date(2026, 8, 20), "19:00", "out")
+    cal = c.get(f"/employments/{eid}/calendar?m=2026-08")
+    check(f"/employments/{eid}/calendar", cal, "Αύγουστος 2026")
+    check(f"/employments/{eid}/calendar κάρτα", cal, "08:00 - 19:00")
+    check(f"/employments/{eid}/calendar υπερωρία", cal, "+2:00")
+    # Καταγραφή παρουσιών όπως η Κάρτα ΕΡΓΑΝΗ: ημ/νία · είσοδος · έξοδος
+    c.post(f"/employments/{eid}/attendance", data={
+        "day": ["2026-08-21", "2026-08-21"], "time_in": ["08:00", "17:00"],
+        "time_out": ["12:00", "22:00"]})
+    if proj.employments[eid].attendance_shifts.get(_date(2026, 8, 21)) != [
+            "08:00-12:00", "17:00-22:00"]:
+        fails.append("Καταγραφή παρουσιών: δεν γράφτηκαν οι βάρδιες εισόδου/εξόδου")
+    check("calendar παρουσία", c.get(f"/employments/{eid}/calendar?m=2026-08"),
+          "17:00 - 22:00")
+    check("modal παρουσιών", c.get(f"/employments/{eid}/modal/attendance"),
+          'name="time_in"')
+    # Άδειες: κατάσταση ως προς την ημ. αναφοράς (26/08/2026)
+    from misevent.domain.events import LeaveType
+    svc.record_leave(eid, LeaveType.UNPAID, _date(2026, 8, 10), _date(2026, 8, 10))
+    svc.record_leave(eid, LeaveType.UNPAID, _date(2026, 9, 8), _date(2026, 9, 8))
+    _card = check("καρτέλα: ληφθείσα άδεια", c.get(f"/employments/{eid}"), "ληφθείσα")
+    if "προγραμματισμένη" not in _card:
+        fails.append("Καρτέλα: η μελλοντική άδεια δεν φαίνεται προγραμματισμένη")
+    # Ιστορικό ημέρας (κλικ στο ημερολόγιο): πρόγραμμα, κάρτα, άδεια
+    _h = check("ιστορικό ημέρας", c.get(f"/employments/{eid}/calendar/day?d=2026-08-20"),
+               "Κάρτα: είσοδος 08:00")
+    if "Αρχικό πρόγραμμα (εβδομαδιαίο)" not in _h:
+        fails.append("Ιστορικό ημέρας: λείπει το αρχικό πρόγραμμα")
+    check("ιστορικό ημέρας άδειας", c.get(f"/employments/{eid}/calendar/day?d=2026-08-10"),
+          "Άδεια: ")
+    # Από το modal ημέρας: χτύπημα κάρτας (μένει ανοιχτό) και πρόγραμμα ημέρας
+    check("modal ημέρας: φόρμες", c.get(f"/employments/{eid}/calendar/day?d=2026-08-24"),
+          "Προσθήκη χτυπήματος")
+    check("modal ημέρας: πρόγραμμα", c.get(f"/employments/{eid}/calendar/day?d=2026-09-10"),
+          "πακέτο υποβολής")
+    _start, _end = proj.employments[eid].day_schedule(_date(2026, 8, 24)).split("-")
+    check("modal ημέρας: πρόταση εισόδου", c.get(
+        f"/employments/{eid}/calendar/day?d=2026-08-24"), f'value="{_start}"')
+    _r = c.post(f"/employments/{eid}/calendar/day/punch", data={
+        "d": "2026-08-24", "time": "08:55", "kind": "in"})
+    _p = check("modal ημέρας: χτύπημα", _r, "Κάρτα: είσοδος 08:55")
+    # htmx: μόνο το modal + ανανέωση ημερολογίου (όχι ολόκληρη η καρτέλα)
+    if "ecal-refresh" not in _r.headers.get("HX-Trigger", "") or "employment-card" in _p:
+        fails.append("Χτύπημα: έπρεπε να ανανεωθεί μόνο το modal και το ημερολόγιο")
+    if f'value="{_end}"' not in _p or '<option value="out" selected' not in _p:
+        fails.append("Χτύπημα: μετά την είσοδο δεν προτείνεται η έξοδος του προγράμματος")
+    c.post(f"/employments/{eid}/calendar/day/punch", data={
+        "d": "2026-09-24", "time": "08:55", "kind": "in"})
+    if proj.employments[eid].punches_on(_date(2026, 9, 24)):
+        fails.append("Χτύπημα κάρτας σε μελλοντική ημέρα")
+    # Ημερήσιο ανά εβδομάδα: διαφορετικό ωράριο ανά ημέρα, ◀ ▶ εβδομάδες
+    check("modal ημερήσιου (εβδομάδα)",
+          c.get(f"/employments/{eid}/modal/daily?week=2026-09-09"), "Δευτέρα 07/09")
+    _e = proj.employments[eid]
+    check("ημερήσιο → πακέτο υποβολής", c.post(f"/employments/{eid}/schedule/daily", data={
+        "week": "2026-09-07", "hours_2026-09-07": _e.day_schedule(_date(2026, 9, 7)),
+        "hours_2026-09-08": "10:00-18:00", "hours_2026-09-09": "08:00-16:00"}),
+        "Πακέτο υποβολής")
+    if _date(2026, 9, 7) in _e.daily_schedule:
+        fails.append("Ημερήσιο: γράφτηκε ημέρα χωρίς αλλαγή")
+    if (_e.day_schedule(_date(2026, 9, 8)), _e.day_schedule(_date(2026, 9, 9))) != (
+            "10:00-18:00", "08:00-16:00"):
+        fails.append("Ημερήσιο ανά εβδομάδα: δεν αποθηκεύτηκαν οι ημέρες")
+    # Η υποβολή γίνεται ΜΟΝΟ από το «Πρόγραμμα → ΕΡΓΑΝΗ» (+ ειδοποίηση στις Υποχρεώσεις)
+    check("υποχρεώσεις: εκκρεμείς υποβολές", c.get("/obligations/"),
+          "εκκρεμείς υποβολές προγράμματος")
+    check("Πρόγραμμα → ΕΡΓΑΝΗ: ημερήσια ομάδα", c.get("/work-schedules/"),
+          "📆 Ημερήσιο πρόγραμμα")
+    c.post("/work-schedules/ergani", data={"week": f"{eid}|2026-09-07"})
+    # Εβδομαδιαίο: καταγράφεται (εκκρεμεί), υποβάλλεται από την ομάδα «Εβδομαδιαίο»
+    c.post(f"/employments/{eid}/schedule", data={
+        "effective_from": "2026-09-14",
+        **{f"day_{k}": v for k, v in _e.schedule.items()}})
+    if not _e.pending_weekly:
+        fails.append("Εβδομαδιαίο: δεν έμεινε εκκρεμές για υποβολή")
+    check("Πρόγραμμα → ΕΡΓΑΝΗ: εβδομαδιαία ομάδα", c.get("/work-schedules/"),
+          "🗓️ Εβδομαδιαίο πρόγραμμα")
+    c.post("/work-schedules/ergani", data={"weekly": f"{eid}|2026-09-14"})
+    if _e.pending_weekly:
+        fails.append("Εβδομαδιαίο: δεν υποβλήθηκε από το «Πρόγραμμα → ΕΡΓΑΝΗ»")
+    # Όρια 11ω/3ω και στο «Ημερήσιο»· το σφάλμα ανανεώνει μόνο το περιεχόμενο
+    _next = _e.day_schedule(_date(2026, 9, 16))
+    _r = c.post(f"/employments/{eid}/schedule/daily", data={
+        "week": "2026-09-14", "hours_2026-09-15": "14:00-23:00",
+        "hours_2026-09-16": _next})
+    if _next and ("#daily-modal" not in _r.headers.get("HX-Retarget", "")
+                  or "11" not in _r.headers.get("HX-Trigger", "")):
+        fails.append("Ημερήσιο: η παραβίαση 11ωρης ανάπαυσης δεν απορρίφθηκε σωστά")
+    check("Ημερήσιο: ◀ ▶ χωρίς νέο .modal", c.get(
+        f"/employments/{eid}/modal/daily?week=2026-09-21"), 'id="daily-modal"')
+    if _e.day_status(_date(2026, 9, 8)) != "submitted":
+        fails.append("Πρόγραμμα → ΕΡΓΑΝΗ: η υποβολή δεν δήλωσε τις ημέρες")
+    c.post(f"/employments/{eid}/schedule/daily", data={"hours_2026-08-20": ""})
+    if not _e.day_schedule(_date(2026, 8, 20)):
+        fails.append("Ημερήσιο: άλλαξε ημέρα του παρελθόντος")
     check(f"/employments/{eid} επιδότηση", c.get(f"/employments/{eid}"),
           "Επιδότηση εργατικής εισφοράς")
     check(f"/employments/{eid}/modal/childcare",

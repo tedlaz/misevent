@@ -269,6 +269,13 @@
           εισφορές, ΦΜΥ, Δώρα) εξοφλείται μόλις ολοκληρωθεί το προαπαιτούμενό
           της. Προεπιλογή: εμφανίζονται και εξοφλούνται χειροκίνητα</span>
       </label>
+      <label>Ορίζοντας «Εκκρεμών» υποχρεώσεων (μήνες μετά τον τρέχοντα)
+        <input type="number" name="obligations_horizon_months" min="0" max="24"
+               step="1" style="max-width:90px"
+               value="{{ misc.obligations_horizon_months }}">
+        <span class="muted" style="font-size:12.5px">— π.χ. 1: τον 3/2026
+          εμφανίζονται εκκρεμότητες έως και 4/2026 (οι εκπρόθεσμες πάντα)</span>
+      </label>
       <div class="btnrow" style="margin-top:10px">
         <button class="run" type="submit">Αποθήκευση προτιμήσεων</button>
       </div>

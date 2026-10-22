@@ -160,10 +160,41 @@
     validate();
   }
 
+  /* ΩΡΑ σε 24ωρη μορφή (ΩΩ:ΛΛ): το native type="time" δείχνει «2 μμ» σε
+     αγγλικό browser. Το κάνουμε πεδίο κειμένου με μάσκα — η τιμή που
+     υποβάλλεται μένει «ΩΩ:ΛΛ», ίδια με του native, άρα ο server δεν αλλάζει. */
+  const TIME = /^([01]\d|2[0-3]):[0-5]\d$/;
+  const maskTime = raw => {
+    const digits = (raw || "").replace(/\D/g, "").slice(0, 4);
+    return digits.length > 2 ? `${digits.slice(0, 2)}:${digits.slice(2)}` : digits;
+  };
+
+  function enhanceTime(input) {
+    input.dataset.grDone = "1";
+    input.value = (input.value || "").slice(0, 5);  // «14:00:00» -> «14:00»
+    input.type = "text";
+    input.inputMode = "numeric";
+    input.maxLength = 5;
+    input.size = 5;
+    input.placeholder = "ΩΩ:ΛΛ";
+    input.autocomplete = "off";
+    const validate = () => input.setCustomValidity(
+      !input.value || TIME.test(input.value) ? "" : "Δώσε ώρα 24ωρη, π.χ. 14:00"
+    );
+    input.addEventListener("input", () => {
+      const next = maskTime(input.value);
+      if (next !== input.value) input.value = next;
+      validate();
+    });
+    validate();
+  }
+
   const scan = root => {
     const target = root && root.querySelectorAll ? root : document;
     target.querySelectorAll('input[type="date"]:not([data-gr-done])')
       .forEach(enhance);
+    target.querySelectorAll('input[type="time"]:not([data-gr-done])')
+      .forEach(enhanceTime);
   };
 
   document.addEventListener("DOMContentLoaded", () => scan(document));

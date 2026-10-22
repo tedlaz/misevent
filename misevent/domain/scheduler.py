@@ -72,6 +72,7 @@ from misevent.domain.events import (
     ObligationFulfilled,
     ObligationScheduled,
     PaymentMade,
+    RetroScheduleSubmitted,
     WageAdjustmentApplied,
 )
 from misevent.rules.calendar_gr import last_working_day_of_month
@@ -122,6 +123,7 @@ class ObligationScheduler:
         self._gift_keys: set[tuple[str, int]] = set()
         self._allowance_periods: set[tuple[int, int]] = set()
         self._wage_adjust_periods: set[tuple[int, int]] = set()
+        self._retro_periods: set[tuple[int, int]] = set()
         self._bootstrap()
 
     def _bootstrap(self):
@@ -144,6 +146,9 @@ class ObligationScheduler:
             elif ob.obligation_type == "WAGE_ADJUSTMENT":
                 self._wage_adjust_periods.add(key)
 
+            elif ob.obligation_type == "RETRO_SCHEDULE":
+                self._retro_periods.add(key)
+
     def rebuild(self):
         """Ξαναχτίζει την εσωτερική απομνημόνευση μετά από event rollback."""
         self._company_periods.clear()
@@ -151,6 +156,7 @@ class ObligationScheduler:
         self._gift_keys.clear()
         self._allowance_periods.clear()
         self._wage_adjust_periods.clear()
+        self._retro_periods.clear()
         self._bootstrap()
 
     # ------------------------------------------------------------------
@@ -183,9 +189,16 @@ class ObligationScheduler:
                 self._ensure_teka(since=(start.year, start.month))
 
         elif isinstance(event, AttendanceSheetApproved):
-            self._fulfill(
-                "ATTENDANCE_APPROVAL", event.period_year, event.period_month
-            )
+            y, m = event.period_year, event.period_month
+            self._fulfill("ATTENDANCE_APPROVAL", y, m)
+            # Απολογιστικό σύστημα τον μήνα -> δήλωση των αποκλίσεων της κάρτας
+            if (self.proj.schedule_system_on(date(y, m, 1)) == "retro"
+                    and (y, m) not in self._retro_periods):
+                self._retro_periods.add((y, m))
+                self._schedule("RETRO_SCHEDULE", ot.due_date("RETRO_SCHEDULE", y, m), y, m)
+
+        elif isinstance(event, RetroScheduleSubmitted):
+            self._fulfill("RETRO_SCHEDULE", event.period_year, event.period_month)
 
         elif isinstance(event, MonthlyPayrollCalculated):
             y, m = event.period_year, event.period_month

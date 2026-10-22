@@ -1,10 +1,7 @@
 {% extends "base.html" %}
-{% block title %}Πρόγραμμα εργασίας — misevent{% endblock %}
-{% block heading %}Πρόγραμμα εργασίας{% endblock %}
-{% block subheading %}ετήσιος προγραμματισμός εργαζομένων{% endblock %}
-{% block head %}
-  <script src="{{ url_for('static', filename='work-schedule-planner.js', v=15) }}" defer></script>
-{% endblock %}
+{% block title %}Πρόγραμμα → ΕΡΓΑΝΗ — misevent{% endblock %}
+{% block heading %}Πρόγραμμα → ΕΡΓΑΝΗ{% endblock %}
+{% block subheading %}αλλαγές προγράμματος προς δήλωση και ιστορικό αποστολών{% endblock %}
 {% block content %}
-  {% include "partials/_work_schedule_panel.html" %}
+  {{ panel|safe }}
 {% endblock %}

@@ -20,6 +20,24 @@ def flash_to(html: str, msg: str, err: bool = False):
     return resp
 
 
+def live_done(msg: str):
+    """Επιτυχία modal των «Ζωντανά»: κενό σώμα (κλείνει το modal) + toast +
+    εντολή στο grid να ξαναφορτώσει ΤΩΡΑ (`lb-refresh`, live-board.js)."""
+    resp = make_response("")
+    resp.headers["HX-Trigger"] = json.dumps(
+        {"flash": {"msg": msg, "err": False}, "lb-refresh": True}
+    )
+    return resp
+
+
+def modal_error(html: str, msg: str):
+    """Αποτυχία modal: ξαναδείχνει το modal (στο `#modal-host`) με toast."""
+    resp = flash_to(html, msg, err=True)
+    resp.headers["HX-Retarget"] = "#modal-host"
+    resp.headers["HX-Reswap"] = "innerHTML"
+    return resp
+
+
 def run_command(fn, *args, **kwargs):
     """Εκτελεί εντολή σειριοποιημένα. Επιστρέφει (ok, message).
 

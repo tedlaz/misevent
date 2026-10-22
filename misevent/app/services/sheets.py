@@ -13,6 +13,7 @@ import misevent.domain.payroll_engine as pe
 import misevent.domain.work_hours as work_hours
 import misevent.rules.config as config
 from misevent.domain.events import AttendanceSheetApproved, LeaveType
+from misevent.integrations import card_punches as cp
 from misevent.rules.calendar_gr import last_working_day_of_month
 
 
@@ -131,9 +132,12 @@ class SheetsMixin:
             year_shifts = {}
             for m in range(1, month + 1):
                 if emp.attendance_days_in_month(year, m):
+                    # Στρογγυλοποίηση (`card_rounding_minutes`, 0 = καμία) ΜΟΝΟ
+                    # εδώ: οι ώρες είναι ΠΡΟΤΑΣΗ, εγκρίνονται στο φύλλο.
+                    step = config.work_hour_rules_for(date(year, m, 1)).card_rounding_minutes
                     year_shifts.update(
                         {
-                            d: s
+                            d: cp.rounded_texts(s, step)
                             for d, s in emp.attendance_shifts.items()
                             if d.year == year and d.month == m
                         }

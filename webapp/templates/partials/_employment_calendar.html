@@ -1,0 +1,46 @@
+{# Μηνιαίο ημερολόγιο εργαζομένου (όπως στο ΕΡΓΑΝΗ). Οι κατηγορίες
+   ανάβουν/σβήνουν με ΚΑΘΑΡΟ CSS (`:has(:checked)`, app.css §Ημερολόγιο).
+   Η πλοήγηση αντικαθιστά όλο το μπλοκ μέσω htmx. #}
+<div class="ecal" id="ecal-{{ mid }}"
+     hx-get="{{ url_for('employments.calendar', employment_id=mid, m=first.strftime('%Y-%m')) }}"
+     hx-trigger="ecal-refresh from:body" hx-swap="outerHTML">
+  <div class="ecal-keys">
+    {% for k, lbl in [('plan', 'Ψηφιακή οργάνωση χρόνου εργασίας'),
+                      ('punch', 'Κάρτα εργασίας'), ('overtime', 'Υπερωρία'),
+                      ('leave', 'Άδειες')] %}
+      <label><input type="checkbox" checked data-k="{{ k }}">
+        <i class="ecal-key {{ k }}"></i>{{ lbl }}</label>
+    {% endfor %}
+  </div>
+  <div class="ecal-nav">
+    {% set url = url_for('employments.calendar', employment_id=mid) %}
+    <span>
+      <button type="button" class="ghost sm" aria-label="Προηγούμενος μήνας"
+              hx-get="{{ url }}?m={{ prev }}" hx-target="#ecal-{{ mid }}" hx-swap="outerHTML">◀</button>
+      <button type="button" class="ghost sm" aria-label="Επόμενος μήνας"
+              hx-get="{{ url }}?m={{ next }}" hx-target="#ecal-{{ mid }}" hx-swap="outerHTML">▶</button>
+      <button type="button" class="ghost sm"
+              hx-get="{{ url }}?m={{ now }}" hx-target="#ecal-{{ mid }}" hx-swap="outerHTML">Σήμερα</button>
+    </span>
+    <b>{{ label }}</b>
+    <span></span>
+  </div>
+  <div class="ecal-grid">
+    {% for n in ['Δευ', 'Τρι', 'Τετ', 'Πεμ', 'Παρ', 'Σαβ', 'Κυρ'] %}
+      <div class="ecal-h">{{ n }}</div>
+    {% endfor %}
+    {% for week in weeks %}{% for d, items in week %}
+      <div class="ecal-d{{ ' out' if d.month != first.month }}{{ ' today' if d == today }}{{ ' off' if not e.active_on(d) }}"
+           role="button" tabindex="0" title="Ιστορικό ημέρας"
+           aria-label="Ιστορικό {{ d|date_gr }}"
+           hx-get="{{ url_for('employments.calendar_day', employment_id=mid, d=d.isoformat()) }}"
+           hx-trigger="click, keyup[key=='Enter']"
+           hx-target="#modal-host" hx-swap="innerHTML">
+        <span class="ecal-n">{{ d.day }}</span>
+        {% for k, hours, lbl in items %}
+          <div class="ecal-ev {{ k }}">{% if hours %}<b>{{ hours }}</b>{% endif %}<span>{{ lbl }}</span></div>
+        {% endfor %}
+      </div>
+    {% endfor %}{% endfor %}
+  </div>
+</div>

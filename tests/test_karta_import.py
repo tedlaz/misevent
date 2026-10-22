@@ -106,3 +106,34 @@ def test_import_feeds_attendance_draft():
     expected = len({d for (a, d) in feb if a == "100011110"})
     assert draft["worked"] == expected
     print(f"OK το συγκεντρωτικό δείχνει {draft['worked']} ημέρες (πηγή: recorded)")
+
+
+def test_flexible_layout():
+    """Τίτλος πάνω από την επικεφαλίδα, άλλη σειρά στηλών, χωρίς τόνους,
+    «Είσοδος/Έξοδος», ISO/Excel ημερομηνίες και ώρες -> διαβάζονται όλα."""
+    import io
+    import zipfile
+
+    rows = [
+        ("Κάρτα εργασίας",),
+        ("ΕΞΟΔΟΣ", "εισοδος", "ημερομηνια", "Παράρτημα", "αφμ"),
+        ("17:00:00", "8:01", "2026-09-14", "0", "115511740"),
+        ("0.75", "0.3333333", "46280", "0", "115511740"),  # 15/9/2026 08:00-18:00
+        ("", "09:00", "16/9/2026 00:00", "0", "115511740"),
+    ]
+    xml = ('<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/'
+           '2006/main"><sheetData>' + "".join(
+               f'<row r="{i}">' + "".join(
+                   f'<c r="{c}{i}" t="str"><v>{v}</v></c>' for c, v in zip("ABCDE", r)
+               ) + "</row>" for i, r in enumerate(rows, 1))
+           + "</sheetData></worksheet>")
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w") as z:
+        z.writestr("xl/worksheets/sheet1.xml", xml)
+    got = [(p.day, p.time_in, p.time_out) for p in ki.parse_karta(buf.getvalue())]
+    assert got == [
+        (date(2026, 9, 14), "08:01", "17:00"),
+        (date(2026, 9, 15), "08:00", "18:00"),
+        (date(2026, 9, 16), "09:00", ""),
+    ], got
+    print("OK ελαστική ανάγνωση στηλών/ημερομηνιών/ωρών")

@@ -306,126 +306,7 @@ table.tbl a.lnk:hover{border-color:var(--ink)}
 .frm .dayrow b{width:34px;font-size:12px;color:var(--muted)}
 .frm .row{display:flex;gap:6px}
 
-/* ------------------------------------ Κεντρικός ετήσιος προγραμματισμός */
-.leave-toolbar{display:flex;align-items:center;justify-content:space-between;gap:18px}
-.leave-toolbar h2{margin-bottom:4px}.leave-toolbar p{font-size:12.5px;color:var(--muted)}
-.leave-toolbar-actions,.leave-zoom{display:flex;align-items:center;gap:8px}
-.leave-zoom{padding-right:10px;border-right:1px solid var(--line)}
-.leave-zoom button{min-width:36px;padding-left:10px;padding-right:10px}
-.leave-zoom button:disabled{opacity:.35;cursor:not-allowed;transform:none}
-.leave-zoom .leave-zoom-level{min-width:48px;font-family:var(--mono);font-size:12px}
-.leave-year-nav,.leave-year-nav form{display:flex;align-items:center;gap:8px}
-.leave-year-nav label{font-size:12px;color:var(--muted);display:flex;align-items:center;gap:6px}
-.leave-year-nav input{width:84px;font:inherit;border:1px solid var(--line);
-  border-radius:8px;padding:7px 8px;color:var(--ink);background:var(--card)}
-.leave-legend{display:flex;gap:16px;flex-wrap:wrap;color:var(--muted);font-size:12px;
-  padding:0 4px}
-.leave-legend span{display:flex;align-items:center;gap:6px}
-.leave-color{width:12px;height:12px;border-radius:4px;display:inline-block}
-.leave-accrual-key{margin-left:auto}.leave-accrual-key>i{width:26px;height:8px;
-  border-radius:8px;background:linear-gradient(90deg,#CFEBDD,#F5D9A7,#F2B5B5)}
-.leave-board{padding:0;overflow:hidden}.leave-board-scroll{overflow:auto}
-.leave-head,.leave-row{display:grid;
-  grid-template-columns:235px minmax(var(--leave-timeline-width,850px),1fr);
-  min-width:calc(235px + var(--leave-timeline-width,850px))}
-.leave-head{position:sticky;top:0;z-index:5;background:var(--card);
-  border-bottom:1px solid var(--line)}
-.leave-name-head{padding:12px 14px;font-size:10.5px;font-weight:700;color:var(--muted);
-  letter-spacing:.06em;text-transform:uppercase;border-right:1px solid var(--line)}
-.leave-months,.leave-month-lines{display:flex;width:100%}
-.leave-months div{padding:12px 2px;text-align:center;font-size:10.5px;font-weight:700;
-  color:var(--muted);text-transform:uppercase;border-right:1px solid var(--line)}
-.leave-row{border-bottom:1px solid var(--line);animation:leave-row-in .32s ease-out both;
-  animation-delay:min(calc(var(--row-index) * 35ms),280ms)}
-.leave-row:last-child{border-bottom:0}
-.leave-employee{position:sticky;left:0;z-index:4;background:var(--card);padding:8px 12px;
-  border-right:1px solid var(--line);display:flex;flex-direction:column;justify-content:center}
-.leave-employee:hover b{text-decoration:underline}.leave-employee b{font-size:13px}
-.leave-employee small{font-size:10.5px;color:var(--muted);margin-top:2px}
-.leave-balance-summary{display:grid;grid-template-columns:repeat(3,1fr);gap:4px;margin-top:7px;
-  padding:5px;border:1px solid var(--line);border-radius:9px;background:var(--paper);
-  transition:border-color .2s ease,background .2s ease,transform .2s ease}
-.leave-balance-summary span{min-width:0;text-align:center}.leave-balance-summary em{
-  display:block;color:var(--muted);font-size:8px;font-style:normal;text-transform:uppercase;
-  letter-spacing:.035em}.leave-balance-summary strong{display:block;margin-top:1px;
-  font-family:var(--mono);font-size:11px;color:var(--ink)}
-.leave-balance-summary.tone-good{border-color:#B9DDC9;background:#F2FAF6}
-.leave-balance-summary.tone-warn{border-color:#E9C985;background:#FFF9EC}
-.leave-balance-summary.tone-danger{border-color:#E6AAAA;background:#FFF2F2}
-.leave-balance-summary.tone-danger strong:last-child{color:#B83838}
-.leave-balance-summary.bump{transform:scale(1.018)}
-.leave-future-planned{font-size:8.5px!important;color:#8A671E!important;line-height:1.2}
-.leave-track{position:relative;min-height:46px;background:var(--card);overflow:hidden;
-  cursor:crosshair}
-.leave-inactive{position:absolute;top:0;bottom:0;z-index:0;pointer-events:none;
-  display:flex;align-items:center;justify-content:center;overflow:hidden;
-  color:#7A8793;background:repeating-linear-gradient(135deg,#E2E7EC 0,#E2E7EC 7px,
-  #D7DDE3 7px,#D7DDE3 14px);box-shadow:inset 0 0 0 1px rgba(93,107,120,.12)}
-.leave-inactive span{font-size:9.5px;font-weight:700;letter-spacing:.04em;
-  text-transform:uppercase;white-space:nowrap;padding:2px 6px;background:rgba(255,255,255,.66);
-  border-radius:4px}
-/* ΚΛΕΙΣΜΕΝΗ ΜΙΣΘΟΔΟΣΙΑ: ανοιχτό μωβ πέπλο από την αρχή του έτους έως το
-   τέλος της κλεισμένης περιόδου. Πάνω από τις μπάρες (z-index 4) ώστε να
-   φαίνεται ότι είναι κλειδωμένες, χωρίς να τις κρύβει. */
-.leave-closed{position:absolute;top:0;bottom:0;left:0;z-index:4;pointer-events:none;
-  display:flex;align-items:flex-start;justify-content:flex-end;overflow:hidden;
-  background:rgba(151,113,201,.20);
-  box-shadow:inset -2px 0 0 rgba(122,86,171,.55)}
-.leave-closed span{font-size:9.5px;font-weight:700;letter-spacing:.04em;
-  text-transform:uppercase;white-space:nowrap;padding:2px 6px;margin:4px 6px 0 0;
-  color:#5F4788;background:rgba(255,255,255,.78);border-radius:4px}
-.leave-color.leave-closed-key{background:rgba(151,113,201,.45)}
-.leave-color.leave-contract-end-key{background:#FCE8E4;border:1px dashed #D55C4B}
-.leave-contract-summary{color:#B84C3E!important;font-weight:700}
-.leave-contract-end{position:absolute;top:0;bottom:0;z-index:3;width:0;
-  border-left:2px dashed #D55C4B;pointer-events:none}
-.leave-contract-end span{position:absolute;top:3px;left:4px;padding:1px 4px;border-radius:4px;
-  background:#FFF4F1;color:#A63F33;font-family:var(--mono);font-size:8.5px;
-  font-weight:700;white-space:nowrap}
-.leave-months .closed{background:#EDE6F7;color:#6E5A93;border-radius:4px}
-.leave-month-lines{position:absolute;inset:0;z-index:1;pointer-events:none}
-.leave-month-lines i{border-right:1px solid var(--line);background:linear-gradient(
-  180deg,rgba(246,248,251,.2),rgba(246,248,251,.65));}
-.leave-accrual-strip{position:absolute;left:0;right:0;bottom:0;height:30px;z-index:2;
-  display:flex;border-top:1px solid #DCE5EC;background:rgba(250,252,253,.92);
-  cursor:default}
-.leave-accrual-month{position:relative;display:flex;align-items:center;justify-content:center;
-  min-width:0;border-right:1px solid rgba(180,194,206,.45);color:#426050;
-  background:#F2FAF6;transition:background-color .25s ease,color .25s ease}
-.leave-accrual-month>i{position:absolute;top:0;left:0;right:0;height:3px;
-  background:#54A978;transition:background-color .25s ease,transform .25s ease;
-  transform-origin:left center}
-.leave-accrual-month span{font-family:var(--mono);font-size:9px;font-weight:700;
-  white-space:nowrap;pointer-events:none;transition:transform .18s ease}
-.leave-accrual-month.tone-warn{color:#8A671E;background:#FFF8E9}
-.leave-accrual-month.tone-warn>i{background:#DEA63F}
-.leave-accrual-month.tone-danger{color:#A73333;background:#FFF0F0}
-.leave-accrual-month.tone-danger>i{background:#D85A5A}
-.leave-accrual-month.tone-neutral{color:#94A0AA;background:#F1F3F5}
-.leave-accrual-month.tone-neutral>i{background:#C5CDD4}
-.leave-accrual-month.bump span{animation:leave-balance-bump .28s ease-out}
-.leave-bar{position:absolute;height:22px;min-width:5px;border-radius:6px;color:#fff;
-  display:flex;align-items:center;justify-content:center;box-shadow:0 2px 6px rgba(23,36,47,.18);
-  cursor:grab;touch-action:none;user-select:none;z-index:2;outline:none;
-  transition:box-shadow .16s ease,filter .16s ease}
-.leave-bar:hover,.leave-bar:focus-visible{box-shadow:0 0 0 2px #fff,0 0 0 4px var(--ink);
-  z-index:2}.leave-bar.dragging{cursor:grabbing;filter:brightness(1.08);z-index:4}
-.leave-bar.saving{opacity:.62;cursor:wait}
-.leave-bar.over-accrual{box-shadow:0 0 0 2px #fff,0 0 0 4px #D43D3D,
-  0 4px 12px rgba(180,44,44,.28);animation:leave-over-pulse 1.4s ease-in-out infinite}
-.leave-bar-text{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:0 5px;
-  font-family:var(--mono);font-size:10.5px;font-weight:700;pointer-events:none}
-.leave-handle{position:absolute;top:0;bottom:0;width:8px;cursor:ew-resize}
-.leave-handle.start{left:0;border-radius:6px 0 0 6px}.leave-handle.end{right:0;border-radius:0 6px 6px 0}
-.leave-handle::after{content:'';position:absolute;top:6px;bottom:6px;width:2px;
-  left:3px;border-radius:2px;background:rgba(255,255,255,.8)}
-.leave-date-badge{position:fixed;z-index:80;pointer-events:none;white-space:nowrap;
-  padding:7px 10px;border-radius:9px;background:var(--ink);color:#fff;
-  font-family:var(--mono);font-size:11px;font-weight:600;
-  box-shadow:var(--sh-2)}
-.leave-date-badge small{display:block;margin-top:3px;color:#DDE6ED;font-size:9.5px;
-  font-weight:500}.leave-date-badge.danger small{color:#FFD0D0}
-/* ΠΑΛΕΤΑ ΤΥΠΩΝ ΑΔΕΙΑΣ — ΜΙΑ πηγή: τη διαβάζουν και το grid «Άδειες» και οι
+/* ΠΑΛΕΤΑ ΤΥΠΩΝ ΑΔΕΙΑΣ — ΜΙΑ πηγή: τη διαβάζουν το Gantt του «Μήνα» και οι
    ζώνες άδειας του «Ζωντανά» (§/live). Το πορτοκαλί ΔΕΝ ανήκει εδώ: είναι
    αποκλειστικά της ασυμφωνίας με την κάρτα. */
 :root{--lv-annual:#26845B;--lv-sick:#D14B4B;--lv-unpaid:#7A5AA6;
@@ -436,224 +317,10 @@ table.tbl a.lnk:hover{border-color:var(--ink)}
 .leave-mitrotita{background:var(--lv-maternity)}
 .leave-goniki{background:var(--lv-parental)}
 .leave-frontida_teknou{background:var(--lv-childcare)}
-@keyframes leave-row-in{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:none}}
-@keyframes leave-balance-bump{0%{transform:scale(.82)}70%{transform:scale(1.12)}100%{transform:none}}
-@keyframes leave-over-pulse{50%{filter:brightness(1.08)}}
-@media(prefers-reduced-motion:reduce){.leave-row,.leave-bar.over-accrual,
-  .leave-accrual-month.bump span{animation:none}.leave-bar,.leave-accrual-month,
-  .leave-balance-summary{transition:none}}
-@media(max-width:720px){.leave-toolbar{align-items:flex-start;flex-direction:column}
-  .leave-toolbar-actions{width:100%;flex-wrap:wrap}.leave-zoom{border-right:0}
-  .leave-year-nav{width:100%}.leave-year-nav form{flex:1}.leave-year-nav form label{flex:1}
-  .leave-year-nav input{width:100%}.leave-accrual-key{margin-left:0}}
 
-/* -------------------------------------------- Ετήσιο πρόγραμμα εργασίας */
-.work-schedule-planner{view-transition-name:work-schedule-panel}
-/* Το view-transition-name κάνει το panel stacking context: το modal που ζει
-   μέσα του (#modal-host) θα έμενε κάτω από τη sticky κεφαλίδα (z-index 5).
-   Όσο είναι ανοιχτό, το panel ανεβαίνει πάνω από αυτήν. */
-.work-schedule-planner:has(.modal-backdrop){position:relative;z-index:31}
-.work-schedule-planner.bulk-swap-smooth .work-row{animation:none}
-::view-transition-old(work-schedule-panel){animation:work-panel-out .16s ease-in both}
-::view-transition-new(work-schedule-panel){animation:work-panel-in .22s ease-out both}
-@keyframes work-panel-out{to{opacity:.2;filter:blur(1.5px)}}
-@keyframes work-panel-in{from{opacity:.2;filter:blur(1.5px)}to{opacity:1;filter:none}}
-@media(prefers-reduced-motion:reduce){::view-transition-old(work-schedule-panel),
-  ::view-transition-new(work-schedule-panel){animation:none}}
-.work-toolbar{display:flex;align-items:center;justify-content:space-between;gap:18px}
-.work-toolbar h2{margin-bottom:4px}.work-toolbar p{font-size:12.5px;color:var(--muted)}
-.work-toolbar-actions,.work-zoom{display:flex;align-items:center;gap:8px}
-.work-zoom{padding-right:10px;border-right:1px solid var(--line)}
-.work-zoom button{min-width:36px;padding-left:10px;padding-right:10px}
-.work-zoom button:disabled{opacity:.35;cursor:not-allowed;transform:none}
-.work-zoom-level{min-width:52px!important;font-family:var(--mono);font-size:12px}
-.work-legend{display:flex;align-items:center;gap:10px 15px;flex-wrap:wrap;padding:0 4px;
-  margin:12px 0 14px;
-  color:var(--muted);font-size:11.5px}.work-legend span{display:flex;align-items:center;gap:6px}
-.work-legend small{margin-left:auto;color:var(--muted)}
-.work-key{width:17px;height:10px;border-radius:3px;border:1px solid rgba(42,58,70,.12)}
-.work-key.work{background:#DDF3E7;border-top:3px solid #33976A}
-.work-key.off{background:#F1F3F5}.work-key.telework{background:#EDE5FA;border-top:3px solid #805BB1}
-.work-key.override{background:#FFF7E5;border-top:3px solid #D49A2D}
-.work-key.holiday{background:#FBE8D2}.work-key.leave{background:repeating-linear-gradient(
-  135deg,#E4F1EB 0,#E4F1EB 3px,#55A77A 3px,#55A77A 5px)}
-.work-key.submitted{background:rgba(46,140,90,.16);border-top:3px solid #2E8C5A}
-.work-key.modified{background:rgba(74,108,214,.20);border-top:3px solid #4A6CD6}
-.work-key.pending{background:rgba(224,150,40,.22);border-top:3px solid #E0A93B}
-.work-key.closed{background:#E3D9F3;border-top:3px solid #9771C9}
-.work-key.contract-end{background:#FCE8E4;border-left:3px dashed #D55C4B}
-/* Επιλεγμένες εβδομάδες (κεφαλίδα) για μαζική υποβολή στο ΕΡΓΑΝΗ */
-.work-weeks div.week-selected{background:#DDF0FF;color:#1C5A8F;box-shadow:inset 0 0 0 2px #4A8FD6}
-.work-erg-weeks-toolbar{position:sticky;left:0;z-index:12;display:flex;flex-wrap:wrap;gap:9px;
-  align-items:center;margin:0 0 10px;padding:9px 13px;border:1px solid #4A8FD6;border-radius:9px;
-  background:#EAF3FC;color:#1C5A8F;font-size:12.5px}
-.work-erg-weeks-toolbar strong{font-family:var(--mono)}
-.work-erg-weeks-toolbar .spacer{flex:1}
-.work-erg-weeks-toolbar button{padding:5px 12px;border-radius:8px;border:1px solid #2F6FA8;
-  background:#2F6FA8;color:#fff;font-weight:700;font-size:12px;cursor:pointer}
-.work-erg-weeks-toolbar button.ghost{background:#fff;color:#2F6FA8}
-.work-erg-weeks-toolbar button:hover{filter:brightness(1.06)}
-.work-board{padding:0;overflow:hidden}.work-board-scroll{overflow:auto;overscroll-behavior:contain;
-  overflow-anchor:none}
-.work-head,.work-row{display:grid;
-  grid-template-columns:235px minmax(var(--work-timeline-width,850px),1fr);
-  min-width:calc(235px + var(--work-timeline-width,850px))}
-.work-head{position:sticky;top:0;z-index:8;height:78px;background:var(--card);
-  border-bottom:1px solid var(--line)}
-.work-name-head{position:sticky;left:0;z-index:10;padding:29px 13px;background:var(--card);
-  border-right:1px solid var(--line);color:var(--muted);font-size:10px;font-weight:700;
-  letter-spacing:.055em;text-transform:uppercase}
-.work-time-head{position:relative;min-width:0}.work-months{position:absolute;
-  left:0;right:0;top:0;height:26px;display:flex;border-bottom:1px solid var(--line)}
-.work-months div{padding:8px 2px;text-align:center;border-right:1px solid var(--line);
-  color:var(--muted);font-size:10px;font-weight:700;text-transform:uppercase;
-  cursor:zoom-in;user-select:none}.work-months div:hover{background:#EAF3FC;color:#286FA8}
-/* Το όνομα του μήνα «κολλάει» δίπλα στη σταθερή στήλη, ώστε να μένει ορατό
-   ακόμη κι όταν σε μεγάλο zoom το πλάτος του μήνα ξεπερνά το παράθυρο. */
-.work-month-label{position:sticky;left:235px;display:inline-block;max-width:100%}
-.work-weeks{position:absolute;left:0;right:0;top:26px;height:23px;display:flex;
-  border-bottom:1px solid var(--line);background:#F8FAFC}
-.work-weeks div{min-width:0;padding:6px 1px;text-align:center;overflow:hidden;
-  border-right:1px solid #DCE4EA;color:#82909B;font-family:var(--mono);font-size:7.5px;
-  font-weight:700;white-space:nowrap;cursor:zoom-in;user-select:none}
-.work-weeks div:hover{position:relative;z-index:2;background:#E6F3EC;color:#24704E}
-.work-day-heads,.work-track{display:grid;
-  grid-template-columns:repeat(var(--work-days),minmax(0,1fr));width:100%}
-.work-day-heads{position:absolute;left:0;right:0;bottom:0;height:29px}
-.work-day-heads>div{position:relative;min-width:0;text-align:center;color:#75828D;
-  overflow:hidden;cursor:zoom-in;user-select:none}.work-day-heads span{display:none}.work-day-heads b{display:none}
-.work-day-heads .month-start{box-shadow:inset 1px 0 #BCC8D1}
-.work-day-heads .weekend{background:#F1F3F5}.work-day-heads .holiday{background:#FCEAD7}
-.work-day-heads .today{box-shadow:inset 0 -3px #287CAB}
-.work-row{min-height:40px;border-bottom:1px solid var(--line);
-  animation:leave-row-in .28s ease-out both;
-  animation-delay:min(calc(var(--row-index) * 30ms),240ms)}
-.work-row:last-child{border-bottom:0}.work-employee{position:sticky;left:0;z-index:6;
-  display:flex;flex-direction:column;justify-content:center;padding:4px 12px;background:var(--card);
-  border-right:1px solid var(--line)}
-.work-employee-link{display:flex;flex-direction:column;text-decoration:none;color:inherit}
-.work-employee-link:hover>b{text-decoration:underline}.work-employee-link>b{font-size:12.5px}
-.work-employee-link>small{margin-top:2px;color:var(--muted);font-size:9.5px}
-.work-erg-btn{margin-top:3px;align-self:flex-start;display:inline-flex;align-items:center;gap:4px;
-  padding:2px 8px;border:1px solid #E0A93B;border-radius:7px;background:#FCF3E1;color:#8A5A12;
-  font-size:9.5px;font-weight:700;letter-spacing:.03em;cursor:pointer}
-.work-erg-btn:hover{background:#F7E7C4}.work-erg-btn b{font-family:var(--mono);font-size:10px}
-.work-erg-btn b.mod{color:#3A56B0}
-.work-erg-ok{margin-top:3px;align-self:flex-start;color:#2C8158;font-size:9px;font-weight:700;
-  letter-spacing:.03em}
-.work-tele-summary{color:#72509B!important}
-.work-track{position:relative;min-width:0;cursor:crosshair;background:#FBFCFD;
-  padding-bottom:30px}  /* χώρος για τη λωρίδα υπολοίπου αδείας */
-.work-track .leave-accrual-strip{display:flex}.work-employee .leave-balance-summary{max-width:200px}
-.work-day-cell{position:relative;min-width:0;overflow:hidden;background:#F7F9FA;
-  cursor:zoom-in;transition:background-color .16s ease,filter .16s ease}
-.work-day-cell.bulk-selected{z-index:3;outline:2px solid #25E8D0;outline-offset:-2px;
-  filter:brightness(1.04);box-shadow:inset 0 0 12px rgba(37,232,208,.42)}
-.work-day-cell.bulk-selected::before{content:'';position:absolute;inset:0;z-index:4;
-  background:linear-gradient(135deg,rgba(37,232,208,.22),rgba(82,121,255,.22));
-  pointer-events:none;animation:work-cell-selected .22s ease-out}
-@keyframes work-cell-selected{from{opacity:0;transform:scale(.55)}to{opacity:1;transform:none}}
-.work-day-cell.month-start{box-shadow:inset 1px 0 #BCC8D1}.work-day-cell.weekend{background:#F0F2F4}
-.work-day-cell.state-work{background:#E9F7EF}.work-day-cell.state-telework{background:#F0EAF9}
-.work-day-cell.state-off.weekend{background:#E9EDF0}
-.work-day-cell.state-inactive{background:repeating-linear-gradient(135deg,#E7EAED 0,
-  #E7EAED 6px,#DDE2E6 6px,#DDE2E6 12px);cursor:not-allowed}
-.work-day-cell.holiday::after{content:'';position:absolute;inset:0;background:rgba(238,150,48,.16);
-  pointer-events:none}.work-day-mark{position:absolute;left:0;right:0;bottom:0;height:3px;
-  background:#3A9A6C}.state-telework .work-day-mark{background:#805BB1}
-.work-day-cell.override{box-shadow:inset 0 3px #D49A2D}.work-day-cell.override.month-start{
-  box-shadow:inset 1px 0 #BCC8D1,inset 0 3px #D49A2D}
-.work-day-cell.today{outline:1px solid #287CAB;outline-offset:-1px;z-index:2}
-.work-day-cell.contract-end{outline:2px dashed #D55C4B;outline-offset:-2px;z-index:2}
-/* ΚΛΕΙΣΜΕΝΗ ΜΙΣΘΟΔΟΣΙΑ: ανοιχτό μωβ πέπλο πάνω από κάθε άλλη κατάσταση —
-   η περίοδος είναι κλειδωμένη (καμία αλλαγή προγράμματος/παρουσιών/αδειών). */
-.work-day-cell.closed{cursor:not-allowed}
-.work-day-cell.closed::after{content:'';position:absolute;inset:0;z-index:5;
-  background:rgba(151,113,201,.26);pointer-events:none}
-.work-day-heads .closed{background:#EDE6F7;color:#6E5A93;cursor:not-allowed}
-.work-day-cell.cov-submitted::before,.work-day-cell.cov-modified::before,
-.work-day-cell.cov-pending::before{content:'';position:absolute;inset:0;z-index:0;
-  pointer-events:none}
-.work-day-cell.cov-submitted::before{background:rgba(46,140,90,.10)}
-.work-day-cell.cov-pending::before{background:rgba(224,150,40,.16)}
-.work-day-cell.cov-modified::before{background:rgba(74,108,214,.20)}
-.work-day-cell.cov-submitted.bulk-selected::before,
-.work-day-cell.cov-modified.bulk-selected::before,
-.work-day-cell.cov-pending.bulk-selected::before{background:linear-gradient(135deg,
-  rgba(37,232,208,.22),rgba(82,121,255,.22))}
-.work-day-cell.upcoming{outline:2px solid #E0912A;outline-offset:-2px;z-index:3}
-.work-day-cell.upcoming:not(.bulk-selected)::before{background:rgba(224,145,42,.32);z-index:2;
-  animation:work-upcoming-pulse 1.6s ease-in-out infinite}
-@keyframes work-upcoming-pulse{0%,100%{opacity:.4}50%{opacity:.85}}
+/* Οθόνη «Πρόγραμμα → ΕΡΓΑΝΗ»: αδήλωτη επόμενη εβδομάδα */
 .work-next-alert{margin:0 0 10px;padding:9px 13px;border:1px solid #E0A93B;border-radius:9px;
   background:#FCF3E1;color:#7A4E12;font-size:12.5px;line-height:1.45}
-.work-day-code{display:none;position:absolute;inset:5px 1px 6px;align-items:center;
-  justify-content:center;text-align:center;color:#294238;font-family:var(--mono);
-  font-size:8px;line-height:1.15;overflow:hidden}.state-telework .work-day-code{color:#624785}
-.state-off .work-day-code{color:#89949D}.work-leave-mark{position:absolute;top:5px;left:22%;right:22%;
-  height:4px;z-index:3;border-radius:5px;background:#26845B;box-shadow:0 0 0 1px #fff}
-.leave-astheneia .work-leave-mark{background:#D14B4B}.leave-adeia_aneu_apodoxon .work-leave-mark{
-  background:#7A5AA6}.leave-mitrotita .work-leave-mark{background:#D9679D}
-.leave-goniki .work-leave-mark{background:#287CAB}
-.leave-frontida_teknou .work-leave-mark{background:#1E9A9A}
-.work-day-cell.has-leave{background-image:repeating-linear-gradient(135deg,transparent 0,
-  transparent 5px,rgba(38,132,91,.13) 5px,rgba(38,132,91,.13) 8px)}
-.work-schedule-planner.day-detail .work-day-heads>div{border-right:1px solid #E4E9ED}
-.work-schedule-planner.day-detail .work-day-heads b{display:block;padding-top:8px;
-  font-family:var(--mono);font-size:8px}.work-schedule-planner.day-detail .work-day-cell{
-  border-right:1px solid rgba(199,209,217,.55)}
-.work-schedule-planner.hour-detail .work-day-heads span{display:block;padding-top:3px;
-  font-size:7px;font-weight:700}.work-schedule-planner.hour-detail .work-day-heads b{
-  padding-top:0;font-size:9px}.work-schedule-planner.hour-detail .work-day-code{display:flex}
-.work-schedule-planner.hour-detail .work-day-cell:hover{filter:brightness(.96);z-index:4;
-  box-shadow:0 0 0 2px #fff,0 0 0 4px var(--ink)}
-/* Στο zoom εβδομάδας υπάρχει αρκετός χώρος ανά ημέρα: αξιοποιείται για
-   πραγματικά ευανάγνωστες ημέρες και ωράρια, χωρίς να αλλάζει το year/month view. */
-.work-schedule-planner.week-detail .work-head{height:94px}
-.work-schedule-planner.week-detail .work-name-head{padding-top:36px;padding-bottom:36px}
-.work-schedule-planner.week-detail .work-months{height:27px}
-.work-schedule-planner.week-detail .work-months div{padding-top:7px;font-size:11px}
-.work-schedule-planner.week-detail .work-weeks{top:27px;height:25px}
-.work-schedule-planner.week-detail .work-weeks div{padding-top:6px;font-size:9px}
-.work-schedule-planner.week-detail .work-day-heads{height:42px}
-.work-schedule-planner.week-detail .work-day-heads span{padding-top:5px;font-size:10px;
-  line-height:1.1}.work-schedule-planner.week-detail .work-day-heads b{padding-top:2px;
-  font-size:13px;line-height:1.1}
-.work-schedule-planner.week-detail .work-row{min-height:88px}
-.work-schedule-planner.week-detail .work-day-code{inset:8px 4px 9px;font-size:12px;
-  line-height:1.3;font-weight:700;letter-spacing:.01em}
-.work-schedule-planner.week-detail .work-day-mark{height:4px}
-.work-bulk-toolbar{position:fixed;left:50%;bottom:22px;z-index:24;display:flex;
-  align-items:center;justify-content:center;flex-wrap:wrap;gap:8px;max-width:calc(100vw - 28px);
-  padding:9px 10px 9px 14px;
-  border:1px solid #345274;border-radius:14px;background:rgba(14,23,43,.96);color:#E8F3FF;
-  box-shadow:0 14px 40px rgba(3,9,24,.42),0 0 22px rgba(37,232,208,.2);
-  backdrop-filter:blur(14px);transform:translateX(-50%);animation:work-bulk-in .2s ease-out}
-.work-bulk-toolbar[hidden]{display:none}.work-bulk-toolbar strong{margin-right:3px;color:#83FFF0;
-  font-size:12px;white-space:nowrap;text-shadow:0 0 8px rgba(37,232,208,.55)}
-.work-bulk-toolbar label{display:flex;align-items:center;gap:6px;color:#AFC1D6;
-  font-size:10px;font-weight:700;white-space:nowrap}.work-bulk-toolbar input{width:235px;max-width:42vw;
-  padding:7px 8px;border:1px solid #3E5471;border-radius:8px;background:#101A30;color:#FFF;
-  font-family:var(--mono);font-size:11px}.work-bulk-toolbar button{padding:8px 10px;border:1px solid #3B5474;
-  border-radius:8px;background:#203250;color:#EAF4FF;font:inherit;font-size:11px;font-weight:700;
-  white-space:nowrap;cursor:pointer}.work-bulk-toolbar button:hover{border-color:#43E8CF;
-  background:#254463;box-shadow:0 0 10px rgba(37,232,208,.22)}
-.work-bulk-toolbar button.save{border-color:#238E7E;background:#176552;color:#BFFFF2;
-  box-shadow:0 0 10px rgba(37,232,208,.16)}
-.work-bulk-toolbar button.danger{border-color:#713B58;color:#FFAAC1;background:#3C2034}
-.work-bulk-toolbar button.danger:hover{border-color:#FF5B8D;background:#55233D}
-.work-bulk-toolbar button.revert{border-color:#3A56B0;color:#C7D4FF;background:#1E2A54}
-.work-bulk-toolbar button.revert:hover{border-color:#6E8BFF;background:#28356A}
-.work-bulk-toolbar button.close{padding:4px 7px;border:0;background:transparent;color:#9CB0C7;font-size:18px}
-.work-bulk-toolbar.saving{opacity:.65;pointer-events:none}
-@keyframes work-bulk-in{from{opacity:0;transform:translate(-50%,12px) scale(.96)}
-  to{opacity:1;transform:translateX(-50%)}}
-.work-schedule-planner.week-detail .work-leave-mark{top:8px;height:5px}
-.work-zoom-toast{position:fixed;z-index:90;padding:6px 9px;border-radius:8px;
-  background:var(--ink);color:#fff;font-family:var(--mono);font-size:10.5px;
-  opacity:0;transform:translateY(4px) scale(.96);pointer-events:none;
-  box-shadow:var(--sh-2);transition:opacity .15s ease,transform .15s ease}
-.work-zoom-toast.show{opacity:1;transform:none}
 
 /* Αναλυτικό ημερήσιο πρόγραμμα */
 .work-day-backdrop{padding:24px 14px}.modal.work-day-modal{width:min(1380px,100%);
@@ -728,6 +395,11 @@ table.tbl a.lnk:hover{border-color:var(--ink)}
   background:repeating-linear-gradient(135deg,#FAEEEE 0,#FAEEEE 8px,#F5E5E5 8px,#F5E5E5 16px)}
 .work-absence-track span{position:relative;padding:5px 12px;border:1px solid #E7C8C8;
   border-radius:999px;background:rgba(255,255,255,.88);font-size:11px;font-weight:700}
+.work-punch{position:absolute;bottom:2px;height:6px;min-width:4px;z-index:3;
+  border-radius:3px;background:#2D7DD2;pointer-events:auto}
+.work-punch.open,.work-punch.orphan{background:#F2B705;width:6px!important}
+.work-punch-key{display:inline-block;width:18px;height:6px;border-radius:3px;
+  background:#2D7DD2;vertical-align:middle;margin-right:4px}
 .work-absence-track.focused{box-shadow:inset 0 0 0 2px rgba(45,125,210,.35)}
 .work-hour-head .is-night{color:#F1C6FF;background:#2A144B;text-shadow:0 0 7px #D967FF}
 .work-hour-head .is-next-day{color:#9CFFF3;background:#073E47;text-shadow:0 0 7px #20EAD5}
@@ -786,26 +458,22 @@ table.tbl a.lnk:hover{border-color:var(--ink)}
 .work-shift-menu i.delete::after{transform:rotate(-45deg)}
 @keyframes work-shift-menu-in{from{opacity:0;transform:translateY(-5px) scale(.96)}
   to{opacity:1;transform:none}}
-.work-week-menu small{display:block;max-width:240px;padding:5px 9px 8px;color:#8EA4BC;
-  overflow:hidden;border-bottom:1px solid #2B3D5C;margin-bottom:5px;font-size:9px;
-  text-overflow:ellipsis;white-space:nowrap}.work-week-menu button span{width:17px;color:#69F2DF;
-  font-size:15px;text-align:center;text-shadow:0 0 8px rgba(37,232,208,.65)}
-.work-week-menu button:disabled{opacity:.38;cursor:not-allowed;background:transparent;box-shadow:none}
+
 .work-day-count-label{background:#11182F}.work-staff-count{background:#F5FAFF}
 .work-staff-count div{padding:10px 2px;border-right:1px solid #E5DDC1;color:#B96815;
   font-family:var(--mono);font-size:12px;font-weight:700;text-align:center}
 .work-staff-count .is-night{color:#8D32BD;background:#F7E9FF}
 .work-staff-count .is-next-day{color:#087B78;background:#E4FFFB}
 .work-staff-count .is-next-day.is-night{background:linear-gradient(135deg,#F7E9FF,#E4FFFB)}
-@media(prefers-reduced-motion:reduce){.work-row{animation:none}.work-zoom-toast,
+@media(prefers-reduced-motion:reduce){.work-zoom-toast,
   .work-day-cell,.work-shift-bar{transition:none}.work-shift-bar.has-overtime{animation:none}
-  .work-day-cell.upcoming:not(.bulk-selected)::before{animation:none;opacity:.7}
+
   .work-shift-track.has-split-gap.gap-warning::after{animation:none;opacity:1}
   .work-shift-track.rest-warning-previous .work-rest-limit.previous,
   .work-shift-track.rest-warning-following .work-rest-limit.following{animation:none;opacity:1}
   .work-shift-menu{animation:none}}
-@media(max-width:720px){.work-toolbar{align-items:flex-start;flex-direction:column}
-  .work-toolbar-actions{width:100%;flex-wrap:wrap}.work-zoom{border-right:0}
+@media(max-width:720px){
+
   .work-legend small,.work-day-legend small{margin-left:0;width:100%}
   .work-day-legend{flex-wrap:wrap}.work-day-grid{grid-template-columns:170px minmax(0,1fr)}}
 
@@ -995,8 +663,12 @@ canvas{max-height:230px}
 .modal{background:var(--card);border:1px solid var(--line);border-radius:14px;
   width:min(700px,100%);box-shadow:0 18px 50px rgba(23,36,47,.30);
   display:flex;flex-direction:column;max-height:calc(100vh - 76px)}
-.modal>form{display:flex;flex-direction:column;min-width:0;min-height:0;
-  max-height:inherit}
+.modal>form,.modal>.modal-swap>form{display:flex;flex-direction:column;
+  min-width:0;min-height:0;max-height:inherit}
+/* Περιεχόμενο modal που ανανεώνεται ΧΩΡΙΣ το ίδιο το .modal (hx-select), ώστε
+   να μην ξαναπαίζει το animation εμφάνισης· display:contents = τα παιδιά του
+   μένουν παιδιά του flex .modal. */
+.modal-swap{display:contents}
 .modal .mhead{padding:15px 20px;border-bottom:1px solid var(--line)}
 .modal .mhead h3{font-size:15px;font-weight:700}
 /* min-height:0 -> επιτρέπει στο flex child να σμικρυνθεί και να ΚΥΛΗΣΕΙ αντί
@@ -1551,6 +1223,7 @@ details.box[open] .frm{animation:rise .3s var(--ease) both}
   backdrop-filter:blur(3px) saturate(.9);
   animation:fade .22s var(--ease) both}
 .modal{box-shadow:var(--sh-3);animation:pop .3s var(--spring) both}
+.modal-backdrop.no-anim,.modal-backdrop.no-anim .modal{animation:none}
 .modal .mhead{background:linear-gradient(120deg,#F4F8FD,var(--card))}
 .modal .mbody b.sec{position:relative;padding-left:11px}
 .modal .mbody b.sec::before{content:'';position:absolute;left:0;top:1px;
@@ -2119,7 +1792,7 @@ button.pick>span:first-of-type{flex:1}
 .lboard.nowoff .lb-dot{opacity:.4}
 
 /* Σημαία ΕΡΓΑΝΗ (αδήλωτο / αλλαγή μετά τη δήλωση) */
-.lb-flag{font-style:normal;font-size:10px;font-weight:700;flex:none;
+.lb-flag{font-style:normal;text-decoration:none;font-size:10px;font-weight:700;flex:none;
   width:14px;height:14px;border-radius:4px;display:flex;
   align-items:center;justify-content:center;margin-left:auto}
 .lb-flag.pend{background:var(--prob-bg);color:var(--prob)}
@@ -2412,20 +2085,10 @@ button.pick>span:first-of-type{flex:1}
     color-mix(in srgb,var(--lv-annual) 13%,#fff) 0 4px,
     color-mix(in srgb,var(--lv-annual) 26%,#fff) 4px 8px)}
 
-/* ============================ ΨΗΦΙΑΚΗ ΚΑΡΤΑ — modal χειροκίνητης καταχώρησης
-   Το modal ζει στη σελίδα «Ζωντανά» (#modal-host) και ξαναχτίζεται ολόκληρο
-   μετά από κάθε καταγραφή/ακύρωση: εδώ μόνο η εμφάνιση των «τσιπ» —
+/* ============================ ΨΗΦΙΑΚΗ ΚΑΡΤΑ — modal ημέρας του Ημερολογίου
+   (καρτέλα εργαζομένου) — η εμφάνιση των «τσιπ» —
    ΔΙΕΛΕΥΣΕΙΣ (ωμά γεγονότα) και ΒΑΡΔΙΕΣ (παράγωγα του ζευγαρώματος), ώστε
    να ξεχωρίζουν με μια ματιά. */
-.kindpick{display:flex;gap:10px;align-items:center}
-.kindpick .chk{display:flex;align-items:center;gap:6px;font-size:13px;
-  color:var(--ink);padding:5px 9px;border:1px solid var(--line);
-  border-radius:8px;background:var(--paper)}
-.kindpick .chk:has(input:checked).k-in{border-color:var(--ready);
-  background:var(--ready-bg)}
-.kindpick .chk:has(input:checked).k-out{border-color:var(--prob);
-  background:var(--prob-bg)}
-.punch-go{display:flex;gap:12px;align-items:center;margin:12px 0 4px}
 .cardday{border:1px solid var(--line);border-radius:10px;padding:8px 10px;
   margin-top:8px;background:var(--paper)}
 .cd-head{display:flex;gap:10px;align-items:baseline;font-size:13px}
@@ -2877,3 +2540,36 @@ body.authpage{background:
 .stat[class*=s-]{border-color:var(--line-soft)}
 .stat:not([class*=s-])::before{content:none}
 nav.side .co{font-size:11.5px}
+
+/* --- Ημερολόγιο εργαζομένου (_employment_calendar.html) ----------------- */
+.ecal{--ecal-plan:#5B8DEF;--ecal-punch:#8DBF1A;--ecal-overtime:#F59464;--ecal-leave:#4FD8B4}
+.ecal-keys{display:flex;flex-wrap:wrap;gap:8px 24px;font-size:12.5px;margin-bottom:10px}
+.ecal-keys label{display:flex;align-items:center;gap:6px;cursor:pointer}
+.ecal-key{display:inline-block;width:30px;height:12px;border-radius:2px;background:var(--ecal-plan)}
+.ecal-key.punch{background:var(--ecal-punch)}
+.ecal-key.overtime{background:var(--ecal-overtime)}
+.ecal-key.leave{background:var(--ecal-leave)}
+.ecal-nav{display:grid;grid-template-columns:1fr auto 1fr;align-items:center;margin-bottom:8px}
+.ecal-grid{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));
+  border-left:1px solid var(--line);border-top:1px solid var(--line)}
+.ecal-h,.ecal-d{border-right:1px solid var(--line);border-bottom:1px solid var(--line)}
+.ecal-h{font-size:12px;font-weight:600;text-align:center;padding:4px;background:var(--paper)}
+.ecal-d{min-height:96px;padding:2px 3px 6px;min-width:0;cursor:pointer}
+.ecal-d:hover,.ecal-d:focus-visible{outline:2px solid var(--line);outline-offset:-2px}
+.ecal-d.out{background:var(--paper)}
+.ecal-d.off{background:repeating-linear-gradient(135deg,var(--paper) 0 8px,var(--card) 8px 16px)}
+.ecal-d.today{background:#FDF6E3}
+.ecal-n{display:block;text-align:right;font-size:12px;color:var(--muted)}
+.ecal-d.out .ecal-n{opacity:.5}
+.ecal-ev{border:1px solid var(--line);border-left:3px solid var(--ecal-plan);border-radius:3px;
+  background:var(--card);padding:3px 5px;margin-top:3px;font-size:11px;line-height:1.3;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ecal-ev b{display:block;font-family:var(--mono);font-weight:600}
+.ecal-ev.punch{border-left-color:var(--ecal-punch)}
+.ecal-ev.overtime{border-left-color:var(--ecal-overtime)}
+.ecal-ev.leave{border-left-color:var(--ecal-leave)}
+.ecal:has([data-k=plan]:not(:checked)) .ecal-ev.plan,
+.ecal:has([data-k=punch]:not(:checked)) .ecal-ev.punch,
+.ecal:has([data-k=overtime]:not(:checked)) .ecal-ev.overtime,
+.ecal:has([data-k=leave]:not(:checked)) .ecal-ev.leave{display:none}
+@media (max-width:700px){.ecal-d{min-height:64px}.ecal-ev span{display:none}}

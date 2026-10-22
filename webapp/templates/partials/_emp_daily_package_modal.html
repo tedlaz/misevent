@@ -1,0 +1,32 @@
+{# ΠΑΚΕΤΟ ΥΠΟΒΟΛΗΣ μετά την αποθήκευση του ημερήσιου: οι ημέρες της
+   εβδομάδας που εκκρεμούν δήλωση (δηλωμένο → νέο). Η υποβολή γίνεται ΜΟΝΟ
+   από το «Πρόγραμμα → ΕΡΓΑΝΗ» (εκεί περιμένει το ίδιο πακέτο). #}
+<div class="modal-backdrop">
+  <div class="modal">
+      <div class="mhead">
+        <h3>📦 Πακέτο υποβολής — {{ e.full_name }}</h3>
+        <span class="muted" style="font-size:12.5px">
+          εβδομάδα <b>{{ pkg_label }}</b> · μόνο οι αλλαγές ως προς το δηλωμένο
+          στο ΕΡΓΑΝΗ</span>
+      </div>
+      <div class="mbody">
+        <table class="tbl">
+          <thead><tr><th>Ημέρα</th><th>Δηλωμένο</th><th>Νέο</th></tr></thead>
+          <tbody>
+            {% for r in pkg_rows %}
+              <tr><td class="mono">{{ r.d|date_gr }}</td>
+                <td class="mono">{% if r.old is none %}<span class="tag">αδήλωτο</span>
+                  {% else %}<s class="muted">{{ r.old or 'ρεπό' }}</s>{% endif %}</td>
+                <td class="mono"><b>{{ r.new or 'ρεπό' }}</b></td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      <div class="mfoot">
+        <button type="button" class="ghost"
+                hx-get="{{ url_for('employments.modal_close') }}"
+                hx-target="#modal-host" hx-swap="innerHTML">Κλείσιμο</button>
+        <a class="run" href="{{ url_for('work_schedules.index') }}">📤 Πρόγραμμα → ΕΡΓΑΝΗ</a>
+      </div>
+  </div>
+</div>

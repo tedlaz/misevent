@@ -62,6 +62,7 @@ from misevent.domain.events import (
     PersonRegistered,
     ScheduleDaysSubmitted,
     ScheduleDeclaredToErgani,
+    ScheduleSystemDeclared,
     SeveranceCalculated,
     SeveranceRulesDefined,
     SicknessBenefitRecorded,
@@ -149,6 +150,9 @@ MISC_DEFAULTS = {
     # εμφανίζονται στο χρονολόγιο και εξοφλούνται μόλις ξεκλειδώσουν
     # (webapp/actions.auto_settle_payments).
     "auto_payments": True,
+    # Χρονολόγιο «Εκκρεμείς»: οι ΜΕΛΛΟΝΤΙΚΕΣ υποχρεώσεις εμφανίζονται έως και
+    # τόσους μήνες μετά τον τρέχοντα (3/2026 + 1 -> έως 30/4/2026). Ακέραιος.
+    "obligations_horizon_months": 1,
 }
 
 
@@ -395,7 +399,12 @@ class EmploymentState:
     # Τύπος προγράμματος & κάλυψη ΕΡΓΑΝΗ (βλ. EmploymentScheduleModeSet /
     # ScheduleDeclaredToErgani / ScheduleDaysSubmitted).
     schedule_mode: str = ""  # "fixed" | "variable"
-    standing_weekly: dict | None = None  # το δηλωμένο standing μοτίβο (fixed)
+    # δηλωμένα standing εβδομαδιαία (fixed), με σειρά υποβολής:
+    # (ισχύς από | None, λήξη | None, μοτίβο) — βλ. day_baseline
+    standing_history: list = field(default_factory=list)
+    # εβδομαδιαία (fixed) που ΚΑΤΑΓΡΑΦΗΚΑΝ αλλά δεν δηλώθηκαν ακόμη στο ΕΡΓΑΝΗ:
+    # (ισχύς από, μοτίβο, λήξη) — η υποβολή γίνεται από το «Πρόγραμμα → ΕΡΓΑΝΗ»
+    pending_weekly: list = field(default_factory=list)
     # baseline ΥΠΟΒΕΒΛΗΜΕΝΩΝ ημερών: date -> το ωράριο που στάλθηκε στο ΕΡΓΑΝΗ.
     # Μια ημέρα με τιμή ίδια με το τρέχον πρόγραμμα = «υποβεβλημένη»· διαφορετική
     # = «τροποποιημένη» (εκκρεμεί νέα υποβολή).
@@ -403,10 +412,12 @@ class EmploymentState:
     # Σύστημα εβδομαδιαίας εργασίας ΑΠΟ ΤΗ ΣΥΜΒΑΣΗ (5/6).
     contract_weekly_system: int = 5
     insurance_profile: InsuranceProfileAssigned | None = None
+    # ΠΑΡΟΥΣΙΕΣ = ΠΑΡΑΓΩΓΟ ΤΗΣ ΚΑΡΤΑΣ ΚΑΙ ΜΟΝΟ (§5.11): ξαναϋπολογίζονται σε
+    # κάθε διέλευση (`_sync_attendance`) από τις ΚΛΕΙΣΤΕΣ βάρδιες — καμία
+    # άλλη πηγή δεν τις γράφει.
     attendance: dict = field(default_factory=dict)  # date -> hours
-    # date -> ["HH:MM-HH:MM", ...] — αναλυτικές βάρδιες (κάρτα εργασίας),
-    # απαραίτητες για την κατάταξη ωρών (work_hours.py). Χειροκίνητες εγγραφές
-    # χωρίς βάρδιες κρατούν μόνο το συνολικό πλήθος ωρών.
+    # date -> ["HH:MM-HH:MM", ...] — οι κλειστές βάρδιες της κάρτας,
+    # απαραίτητες για την κατάταξη ωρών (work_hours.py).
     attendance_shifts: dict = field(default_factory=dict)
     # ΨΗΦΙΑΚΗ ΚΑΡΤΑ — ΩΜΕΣ ΔΙΕΛΕΥΣΕΙΣ: date -> [{"m", "kind", "id", "source",
     # "note"}, …] κατά ώρα. Οι ΒΑΡΔΙΕΣ δεν αποθηκεύονται· παράγονται με
@@ -791,6 +802,40 @@ class EmploymentState:
             out.append(s)
         return out
 
+    def schedule_completions(self, year: int, month: int) -> int:
+        """Πόσα χτυπήματα του μήνα συμπληρώθηκαν ΑΠΟ ΤΟ ΠΡΟΓΡΑΜΜΑ (ορφανά —
+        μετρούν στο μηνιαίο όριο `orphan_month_cap`)."""
+        return sum(
+            1
+            for d, punches in self.card_punches.items()
+            if d.year == year and d.month == month
+            for p in punches
+            if p["source"] == "schedule"
+        )
+
+    def actual_shifts(self, d: date) -> list:
+        """Οι ΠΡΑΓΜΑΤΙΚΕΣ (κλειστές) βάρδιες της `d` ως «ΩΩ:ΛΛ-ΩΩ:ΛΛ», από
+        τις διελεύσεις της κάρτας. Πηγή της απολογιστικής δήλωσης."""
+        return list(self.attendance_shifts.get(d, []))
+
+    def _sync_attendance(self, d: date) -> None:
+        """Ξαναϋπολογίζει την παρουσία των ημερών που αγγίζει μια διέλευση
+        της `d` (χθες·σήμερα·αύριο — η νυχτερινή βάρδια περνά τα μεσάνυχτα).
+        ΑΚΡΙΒΕΙΣ ώρες (Εγκ. 37271/2024: η σήμανση = η πραγματική έναρξη/λήξη)
+        — η στρογγυλοποίηση αφορά ΜΟΝΟ τις προτάσεις του φύλλου
+        (sheets.hours_analysis)."""
+        from misevent.integrations import card_punches as cp
+
+        for x in (d - timedelta(days=1), d, d + timedelta(days=1)):
+            shifts = self.card_shifts(x)
+            texts = cp.shift_texts(shifts)
+            if texts:
+                self.attendance_shifts[x] = list(texts)
+                self.attendance[x] = round(cp.worked_minutes(shifts) / 60, 2)
+            else:
+                self.attendance_shifts.pop(x, None)
+                self.attendance.pop(x, None)
+
     @property
     def weekly_system(self) -> int:
         """Σύστημα εβδομαδιαίας εργασίας της σύμβασης (5 ή 6)."""
@@ -937,13 +982,17 @@ class EmploymentState:
 
     def day_baseline(self, d: date):
         """Το ΥΠΟΒΕΒΛΗΜΕΝΟ ωράριο (baseline) της ημέρας `d`, ή None αν δεν έχει
-        δηλωθεί ποτέ στο ΕΡΓΑΝΗ. Προτεραιότητα: ρητή ημερήσια υποβολή
-        (`declared_days`)· αλλιώς, για fixed, το standing εβδομαδιαίο μοτίβο."""
+        δηλωθεί ποτέ στο ΕΡΓΑΝΗ. Ισχύει η ΤΕΛΕΥΤΑΙΑ υποβολή που καλύπτει τη
+        `d`: η εβδομαδιαία σβήνει τις παλαιότερες ημερήσιες του διαστήματός
+        της (βλ. ScheduleDeclaredToErgani), οπότε όσες έμειναν στο
+        `declared_days` είναι νεότερες από κάθε εβδομαδιαία."""
         if d in self.declared_days:
             return self.declared_days[d]
-        if self.schedule_mode == "fixed" and self.standing_weekly is not None:
+        if self.schedule_mode == "fixed":
             code = ("MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN")[d.weekday()]
-            return self.standing_weekly.get(code, "") or ""
+            for start, end, pattern in reversed(self.standing_history):
+                if _within(d, start, end):
+                    return pattern.get(code, "") or ""
         return None
 
     def day_status(self, d: date) -> str:
@@ -1124,6 +1173,20 @@ class EmploymentState:
         }
 
 
+def leave_state(leave, ref: date) -> str:
+    """Κατάσταση άδειας ΩΣ ΠΡΟΣ την ημερομηνία αναφοράς — ΠΑΡΑΓΩΓΗ, όχι event:
+    "planned" (δεν ξεκίνησε) | "ongoing" (σε εξέλιξη) | "taken" (πέρασε χωρίς
+    αλλαγή = ληφθείσα· από εδώ και πέρα αλλάζει μόνο ως διόρθωση)."""
+    if leave.date_from > ref:
+        return "planned"
+    return "ongoing" if leave.date_to >= ref else "taken"
+
+
+def _within(d: date, start: date | None, end: date | None) -> bool:
+    """d ∈ [start, end] — None = χωρίς όριο."""
+    return (start is None or start <= d) and (end is None or d <= end)
+
+
 def _next_day(d: date):
     from datetime import timedelta
 
@@ -1204,6 +1267,9 @@ class Projections:
         self.attendance_sheets: dict[tuple[int, int], AttendanceSheetApproved] = {}
         # Λειτουργικές προτιμήσεις («Διάφορα») — latest-wins από events
         self.misc_settings: dict = dict(MISC_DEFAULTS)
+        # Σύστημα δήλωσης αλλαγών ωραρίου ΑΝΑ ΜΗΝΑ (1η του μήνα -> "pre"|"retro"):
+        # νέα δήλωση για τον ίδιο μήνα αντικαθιστά (βλ. schedule_system_on)
+        self.schedule_systems: dict = {}
         # ΨΗΦΙΑΚΗ ΚΑΡΤΑ: μετρητής διελεύσεων (κάθε καταγραφή/ακύρωση τον
         # ανεβάζει). Είναι το «σφυγμός» που ρωτά η οθόνη «Ζωντανά» για να
         # ανανεωθεί ΜΟΝΟ όταν όντως άλλαξε κάτι — δεν είναι δεδομένο, είναι
@@ -1271,8 +1337,8 @@ class Projections:
         elif isinstance(event, MiscSettingsChanged):
             # ενημερώνει μόνο τα κλειδιά που φέρει το event (latest-wins)
             for k, v in event.fields.items():
-                if k in MISC_DEFAULTS:
-                    self.misc_settings[k] = bool(v)
+                if k in MISC_DEFAULTS:  # ίδιος τύπος με το default (bool/int)
+                    self.misc_settings[k] = type(MISC_DEFAULTS[k])(v)
 
         elif isinstance(event, CompanyRegistered):
             self.company = event
@@ -1449,7 +1515,8 @@ class Projections:
                 )
             ]
             emp.schedule_mode = event.schedule_mode
-            emp.standing_weekly = None
+            emp.standing_history = []
+            emp.pending_weekly = []
             emp.daily_schedule = {
                 date.fromisoformat(iso): hours
                 for iso, hours in event.daily_schedule.items()
@@ -1521,6 +1588,16 @@ class Projections:
                 key=lambda item: (item[1][0], item[0]),
             )[1]
             emp.schedule = dict(latest[1])
+            if emp.schedule_mode != "variable":  # μεταβλητό: μόνο template
+                emp.pending_weekly = [
+                    p for p in emp.pending_weekly if p[0] != event.effective_from
+                ] + [(event.effective_from, dict(event.weekly_pattern), event.end_date)]
+            # Η τελευταία υποβολή επικρατεί: το νέο εβδομαδιαίο ακυρώνει τις
+            # παλαιότερες ημερήσιες μεταβολές του διαστήματος ισχύος του.
+            emp.daily_schedule = {
+                d: h for d, h in emp.daily_schedule.items()
+                if not _within(d, event.effective_from, event.end_date)
+            }
 
         elif isinstance(event, DailyScheduleAssigned):
             # Νέα υποβολή αντικαθιστά τις ίδιες ημέρες (last-write-wins)
@@ -1529,11 +1606,26 @@ class Projections:
                 sched[date.fromisoformat(iso)] = hours
 
         elif isinstance(event, EmploymentScheduleModeSet):
-            self.employments[event.employee_id].schedule_mode = event.mode
+            emp = self.employments[event.employee_id]
+            emp.schedule_mode = event.mode
+            if event.mode == "variable":
+                emp.pending_weekly = []
 
         elif isinstance(event, ScheduleDeclaredToErgani):
-            # STANDING εβδομαδιαίο (baseline όλων των ημερών, τύπος fixed)
-            self.employments[event.employee_id].standing_weekly = dict(event.days)
+            # STANDING εβδομαδιαίο (fixed): νεότερο από κάθε προηγούμενη
+            # ημερήσια δήλωση του διαστήματός του — αυτές παύουν να ισχύουν.
+            emp = self.employments[event.employee_id]
+            emp.standing_history.append(
+                (event.effective_from, event.end_date, dict(event.days))
+            )
+            emp.pending_weekly = [  # παλιά events χωρίς ημερομηνία: όλα
+                p for p in emp.pending_weekly
+                if event.effective_from is not None and p[0] != event.effective_from
+            ]
+            emp.declared_days = {
+                d: h for d, h in emp.declared_days.items()
+                if not _within(d, event.effective_from, event.end_date)
+            }
 
         elif isinstance(event, ScheduleDaysSubmitted):
             emp = self.employments[event.employee_id]
@@ -1548,11 +1640,13 @@ class Projections:
         elif isinstance(event, AttendanceSheetApproved):
             self.attendance_sheets[(event.period_year, event.period_month)] = event
 
+        elif isinstance(event, ScheduleSystemDeclared):
+            self.schedule_systems[event.effective_from] = event.system
+
         elif isinstance(event, AttendanceRecorded):
-            emp = self.employments[event.employee_id]
-            emp.attendance[event.work_date] = event.hours_worked + event.overtime_hours
-            if event.shifts:
-                emp.attendance_shifts[event.work_date] = list(event.shifts)
+            # ΠΑΛΑΙΟ event (πριν οι παρουσίες γίνουν παράγωγο της κάρτας):
+            # μένει μόνο για να διαβάζονται τα παλιά logs — ΔΕΝ μετρά.
+            pass
 
         elif isinstance(event, CardPunchRecorded):
             # ΩΜΗ διέλευση: μπαίνει στη θέση της κατά ώρα (η κάρτα μπορεί να
@@ -1566,9 +1660,11 @@ class Projections:
                     "id": event.punch_id,
                     "source": event.source,
                     "note": event.note,
+                    "blind": event.blind,
                 }
             )
             day.sort(key=lambda p: (p["m"], 0 if p["kind"] == "in" else 1))
+            emp._sync_attendance(event.punch_date)
             self.card_pulse += 1
 
         elif isinstance(event, CardPunchCancelled):
@@ -1582,6 +1678,7 @@ class Projections:
                         emp.card_punches[d] = kept
                     else:
                         del emp.card_punches[d]
+                    emp._sync_attendance(d)
                     break
             self.card_pulse += 1
 
@@ -1706,6 +1803,12 @@ class Projections:
             self.handle(agg, ev)
 
     # -- queries -----------------------------------------------------------
+    def schedule_system_on(self, d: date) -> str:
+        """Το σύστημα δήλωσης που ισχύει τη `d`: η νεότερη δήλωση με έναρξη
+        <= d· χωρίς δήλωση = "pre" (προαναγγελτικό, ο κανόνας του νόμου)."""
+        starts = [s for s in self.schedule_systems if s <= d]
+        return self.schedule_systems[max(starts)] if starts else "pre"
+
     def pending_obligations(self, as_of: date | None = None):
         obs = [o for o in self.obligations.values() if not o.fulfilled]
         if as_of:

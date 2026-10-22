@@ -308,7 +308,9 @@
             "daily_legal_6": 8,
             "daily_overwork_start": 8,
             "overtime_day_cap": 3,
-            "overtime_year_cap": 150
+            "overtime_year_cap": 150,
+            "orphan_month_cap": 3,
+            "card_rounding_minutes": 0
           }
         }
       ]

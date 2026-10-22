@@ -98,3 +98,7 @@ def register(app):
     app.jinja_env.filters["yes_no"] = yes_no
     app.jinja_env.filters["day_segments"] = day_segments
     app.jinja_env.filters["service_gr"] = service_gr
+    # Κατάσταση άδειας ως προς την ημ. αναφοράς: {{ leave_state(lv, today) }}
+    from misevent.domain.projections import leave_state
+
+    app.jinja_env.globals["leave_state"] = leave_state

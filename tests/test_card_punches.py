@@ -236,3 +236,173 @@ def test_live_board_shows_punches():
     assert row["actual"][0]["text"] == "09:03-16:59"
     assert row["actual"][0]["h"] == 7.93
     print("OK το grid δείχνει διελεύσεις, ανοιχτή βάρδια και το κλείσιμό της")
+
+
+def test_attendance_derived_from_punches_only():
+    """Οι παρουσίες ΒΓΑΙΝΟΥΝ από την κάρτα: κλειστή βάρδια = παρουσία,
+    ανοιχτή/ακυρωμένη = καμία· η καταγραφή ημέρας γράφει χτυπήματα."""
+    _store, proj, svc, eid = _setup()
+    emp = proj.employments[eid]
+    pin = svc.record_card_punch(eid, DAY, "09:00", "in")
+    assert DAY not in emp.attendance  # ανοιχτή βάρδια δεν μετρά
+    pout = svc.record_card_punch(eid, DAY, "17:00", "out")
+    assert emp.attendance[DAY] == 8.0
+    assert emp.attendance_shifts[DAY] == ["09:00-17:00"]
+    svc.cancel_card_punch(pout)
+    assert DAY not in emp.attendance
+    svc.cancel_card_punch(pin)
+    svc.record_attendance(eid, DAY, ["22:00-02:00"])
+    assert emp.attendance_shifts[DAY] == ["22:00-02:00"]
+    svc.record_attendance(eid, DAY, ["10:00-14:00"])  # αντικαθιστά
+    assert emp.attendance_shifts[DAY] == ["10:00-14:00"]
+    assert emp.attendance[DAY] == 4.0
+    print("OK οι παρουσίες είναι παράγωγο των χτυπημάτων κάρτας")
+
+
+def test_missing_in_or_out_become_lone_punches():
+    """Γραμμή κάρτας χωρίς έξοδο/είσοδο ΔΕΝ χάνεται: γίνεται ανοιχτή βάρδια /
+    ορφανή έξοδος — και δεν μετρά ως παρουσία."""
+    from misevent.integrations import karta_import as ki
+
+    rows = [ki.KartaPunch("1", "", "", DAY, "09:00", ""),
+            ki.KartaPunch("1", "", "", DAY, "", "21:00"),
+            ki.KartaPunch("2", "", "", DAY, "", "")]
+    assert ki.daily_shifts(rows) == {("1", DAY): ["09:00-", "-21:00"]}
+    _store, proj, svc, eid = _setup()
+    emp = proj.employments[eid]
+    svc.record_attendance(eid, DAY, ["09:00-"])  # λείπει η έξοδος
+    assert [(s["open"], s["orphan"]) for s in emp.card_shifts(DAY)] == [(True, False)]
+    assert DAY not in emp.attendance
+    svc.record_attendance(eid, DAY, ["-17:00"])  # λείπει η είσοδος (αντικαθιστά)
+    assert [(s["open"], s["orphan"]) for s in emp.card_shifts(DAY)] == [(False, True)]
+    assert DAY not in emp.attendance
+    print("OK τα ελλιπή χτυπήματα της κάρτας ΕΡΓΑΝΗ μένουν ορατά")
+
+
+def test_orphan_completed_from_schedule_with_monthly_cap():
+    """Ορφανό χτύπημα -> το ταίρι από το ΠΡΟΓΡΑΜΜΑ (09:00-17:00), έως
+    `orphan_month_cap` (3) ανά εργαζόμενο τον μήνα."""
+    _store, proj, svc, eid = _setup()
+    emp = proj.employments[eid]
+    lone = svc.record_card_punch(eid, DAY, "09:04", "in")      # χωρίς έξοδο
+    svc.complete_punch_from_schedule(lone)
+    assert emp.attendance_shifts[DAY] == ["09:04-17:00"]  # ακριβείς ώρες
+    day2 = date(2026, 8, 6)
+    lone = svc.record_card_punch(eid, day2, "17:20", "out")    # χωρίς είσοδο
+    svc.complete_punch_from_schedule(lone)
+    assert emp.attendance_shifts[day2] == ["09:00-17:20"]
+    with_pair = svc.record_card_punch(eid, date(2026, 8, 7), "09:00", "in")
+    svc.record_card_punch(eid, date(2026, 8, 7), "17:00", "out")
+    try:
+        svc.complete_punch_from_schedule(with_pair)
+        raise AssertionError("πλήρης βάρδια δεν συμπληρώνεται")
+    except ValueError:
+        pass
+    svc.complete_punch_from_schedule(
+        svc.record_card_punch(eid, date(2026, 8, 10), "09:00", "in"))
+    lone = svc.record_card_punch(eid, date(2026, 8, 11), "09:00", "in")
+    try:
+        svc.complete_punch_from_schedule(lone)  # 4ο του μήνα
+        raise AssertionError("πέρασε 4ο ορφανό")
+    except ValueError as exc:
+        assert "Εξαντλήθηκαν τα 3" in str(exc)
+    assert emp.schedule_completions(2026, 8) == 3
+    print("OK συμπλήρωση ορφανών από το πρόγραμμα, έως 3 τον μήνα")
+
+
+def _karta_xlsx(rows) -> bytes:
+    """Ελάχιστο xlsx ΕΡΓΑΝΗ (μόνο το φύλλο) — αρκεί στο `parse_karta`."""
+    import io
+    import zipfile
+
+    from misevent.integrations import karta_import as ki
+
+    def row(i, vals):
+        return f'<row r="{i}">' + "".join(
+            f'<c r="{c}{i}" t="str"><v>{v}</v></c>' for c, v in zip("ABCDEFG", vals)
+        ) + "</row>"
+
+    # (ΑΦΜ, Επώνυμο, Όνομα, ISO ημ/νία, Από, Έως) -> γραμμή ΕΡΓΑΝΗ (Η/Μ/ΕΕΕΕ)
+    rows = [("0", *r[:3], date.fromisoformat(r[3]).strftime("%d/%m/%Y"), *r[4:])
+            for r in rows]
+    xml = ('<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/'
+           '2006/main"><sheetData>'
+           + "".join(row(i, r) for i, r in enumerate([ki.COLUMNS, *rows], 1))
+           + "</sheetData></worksheet>")
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w") as z:
+        z.writestr("xl/worksheets/sheet1.xml", xml)
+    return buf.getvalue()
+
+
+def test_import_corrects_blind_punches_and_keeps_the_fact():
+    """Εισαγωγή: τα ΤΥΦΛΑ χτυπήματα διορθώνονται από το πρόγραμμα ΚΑΤΑ την
+    εισαγωγή, και η πληροφορία «τυφλό» μένει μόνιμα στο χτύπημα."""
+    from misevent.domain.events import LeaveType
+
+    _store, proj, svc, eid = _setup()
+    emp = proj.employments[eid]
+    svc.record_leave(eid, LeaveType.SICK, date(2026, 8, 7), date(2026, 8, 7))
+    res = svc.import_karta_attendance(_karta_xlsx([
+        ("100011110", "Λ", "Τ", "2026-08-05", "09:02", ""),       # χωρίς έξοδο
+        ("100011110", "Λ", "Τ", "2026-08-06", "", "17:04"),       # χωρίς είσοδο
+        ("100011110", "Λ", "Τ", "2026-08-07", "09:00", "17:00"),
+    ]))
+    assert [b["fixed"] for b in res["blind"]] == [True, True]
+    assert emp.attendance_shifts[date(2026, 8, 5)] == ["09:02-17:00"]  # ακριβείς ώρες
+    assert emp.attendance_shifts[date(2026, 8, 6)] == ["09:00-17:04"]
+    blind = [p for d in emp.card_punches.values() for p in d if p["blind"]]
+    assert [(p["kind"], cp.hhmm(p["m"])) for p in blind] == [
+        ("in", "09:02"), ("out", "17:04")]
+    assert emp.schedule_completions(2026, 8) == 2
+    # χτύπημα σε ημέρα άδειας: καταγράφεται, αλλά βγαίνει προειδοποίηση
+    assert [b["day"] for b in res["on_leave"]] == [date(2026, 8, 7)]
+    assert emp.attendance_shifts[date(2026, 8, 7)] == ["09:00-17:00"]
+    print("OK τα τυφλά χτυπήματα διορθώνονται στην εισαγωγή και μένουν σημαδεμένα")
+
+
+def test_card_rounding_for_calculations_only():
+    """Στρογγυλοποίηση κάρτας: η ΣΥΝΟΛΙΚΗ διάρκεια της ημέρας πάει στην
+    κοντινότερη μισή ώρα (η διαφορά στη λήξη της τελευταίας βάρδιας)· η κάρτα
+    κρατά την ακριβή ώρα."""
+    t = cp.parse_time
+
+    def hours(*pairs, step=30):
+        out = cp.rounded([{"s": t(a), "e": t(b)} for a, b in pairs], step)
+        return cp.worked_minutes(out) / 60
+
+    assert hours(("09:00", "16:24")) == 7.5   # 7,4 -> 7,5
+    assert hours(("09:00", "16:12")) == 7.0   # 7,2 -> 7
+    assert hours(("09:00", "16:42")) == 7.5   # 7,7 -> 7,5 (κοντινότερη μισή)
+    assert hours(("09:00", "16:48")) == 8.0   # 7,8 -> 8
+    assert hours(("09:00", "17:06")) == 8.0   # 8,1 -> 8
+    assert hours(("09:00", "17:12")) == 8.0   # 8,2 -> 8
+    assert hours(("09:00", "17:15")) == 8.5   # μισό βήμα -> πάνω
+    out = cp.rounded([{"s": t("08:52"), "e": t("17:12")}], 30)
+    assert cp.shift_texts(out) == ("08:52-17:22",)  # προσέλευση ακριβής
+    # σπαστό: το σύνολο μετρά· αρνητική διαφορά > τελευταίας βάρδιας -> προηγούμενη
+    out = cp.rounded([{"s": 540, "e": 782}, {"s": 960, "e": 970}], 30)
+    assert [(s["s"], s["e"]) for s in out] == [(540, 780)]
+    assert cp.rounded([{"s": 601, "e": 604}], 15) == []  # μηδενίστηκε
+    assert cp.rounded([{"s": 601, "e": None}], 15) == [{"s": 601, "e": None}]
+    assert cp.rounded([{"s": 602, "e": 1088}], 0) == [{"s": 602, "e": 1088}]
+    assert cp.rounded_texts(["09:00-17:12"], 30) == ["09:00-17:00"]
+    assert cp.rounded_texts(["22:00-06:10"], 30) == ["22:00-06:00"]  # μεσάνυχτα
+    print("OK στρογγυλοποίηση διάρκειας")
+
+
+def test_rounding_only_in_sheet_proposals(fresh_system):
+    """Παρουσίες/ΕΡΓΑΝΗ ΠΑΝΤΑ ακριβείς· η στρογγυλοποίηση (προεπιλογή 0)
+    αγγίζει μόνο τις ΠΡΟΤΕΙΝΟΜΕΝΕΣ ώρες του φύλλου (hours_analysis)."""
+    _store, proj, svc, eid = _setup()
+    svc.record_card_punch(eid, DAY, "09:00", "in")
+    svc.record_card_punch(eid, DAY, "17:12", "out")
+    emp = proj.employments[eid]
+    assert emp.attendance_shifts[DAY] == ["09:00-17:12"]
+    assert emp.attendance[DAY] == 8.2
+    assert svc.hours_analysis(2026, 8)[eid]["overwork"] == 0.2  # 9η ώρα: 12΄
+    svc.define_parameters("work_hours", date(2026, 1, 1), night_start=22,
+                          night_end=6, card_rounding_minutes=30)
+    assert svc.hours_analysis(2026, 8)[eid]["overwork"] == 0.0  # 8,2ω -> 8ω
+    assert emp.attendance_shifts[DAY] == ["09:00-17:12"]        # άθικτες
+    print("OK στρογγυλοποίηση μόνο στις προτάσεις του φύλλου")

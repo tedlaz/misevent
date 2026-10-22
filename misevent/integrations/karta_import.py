@@ -3,7 +3,12 @@
 
 Το ΕΡΓΑΝΗ εξάγει τις πραγματικές παρουσίες μιας περιόδου σε xlsx με στήλες:
 
-    ΑΦΜ | Επώνυμο | Όνομα | Ημ/νία | Είσοδος | Έξοδος
+    ΑΑ Παραρτηματος | ΑΦΜ | Επώνυμο | Όνομα | Ημ/νία | Από | Έως
+
+(ημερομηνία «Η/Μ/ΕΕΕΕ», π.χ. 14/9/2026· το παράρτημα αγνοείται — η
+αντιστοίχιση γίνεται με ΑΦΜ). Η ανάγνωση είναι ΕΛΑΣΤΙΚΗ: στήλες με το όνομα
+(οποιαδήποτε σειρά, χωρίς τόνους/κεφαλαία, «Είσοδος/Έξοδος» αντί «Από/Έως»),
+ημερομηνίες και ώρες και σε μορφές Excel (π.χ. αρχείο ξανασωσμένο).
 
 Κάθε γραμμή είναι ΜΙΑ διέλευση (βάρδια). Μια ημέρα μπορεί να έχει πολλές
 γραμμές (π.χ. διακοπτόμενο ωράριο 08:00-12:00 + 17:00-19:00) — αθροίζονται.
@@ -15,15 +20,16 @@
 """
 from __future__ import annotations
 
+import unicodedata
 import zipfile
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, datetime, timedelta
 from xml.etree import ElementTree as ET
 
 _NS = "{http://schemas.openxmlformats.org/spreadsheetml/2006/main}"
 
-# Οι στήλες με τη σειρά που τις εξάγει το ΕΡΓΑΝΗ (A..F)
-COLUMNS = ("ΑΦΜ", "Επώνυμο", "Όνομα", "Ημ/νία", "Είσοδος", "Έξοδος")
+# Οι στήλες με τη σειρά που τις εξάγει το ΕΡΓΑΝΗ (A..G)
+COLUMNS = ("ΑΑ Παραρτηματος", "ΑΦΜ", "Επώνυμο", "Όνομα", "Ημ/νία", "Από", "Έως")
 
 
 @dataclass(frozen=True)
@@ -131,42 +137,109 @@ def parse_karta(source) -> list[KartaPunch]:
     if not rows:
         raise ValueError("Το αρχείο καρτών είναι κενό")
 
-    def cells(row) -> list[str]:
-        by_col = {
-            _col_letter(c.get("r", "")): _cell_text(c, shared)
+    def cells(row) -> dict[str, str]:
+        return {
+            _col_letter(c.get("r", "")): _cell_text(c, shared).strip()
             for c in row.findall(_NS + "c")
         }
-        return [by_col.get(col, "") for col in ("A", "B", "C", "D", "E", "F")]
 
-    header = cells(rows[0])
-    if header[:6] != list(COLUMNS):
+    # Επικεφαλίδα: η πρώτη από τις 10 πρώτες γραμμές που έχει τις
+    # υποχρεωτικές στήλες (πάνω της μπορεί να υπάρχουν τίτλοι). Οι στήλες
+    # βρίσκονται ΜΕ ΤΟ ΟΝΟΜΑ — σειρά, τόνοι, κεφαλαία και έξτρα στήλες
+    # (π.χ. παράρτημα) δεν παίζουν ρόλο.
+    for h, row in enumerate(rows[:10]):
+        col = {}
+        for letter, text in cells(row).items():
+            field = _HEADER_ALIASES.get(_norm(text))
+            if field and field not in col:
+                col[field] = letter
+        if _REQUIRED <= col.keys():
+            break
+    else:
         raise ValueError(
-            "Μη αναμενόμενη γραμμογράφηση καρτών ΕΡΓΑΝΗ — "
-            f"περίμενα στήλες {COLUMNS}, βρήκα {tuple(header[:6])}"
+            "Μη αναμενόμενη γραμμογράφηση καρτών ΕΡΓΑΝΗ — δεν βρέθηκαν οι "
+            f"στήλες ΑΦΜ, Ημ/νία, Από, Έως (αναμενόμενες: {', '.join(COLUMNS)})"
         )
 
     punches = []
-    for i, row in enumerate(rows[1:], start=2):
-        afm, last, first, d, tin, tout = cells(row)
-        if not any((afm, last, first, d)):
+    for i, row in enumerate(rows[h + 1:], start=h + 2):
+        v = cells(row)
+        afm, d = v.get(col["afm"], ""), v.get(col["day"], "")
+        if not afm and not d:
             continue  # κενή γραμμή
-        try:
-            day = date.fromisoformat(d.strip())
-        except ValueError:
+        day = _parse_day(d)
+        if day is None:
             raise ValueError(
                 f"Μη έγκυρη ημερομηνία «{d}» στη γραμμή {i} του αρχείου καρτών"
-            ) from None
+            )
         punches.append(
             KartaPunch(
                 afm="".join(ch for ch in afm if ch.isdigit()),
-                last_name=last.strip(),
-                first_name=first.strip(),
+                last_name=v.get(col.get("last"), ""),
+                first_name=v.get(col.get("first"), ""),
                 day=day,
-                time_in=tin.strip(),
-                time_out=tout.strip(),
+                time_in=_parse_time(v.get(col["in"], "")),
+                time_out=_parse_time(v.get(col["out"], "")),
             )
         )
     return punches
+
+
+def _norm(text: str) -> str:
+    """Κείμενο επικεφαλίδας χωρίς τόνους, κεφαλαία, κενά και σύμβολα:
+    «Ημ/νία» -> «ημνια», «ΑΑ Παραρτηματος» -> «ααπαραρτηματος»."""
+    t = unicodedata.normalize("NFD", text or "")
+    return "".join(ch for ch in t if ch.isalnum()).lower()
+
+
+# Ονόματα στηλών (κανονικοποιημένα με `_norm`) -> πεδίο
+_HEADER_ALIASES = {
+    "αφμ": "afm",
+    "επωνυμο": "last",
+    "ονομα": "first",
+    "ημνια": "day", "ημερομηνια": "day", "ημερα": "day",
+    "απο": "in", "εισοδος": "in", "ωραεισοδου": "in",
+    "εως": "out", "εξοδος": "out", "ωραεξοδου": "out",
+}
+_REQUIRED = {"afm", "day", "in", "out"}
+_DATE_FORMATS = ("%d/%m/%Y", "%d-%m-%Y", "%d.%m.%Y", "%Y-%m-%d", "%d/%m/%y")
+
+
+def _parse_day(text: str) -> date | None:
+    """Ημερομηνία σε όποια μορφή τη γράψει το ΕΡΓΑΝΗ ή το Excel: Η/Μ/ΕΕΕΕ
+    (και με - ή .), ISO, με ώρα στο τέλος, ή αριθμός ημερομηνίας Excel."""
+    t = (text or "").split()[0] if (text or "").strip() else ""
+    for fmt in _DATE_FORMATS:
+        try:
+            return datetime.strptime(t, fmt).date()
+        except ValueError:
+            pass
+    try:  # αριθμός Excel: ημέρες από 30/12/1899
+        return date(1899, 12, 30) + timedelta(days=int(float(t)))
+    except (ValueError, OverflowError):
+        return None
+
+
+def _parse_time(text: str) -> str:
+    """Ώρα -> «ΩΩ:ΛΛ»: «8:01», «08:01:00», «14/9/2026 08:01» ή κλάσμα
+    ημέρας του Excel (0.5 = 12:00). Ό,τι δεν είναι ώρα μένει ως έχει
+    (κενό = τυφλό χτύπημα, §5.11)."""
+    t = (text or "").strip()
+    if not t:
+        return ""
+    t = t.split()[-1]
+    if ":" in t:
+        hh, mm = t.split(":")[:2]
+    else:
+        try:
+            m = round(float(t) % 1 * 24 * 60) % (24 * 60)
+        except ValueError:
+            return t
+        hh, mm = m // 60, m % 60
+    try:
+        return f"{int(hh):02d}:{int(mm):02d}"
+    except ValueError:
+        return t
 
 
 def daily_hours(punches: list[KartaPunch]) -> dict[tuple[str, date], float]:
@@ -184,12 +257,19 @@ def daily_hours(punches: list[KartaPunch]) -> dict[tuple[str, date], float]:
 
 def daily_shifts(punches: list[KartaPunch]) -> dict[tuple[str, date], list[str]]:
     """Οι αναλυτικές βάρδιες ανά (ΑΦΜ, ημέρα), ως "HH:MM-HH:MM" με χρονική
-    σειρά — τροφοδοτούν την κατάταξη ωρών (work_hours.py)."""
+    σειρά — τροφοδοτούν την κατάταξη ωρών (work_hours.py).
+
+    ⚠️ Γραμμή με ΜΟΝΟ είσοδο ("HH:MM-") ή ΜΟΝΟ έξοδο ("-HH:MM") ΚΡΑΤΙΕΤΑΙ:
+    γίνεται μοναχικό χτύπημα κάρτας (ανοιχτή βάρδια / ορφανή έξοδος, §5.11),
+    ορατό ως λάθος — όχι σιωπηλή απώλεια."""
     out: dict[tuple[str, date], list[tuple[int, str]]] = {}
     for p in punches:
-        if p.minutes <= 0:
+        a, b = _hm_opt(p.time_in), _hm_opt(p.time_out)
+        if a is None and b is None or a == b:
             continue
+        tin = p.time_in.strip() if a is not None else ""
+        tout = p.time_out.strip() if b is not None else ""
         out.setdefault((p.afm, p.day), []).append(
-            (_hm(p.time_in), f"{p.time_in}-{p.time_out}")
+            (a if a is not None else b, f"{tin}-{tout}")
         )
     return {k: [s for _, s in sorted(v)] for k, v in out.items()}

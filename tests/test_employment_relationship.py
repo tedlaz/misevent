@@ -174,56 +174,6 @@ def test_fixed_term_start_is_always_canonicalized_to_hire_date():
     ) == ("1", date(2026, 2, 1), date(2026, 8, 31))
 
 
-def test_fixed_term_end_is_informational_marker_in_annual_grids(monkeypatch):
-    from webapp.views import leaves as leave_views
-    from webapp.views import work_schedules as schedule_views
-
-    service, projection, person_id = _service()
-    employment_id = service.start_employment(
-        person_id, date(2026, 1, 1), monthly_gross=1500,
-        weekly_pattern=WEEK, employment_relationship="1",
-        fixed_term_to=date(2026, 6, 30),
-    )
-    projection.employments[employment_id].hire_submitted = True
-    monkeypatch.setattr(schedule_views, "proj", projection)
-    monkeypatch.setattr(schedule_views, "svc", service)
-    monkeypatch.setattr(schedule_views, "today", lambda: date(2026, 2, 1))
-    monkeypatch.setattr(leave_views, "proj", projection)
-    monkeypatch.setattr(leave_views, "svc", service)
-    monkeypatch.setattr(leave_views, "today", lambda: date(2026, 2, 1))
-
-    schedule_context = schedule_views._planner_context(2026)
-    schedule_row = schedule_context["rows"][0]
-    end_cell = next(
-        cell for cell in schedule_row["cells"]
-        if cell["date"] == date(2026, 6, 30)
-    )
-    next_cell = next(
-        cell for cell in schedule_row["cells"]
-        if cell["date"] == date(2026, 7, 1)
-    )
-    assert end_cell["contract_end"] is True
-    assert "Προβλεπόμενη λήξη" in end_cell["title"]
-    assert next_cell["active"] is True  # η λήξη δεν λειτουργεί ως αποχώρηση
-
-    leave_context = leave_views._planner_context(2026)
-    marker = leave_context["rows"][0]["contract_end"]
-    assert marker["date"] == date(2026, 6, 30)
-
-    app = create_app()
-    with app.test_request_context("/"):
-        schedule_html = render_template(
-            "partials/_work_schedule_panel.html", **schedule_context
-        )
-        leave_html = render_template(
-            "partials/_leave_planner_panel.html", **leave_context
-        )
-    assert "work-day-cell state-work" in schedule_html
-    assert "contract-end" in schedule_html
-    assert "leave-contract-end" in leave_html
-    assert "πληροφοριακή ένδειξη, επιτρέπεται παράταση" in leave_html
-
-
 def test_live_json_preview_uses_unsaved_form_values_without_mutation(monkeypatch):
     service, projection, person_id = _service()
     employment_id = service.start_employment(

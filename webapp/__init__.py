@@ -5,7 +5,7 @@ Web UI Μισθοδοσίας — Flask + Jinja2 + htmx.
   /              Επισκόπηση        /payroll       Μισθοδοσία
   /obligations   Υποχρεώσεις       /payments      Πληρωμές (προβολή μόνο)
   /persons       Πρόσωπα           /eapd · /fmy   Αρχεία ΑΠΔ · Αρχεία ΦΜΥ
-  /live          Ζωντανά (ημέρα)
+  /live          Ζωντανά (ημέρα)    /work-schedules Πρόγραμμα → ΕΡΓΑΝΗ
   /employments   Απασχολήσεις      /ergani        ΕΡΓΑΝΗ
                                    /company       Εταιρεία
                                    /audit         Event log

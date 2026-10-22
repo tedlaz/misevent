@@ -1,13 +1,69 @@
 """
-ΑΔΕΙΕΣ ΜΕΣΑ ΣΤΟ «ΠΡΟΓΡΑΜΜΑ ΕΡΓΑΣΙΑΣ».
+ΑΔΕΙΕΣ & ΠΡΟΓΡΑΜΜΑ ΣΤΑ «ΖΩΝΤΑΝΑ» + οθόνη «Πρόγραμμα → ΕΡΓΑΝΗ».
 
-Η σελίδα δείχνει το υπόλοιπο κανονικής άδειας ανά μήνα (ίδιο `_accrual` με
-το πλάνο αδειών) και δημιουργεί άδεια από επιλεγμένες ημέρες: το modal
-νέας άδειας με `back=work` αποθηκεύει και επιστρέφει το panel του
-ΠΡΟΓΡΑΜΜΑΤΟΣ, όχι του πλάνου αδειών.
+Οι άδειες δημιουργούνται/επεξεργάζονται από τα Ζωντανά (modal → κενό σώμα +
+`lb-refresh`). Οι αλλαγές προγράμματος (μαζική αλλαγή στα Ζωντανά)
+συγκεντρώνονται στην οθόνη `/work-schedules/`, από όπου αναιρούνται ή
+στέλνονται στο ΕΡΓΑΝΗ — και μένουν στο ιστορικό αποστολών.
 
-⚠️ Ζητά `fresh_system`: στήνει εταιρεία και γράφει άδειες.
+⚠️ Ζητά `fresh_system`: στήνει εταιρεία και γράφει άδειες/προγράμματα.
 """
+
+import re
+from datetime import timedelta
+
+
+def test_schedule_changes_go_through_ergani_screen(fresh_system):
+    import _bootstrap  # noqa: F401  # ρίζα project στο sys.path + cwd
+
+    from webapp import create_app
+    from webapp.clock import today
+    from webapp.system import proj
+
+    app = create_app()
+    c = _bootstrap.ui_client(app)
+    assert c.post("/seed").status_code == 200
+
+    with app.test_request_context("/"):
+        ref = today()
+    e = next(e for e in proj.employments.values() if e.active and e.hire_submitted)
+    eid = e.employment_id
+    # Τετάρτη σε 2 εβδομάδες: μελλοντική, εντός ορίζοντα της οθόνης
+    day = ref - timedelta(days=ref.weekday()) + timedelta(days=16)
+    monday = day - timedelta(days=day.weekday())
+    old = e.day_schedule(day)
+    new = "10:00-18:00" if old != "10:00-18:00" else "09:00-17:00"
+
+    assert c.get("/live/").get_data(as_text=True).count("/work-schedules/") >= 1
+    assert "Μαζική αλλαγή" in c.get("/work-schedules/range").get_data(as_text=True)
+    r = c.post("/work-schedules/range", data={
+        "eid": eid, "date_from": day.isoformat(), "date_to": day.isoformat(),
+        "hours": new})
+    assert r.status_code == 200 and r.get_data(as_text=True) == "", r.headers
+    assert "lb-refresh" in r.headers["HX-Trigger"]
+    assert e.day_schedule(day) == new
+
+    page = c.get("/work-schedules/").get_data(as_text=True)
+    assert f'value="{eid}|{monday.isoformat()}"' in page
+    assert new in page
+
+    # Το seed έχει δηλωμένο πρόγραμμα -> η αλλαγή είναι «τροποποιημένη»
+    assert e.day_status(day) == "modified"
+    # ΑΝΑΙΡΕΣΗ: επαναφορά στη δηλωμένη τιμή
+    c.post("/work-schedules/ergani/revert",
+           data={"week": f"{eid}|{monday.isoformat()}"})
+    assert e.day_schedule(day) == old
+    c.post("/work-schedules/range", data={
+        "eid": eid, "date_from": day.isoformat(), "date_to": day.isoformat(),
+        "hours": new})
+
+    # ΥΠΟΒΟΛΗ όλων των εκκρεμών (χρονολογικά — καμία τρύπα)
+    weeks = re.findall(r'name="week" checked\s+value="([^"]+)"', page)
+    assert weeks
+    html = c.post("/work-schedules/ergani", data={"week": weeks}).get_data(as_text=True)
+    assert e.day_status(day) == "submitted"
+    assert "Ιστορικό αποστολών" in html and "Καμία αποστολή" not in html
+    assert f'value="{eid}|{monday.isoformat()}"' not in html
 
 
 def test_work_schedule_leaves(fresh_system):
@@ -25,44 +81,33 @@ def test_work_schedule_leaves(fresh_system):
         year = today().year
     eid = next(e.employment_id for e in proj.employments.values() if e.active)
 
-    page = c.get(f"/work-schedules/?year={year}").get_data(as_text=True)
-    assert "leave-accrual-strip" in page and "Υπόλοιπο" in page
-
-    modal = c.get(
-        f"/leaves/{eid}/new?date={year}-12-14&date_to={year}-12-16"
-        f"&year={year}&back=work"
-    ).get_data(as_text=True)
-    assert "#work-schedule-panel" in modal
-    assert f'value="{year}-12-16"' in modal
-
-    r = c.post(
-        f"/leaves/{eid}/new?year={year}&back=work",
-        data={"leave_type": "ANNUAL", "date_from": f"{year}-12-14",
-              "date_to": f"{year}-12-16", "notes": ""},
-    )
-    html = r.get_data(as_text=True)
-    assert r.status_code == 200
-    assert 'id="work-schedule-panel"' in html, "επέστρεψε λάθος panel"
-    assert "has-leave" in html and "data-leave-modal-url" in html
-
-    # Το πλάνο αδειών μένει όπως ήταν (χωρίς back)
-    assert "Ετήσιο πλάνο" in c.get(f"/leaves/?year={year}").get_data(as_text=True)
-
-    # ΖΩΝΤΑΝΑ (μήνας: μενού τύπου άδειας): back=live -> κενό σώμα (κλείνει
-    # το modal) + εντολή ανανέωσης του grid
+    # ΖΩΝΤΑΝΑ (μήνας: μενού τύπου άδειας): κενό σώμα (κλείνει το modal) +
+    # εντολή ανανέωσης του grid
     assert 'id="lb-leave-menu"' in c.get("/live/").get_data(as_text=True)
-    r = c.post(
-        f"/leaves/{eid}/new",
-        data={"leave_type": "SICK", "date_from": f"{year}-12-21",
-              "date_to": f"{year}-12-22", "back": "live"},
-    )
-    assert r.status_code == 200 and r.get_data(as_text=True) == ""
-    assert "lb-refresh" in r.headers["HX-Trigger"]
+    for kind, d0, d1 in (("ANNUAL", 14, 16), ("SICK", 21, 22)):
+        r = c.post(
+            f"/leaves/{eid}/new",
+            data={"leave_type": kind, "date_from": f"{year}-12-{d0}",
+                  "date_to": f"{year}-12-{d1}"},
+        )
+        assert r.status_code == 200 and r.get_data(as_text=True) == ""
+        assert "lb-refresh" in r.headers["HX-Trigger"]
     assert any(lv.date_from.isoformat() == f"{year}-12-21"
                for lv in proj.employments[eid].active_leaves())
     # Διήμερη άδεια = ΜΙΑ συνεχόμενη μπάρα, όχι μία ανά ημέρα
     rows = c.get(f"/live/rows?base={year}-12-15&days=15").get_data(as_text=True)
     assert rows.count("lb-leaveband lv-astheneia") == 1
+
+    # ΕΠΕΞΕΡΓΑΣΙΑ: κλικ στη ζώνη (data-lid) -> modal -> αποθήκευση στα Ζωντανά
+    lid = re.search(r'lb-leaveband lv-astheneia" data-lid="([^"]+)"', rows)[1]
+    modal = c.get(f"/leaves/{eid}/{lid}/modal").get_data(as_text=True)
+    assert 'hx-target="#modal-host"' in modal and f'value="{year}-12-22"' in modal
+    r = c.post(f"/leaves/{eid}/{lid}", data={
+        "leave_type": "SICK", "date_from": f"{year}-12-21",
+        "date_to": f"{year}-12-23", "notes": ""})
+    assert r.get_data(as_text=True) == "" and "lb-refresh" in r.headers["HX-Trigger"]
+    assert any(lv.leave_id == lid and lv.date_to.day == 23
+               for lv in proj.employments[eid].active_leaves())
 
     # ΥΠΟΛΟΙΠΟ ΚΑΝΟΝΙΚΗΣ ΑΔΕΙΑΣ στο τέλος κάθε ημέρας: η άδεια 14–16/12 το
     # μειώνει ακριβώς κατά τις εργάσιμές της· στο έτος μία τιμή ανά μήνα

@@ -139,6 +139,14 @@ def _pay_fmy(y, m):
     return f"Καταβλήθηκε ΦΜΥ {m}/{y}: {total:.2f}€"
 
 
+def _submit_retro_schedule(y, m):
+    res = svc.submit_retro_schedule(y, m)
+    if not res["count"]:
+        return f"Απολογιστική δήλωση {m}/{y}: καμία απόκλιση της κάρτας — τίποτα προς δήλωση"
+    return (f"Απολογιστική δήλωση {m}/{y}: καταγράφηκαν {res['count']} ημέρες "
+            f"({res['employees']} εργαζόμενοι) — υποβολή από το «Πρόγραμμα → ΕΡΓΑΝΗ»")
+
+
 # όνομα εντολής (obligation_types.command) -> υλοποίηση
 COMMANDS = {
     "approve_attendance": _approve_attendance,
@@ -157,6 +165,7 @@ COMMANDS = {
     "submit_fmy": _submit_fmy,
     "pay_fmy": _pay_fmy,
     "apply_minimum_adjustments": _apply_minimum_adjustments,
+    "submit_retro_schedule": _submit_retro_schedule,
 }
 
 # Δίχτυ ασφαλείας: κάθε τύπος του μητρώου πρέπει να έχει υλοποιημένη εντολή
@@ -294,6 +303,6 @@ def seed_demo() -> str:
     d = start
     while d <= today:
         if is_working_day(d):
-            svc.record_attendance(eid3, d, 8)
+            svc.record_attendance(eid3, d, ["09:00-17:00"])
         d += timedelta(days=1)
     return "Δημιουργήθηκαν δοκιμαστικά δεδομένα (3 πρόσωπα)"

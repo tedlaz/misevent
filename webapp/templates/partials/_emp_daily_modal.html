@@ -1,34 +1,53 @@
-{# Modal ημερήσιου προγράμματος σε εύρος ημερών — υπερισχύει του εβδομαδιαίου. #}
+{# Modal ημερήσιου προγράμματος ΑΝΑ ΕΒΔΟΜΑΔΑ: κάθε ημέρα με το δικό της
+   ωράριο (υπερισχύει του εβδομαδιαίου). Ράγα ωραρίου με κοινό άξονα
+   (static/time-rail.js). Οι κλειδωμένες ημέρες είναι disabled — δεν
+   υποβάλλονται καν. ◀ ▶ = άλλη εβδομάδα (οι μη αποθηκευμένες αλλαγές χάνονται). #}
 {% set f = form or {} %}
 <div class="modal-backdrop">
-  <div class="modal">
+  <div class="modal wide">
+  {# ◀ ▶ ανανεώνουν ΜΟΝΟ αυτό το περιεχόμενο (hx-select) — όχι το .modal, που
+     θα ξανάπαιζε το animation εμφάνισης («αναβόσβημα»). #}
+  <div id="daily-modal" class="modal-swap">
     <form hx-post="{{ url_for('employments.schedule_daily', employment_id=e.employment_id) }}"
           hx-target="#employment-card" hx-swap="outerHTML">
-      <div class="mhead">
-        <h3>📆 Ημερήσιο πρόγραμμα — {{ e.full_name }}</h3>
-        <span class="muted" style="font-size:12.5px">
-          υπερισχύει του εβδομαδιαίου για τις ημέρες που ορίζει · νέα υποβολή
-          για τις ίδιες ημέρες αντικαθιστά την προηγούμενη ·
-          σπαστό: 09:00-13:00+16:00-20:00 (κενό ≥ 3 ώρες) ·
-          πρόθεμα Τ = τηλεεργασία</span>
+      <input type="hidden" name="week" value="{{ monday.isoformat() }}">
+      <div class="mhead work-day-title">
+        <div>
+          <h3>📆 Ημερήσιο πρόγραμμα — {{ e.full_name }}</h3>
+          <span class="muted" style="font-size:12.5px">
+            εβδομάδα <b>{{ week_label }}</b> · υπερισχύει του εβδομαδιαίου ·
+            κενό = ρεπό · σπαστό: 09:00-13:00+16:00-20:00 (κενό ≥ 3 ώρες) ·
+            πρόθεμα Τ = τηλεεργασία · αλλάζουν μόνο μελλοντικές ημέρες</span>
+        </div>
+        <div class="work-day-nav">
+          {% set url = url_for('employments.modal', employment_id=e.employment_id, name='daily') %}
+          <button type="button" class="ghost" aria-label="Προηγούμενη εβδομάδα"
+                  hx-get="{{ url }}?week={{ prev_week.isoformat() }}"
+                  hx-target="#daily-modal" hx-select="#daily-modal" hx-swap="outerHTML">◀</button>
+          <button type="button" class="ghost" aria-label="Επόμενη εβδομάδα"
+                  hx-get="{{ url }}?week={{ next_week.isoformat() }}"
+                  hx-target="#daily-modal" hx-select="#daily-modal" hx-swap="outerHTML">▶</button>
+        </div>
       </div>
       <div class="mbody">
-        <div class="frm cols">
-          <label>Από<input type="date" name="date_from"
-            value="{{ f.get('date_from', today.isoformat()) }}" required></label>
-          <label>Έως<input type="date" name="date_to"
-            value="{{ f.get('date_to', today.isoformat()) }}" required></label>
-          <label class="wide">Ωράριο (κενό = ΡΕΠΟ)
-            <input name="hours" placeholder="ρεπό" data-time-rail
-                   value="{{ f.get('hours', '') }}"></label>
+        <div data-time-rail-week data-contract-hours="{{ '%g'|format(e.weekly_hours) }}"
+             data-childcare-hours="{{ e.childcare_hours_on(monday) }}">
+          {% for r in week_rows %}
+            {% set name = 'hours_' ~ r.d.isoformat() %}
+            <div class="dayrow"><b>{{ r.label }}</b>
+              <input name="{{ name }}" placeholder="ρεπό" data-time-rail="{{ r.label }}"
+                     value="{{ f.get(name, r.raw) }}" {{ 'disabled' if not r.editable }}
+                     {% if not r.editable %}title="Κλειδωμένη ημέρα (παρελθόν ή εκτός απασχόλησης)"{% endif %}></div>
+          {% endfor %}
         </div>
       </div>
       <div class="mfoot">
         <button type="button" class="ghost"
                 hx-get="{{ url_for('employments.modal_close') }}"
                 hx-target="#modal-host" hx-swap="innerHTML">Άκυρο</button>
-        <button class="run" type="submit">Υποβολή → ΕΡΓΑΝΗ (ΟΧΕ)</button>
+        <button class="run" type="submit">Αποθήκευση εβδομάδας</button>
       </div>
     </form>
+  </div>
   </div>
 </div>

@@ -38,7 +38,7 @@
                 hx-get="{{ url_for('employments.modal_close') }}"
                 hx-target="#modal-host" hx-swap="innerHTML">Άκυρο</button>
         <button class="run" type="submit">
-          {% if e.schedule_mode == 'variable' %}Αποθήκευση template{% else %}Αποθήκευση → ΕΡΓΑΝΗ (ΟΧΕ){% endif %}
+          {% if e.schedule_mode == 'variable' %}Αποθήκευση template{% else %}Αποθήκευση (υποβολή από «Πρόγραμμα → ΕΡΓΑΝΗ»){% endif %}
         </button>
       </div>
     </form>

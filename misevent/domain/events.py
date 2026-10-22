@@ -287,10 +287,15 @@ class EmploymentScheduleModeSet(DomainEvent):
 class ScheduleDeclaredToErgani(DomainEvent):
     """Δήλωση STANDING εβδομαδιαίου (χωρίς λήξη, τύπος fixed) στο ΕΡΓΑΝΗ.
 
-    `days` = το εβδομαδιαίο μοτίβο ανά DAY_CODE (baseline όλων των ημερών)."""
+    `days` = το εβδομαδιαίο μοτίβο ανά DAY_CODE, baseline των ημερών
+    [effective_from, end_date] (None = χωρίς όριο· παλιά events).
+    Κάθε υποβολή είναι Ή εβδομαδιαία (αυτό) Ή ημερήσια (ScheduleDaysSubmitted)·
+    για κάθε ημέρα ισχύει η ΤΕΛΕΥΤΑΙΑ που την καλύπτει."""
 
     employee_id: str
     days: dict
+    effective_from: date | None = None
+    end_date: date | None = None
 
 
 @dataclass(frozen=True)
@@ -306,6 +311,34 @@ class ScheduleDaysSubmitted(DomainEvent):
     employee_id: str
     batch_no: int = 0
     days: dict = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
+class ScheduleSystemDeclared(DomainEvent):
+    """Σύστημα καταχώρισης αλλαγών ωραρίου/οργάνωσης χρόνου/υπερωριών της
+    ΕΤΑΙΡΕΙΑΣ από τον μήνα `effective_from` (1η του μήνα) και μετά, έως νέα
+    δήλωση (ΥΑ 32689/2025, άρθρο 2Α):
+
+    "pre"   — προαναγγελτικό: οι αλλαγές δηλώνονται ΠΡΙΝ γίνουν·
+    "retro" — απολογιστικό (μόνο με ψηφιακή κάρτα): δηλώνονται έως το τέλος
+              του ΕΠΟΜΕΝΟΥ μήνα, από τα χτυπήματα της κάρτας.
+    Υποβάλλεται έως την τελευταία ημέρα του προηγούμενου μήνα."""
+
+    effective_from: date
+    system: str
+
+
+@dataclass(frozen=True)
+class RetroScheduleSubmitted(DomainEvent):
+    """Ολοκληρώθηκε η ΑΠΟΛΟΓΙΣΤΙΚΗ δήλωση ωραρίου της περιόδου (κλείνει την
+    υποχρέωση RETRO_SCHEDULE). Οι ίδιες οι ημέρες είναι `DailyScheduleAssigned`
+    + `ScheduleDaysSubmitted` (batch `batch_no`· 0 = καμία απόκλιση από την
+    κάρτα, τίποτα προς δήλωση)."""
+
+    period_year: int
+    period_month: int
+    batch_no: int = 0
+    days: int = 0
 
 
 @dataclass(frozen=True)
@@ -337,7 +370,11 @@ class CardPunchRecorded(DomainEvent):
     την ενώνει με την είσοδο της προηγούμενης).
     `minute`: λεπτά από τα μεσάνυχτα (0-1439).
     `kind`: "in" (είσοδος) | "out" (έξοδος).
-    `source`: "manual" (χειροκίνητη καταχώρηση) | "card" | "import"."""
+    `source`: "manual" (χειροκίνητη καταχώρηση) | "card" | "ergani" (εισαγωγή
+    αρχείου ΕΡΓΑΝΗ) | "schedule" (ταίρι ΤΥΦΛΟΥ χτυπήματος από το πρόγραμμα).
+    `blind`: ΤΥΦΛΟ χτύπημα — ήρθε ΧΩΡΙΣ το ταίρι του (γραμμή ΕΡΓΑΝΗ χωρίς
+    είσοδο ή έξοδο). Μένει ΜΟΝΙΜΑ στο log, ακόμη κι αφού η βάρδια
+    συμπληρωθεί (από το πρόγραμμα ή χειροκίνητα)."""
 
     employee_id: str
     punch_date: date
@@ -346,6 +383,7 @@ class CardPunchRecorded(DomainEvent):
     source: str = "manual"
     punch_id: str = ""
     note: str = ""
+    blind: bool = False
 
 
 @dataclass(frozen=True)
@@ -969,6 +1007,8 @@ class WorkHourRulesDefined(DomainEvent):
     daily_overwork_start: int = 8
     overtime_day_cap: int = 3
     overtime_year_cap: int = 150
+    orphan_month_cap: int = 3
+    card_rounding_minutes: int = 0
     # ΚΑΤΑΡΓΗΣΗ: εγγραφή που σημαίνει «από αυτή την ημερομηνία ΔΕΝ υπάρχει
     # κανόνας». Δεν είναι διαγραφή (κανόνας #2) — είναι κανονική εγγραφή με
     # valid_from. Το config._pick σκάει αντί να υποχωρήσει σιωπηλά στην
@@ -1129,6 +1169,8 @@ EVENT_TYPES = {
         EmploymentScheduleModeSet,
         ScheduleDeclaredToErgani,
         ScheduleDaysSubmitted,
+        ScheduleSystemDeclared,
+        RetroScheduleSubmitted,
         AttendanceRecorded,
         CardPunchRecorded,
         CardPunchCancelled,

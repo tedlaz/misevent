@@ -7,6 +7,7 @@
 μεταξύ mixins, θα φτιάξεις κύκλους.
 """
 
+from calendar import monthrange
 from datetime import date, timedelta
 
 import misevent.integrations.ergani as ergani_mod
@@ -15,9 +16,13 @@ import misevent.rules.constraints as constraints
 from misevent.domain.events import (
     ChildcareReductionSet,
     DailyScheduleAssigned,
+    RetroScheduleSubmitted,
     ScheduleDaysSubmitted,
+    ScheduleSystemDeclared,
     WorkScheduleAssigned,
 )
+
+SCHEDULE_SYSTEMS = {"pre": "Προαναγγελτικό", "retro": "Απολογιστικό"}
 
 
 class SchedulesMixin:
@@ -52,28 +57,62 @@ class SchedulesMixin:
                 "Η ημερομηνία λήξης του εβδομαδιαίου δεν μπορεί να είναι "
                 "πριν την ημερομηνία έναρξης"
             )
+        # Όρια με τις ΓΕΙΤΟΝΙΚΕΣ ημέρες (11ωρη ανάπαυση). Μέσα στο διάστημα
+        # ισχύος το νέο εβδομαδιαίο ΣΒΗΝΕΙ τις ημερήσιες αλλαγές (latest-wins),
+        # άρα ελέγχεται το ωράριο του ΜΟΤΙΒΟΥ — όχι το ημερήσιο που θα χαθεί.
+        # (Μέσα στο μοτίβο, και Κυρ→Δευ, ελέγχει ήδη το check_schedule.)
+        def pattern_on(d):
+            return weekly_pattern.get(constraints.DAY_CODES[d.weekday()], "")
+
         previous_day = effective_from - timedelta(days=1)
-        day_code = constraints.DAY_CODES[effective_from.weekday()]
-        current = emp.daily_schedule.get(
-            effective_from, weekly_pattern.get(day_code, "")
-        )
         constraints.check_daily_rest(
             emp.day_schedule(previous_day),
-            current,
+            pattern_on(effective_from),
             previous_day.strftime("%d/%m/%Y"),
             effective_from.strftime("%d/%m/%Y"),
         )
+        if end_date is not None:
+            # μετά τη λήξη μένουν μόνο τυχόν ημερήσιες αλλαγές (καμία εβδομάδα)
+            after = end_date + timedelta(days=1)
+            constraints.check_daily_rest(
+                pattern_on(end_date),
+                emp.daily_schedule.get(after, ""),
+                end_date.strftime("%d/%m/%Y"),
+                after.strftime("%d/%m/%Y"),
+            )
         self.store.append(
             employee_id,
             WorkScheduleAssigned(employee_id, effective_from, weekly_pattern, end_date),
         )
-        # ΣΤΑΘΕΡΟ πρόγραμμα: το νέο εβδομαδιαίο υποβάλλεται αμέσως ως standing
-        # ΟΧΕ (με τη λήξη του, αν έχει). ΜΕΤΑΒΛΗΤΟ: το εβδομαδιαίο είναι ΜΟΝΟ
-        # template του grid — η υποβολή στο ΕΡΓΑΝΗ γίνεται ρητά ανά εβδομάδα.
-        # Πριν την αναγγελία πρόσληψης ΔΕΝ στέλνεται (το ΕΡΓΑΝΗ την απορρίπτει):
-        # η «Υποβολή ΟΧΕ» της καρτέλας θα δηλώσει τότε το ισχύον πρόγραμμα.
-        if emp.schedule_mode == "fixed" and self.hire_announced(employee_id):
-            self._declare_standing_weekly(employee_id, effective_from, end_date)
+        # ΚΑΜΙΑ αυτόματη υποβολή: το ΣΤΑΘΕΡΟ εβδομαδιαίο μένει «εκκρεμές»
+        # (`emp.pending_weekly`) και δηλώνεται ΜΟΝΟ από το «Πρόγραμμα → ΕΡΓΑΝΗ»
+        # (`submit_weekly_schedules`). ΜΕΤΑΒΛΗΤΟ: μόνο template του grid.
+
+    def submit_weekly_schedules(self, selection: dict) -> int:
+        """Υποβολή ΕΚΚΡΕΜΩΝ εβδομαδιαίων (standing ΟΧΕ) στο ΕΡΓΑΝΗ:
+        `selection` = {employment_id: [ισχύς από, …]}. Με τη σειρά ισχύος,
+        ώστε το νεότερο να είναι το τελευταίο δηλωμένο. Επιστρέφει πλήθος."""
+        if self.proj.company is None:
+            raise ValueError("Δεν έχουν καταχωρηθεί στοιχεία εταιρείας")
+        todo = []
+        for eid, starts in selection.items():
+            emp = self.proj.employments.get(eid)
+            if emp is None:
+                raise ValueError(f"Άγνωστη απασχόληση {eid}")
+            self._require_hire_announced(eid)
+            wanted = {s if isinstance(s, date) else date.fromisoformat(str(s))
+                      for s in starts}
+            todo += [(eid, p) for p in emp.pending_weekly if p[0] in wanted]
+        if not todo:
+            raise ValueError("Δεν επιλέχθηκε εκκρεμές εβδομαδιαίο πρόγραμμα")
+        rejected = []
+        for eid, (start, pattern, end) in sorted(todo, key=lambda t: t[1][0]):
+            self._declare_standing_weekly(eid, start, end, pattern)
+            if any(p[0] == start for p in self.proj.employments[eid].pending_weekly):
+                rejected.append(self.proj.employments[eid].full_name)
+        if rejected:
+            raise ValueError("ΑΠΕΡΡΙΨΕ το ΕΡΓΑΝΗ το εβδομαδιαίο: " + ", ".join(rejected))
+        return len(todo)
 
     def validate_daily_schedule(self, employee_id, days: dict) -> dict:
         """Ελέγχει ημερήσιες μεταβολές χωρίς να γράψει event."""
@@ -276,3 +315,127 @@ class SchedulesMixin:
                 self.set_daily_schedule(eid, restore)
                 reverted += len(restore)
         return reverted
+
+    # ------------------------- Σύστημα δήλωσης & απολογιστική δήλωση ωραρίου
+    def declare_schedule_system(self, month_start: date, system: str, as_of: date):
+        """Σύστημα καταχώρισης αλλαγών ωραρίου της ΕΤΑΙΡΕΙΑΣ από τον μήνα
+        `month_start` (ΥΑ 32689/2025, 2Α Δ): δηλώνεται έως την τελευταία ημέρα
+        του ΠΡΟΗΓΟΥΜΕΝΟΥ μήνα (`as_of` = σήμερα) και ισχύει έως νέα δήλωση.
+        Το απολογιστικό επιτρέπεται μόνο με ψηφιακή κάρτα εργασίας."""
+        if system not in SCHEDULE_SYSTEMS:
+            raise ValueError("Άγνωστο σύστημα δήλωσης — προαναγγελτικό ή απολογιστικό")
+        month_start = month_start.replace(day=1)
+        if month_start <= as_of:
+            raise ValueError(
+                "Το σύστημα δηλώνεται έως την τελευταία ημέρα του προηγούμενου "
+                f"μήνα — νωρίτερος δυνατός μήνας: "
+                f"{(as_of.replace(day=1) + timedelta(days=32)).strftime('%m/%Y')}"
+            )
+        if system == "retro" and not any(
+            e.hire_submitted and str(e.working_card) == "1"
+            for e in self.proj.employments.values()
+        ):
+            raise ValueError(
+                "Το απολογιστικό σύστημα επιτρέπεται μόνο σε όσους εφαρμόζουν "
+                "ψηφιακή κάρτα εργασίας (κανείς εργαζόμενος με κάρτα)"
+            )
+        self.store.append("COMPANY", ScheduleSystemDeclared(month_start, system))
+
+    @staticmethod
+    def _retro_text(actual: list) -> str:
+        """Οι πραγματικές βάρδιες ως ωράριο ημέρας. Αν δεν χωρούν στη μορφή
+        του προγράμματος (> 2 τμήματα ή σπαστό με κενό < 3ω, π.χ. διάλειμμα),
+        δηλώνεται το ενιαίο διάστημα πρώτη είσοδος–τελευταία έξοδος."""
+        if not actual:
+            return ""
+        text = "+".join(actual)
+        try:
+            constraints.parse_day_schedule(text)
+            return text
+        except ValueError:
+            return f"{actual[0].split('-')[0]}-{actual[-1].split('-')[1]}"
+
+    @staticmethod
+    def _within_tolerance(declared: str, actual: str, flex: int) -> bool:
+        """Συμφωνεί η κάρτα με το δηλωμένο, με ΕΥΕΛΙΚΤΗ ΠΡΟΣΕΛΕΥΣΗ `flex` λεπτών
+        (Εγκ. 37271/2024 §Δ); Η προσέλευση επιτρέπεται ΜΟΝΟ μέσα στο
+        [έναρξη, έναρξη + flex] — ΠΟΤΕ νωρίτερα — και κάθε επόμενο άκρο
+        μετατίθεται έως όσο καθυστέρησε η προσέλευση: 09:00-17:00 με 30΄ ->
+        09:20-17:20 εντάξει, 08:50-17:00 ή 09:00-17:05 όχι (απόκλιση)."""
+        try:
+            a = constraints.parse_day_schedule(declared)
+            b = constraints.parse_day_schedule(actual)
+        except ValueError:
+            return False
+        if len(a) != len(b):
+            return False
+        if not a:
+            return True
+        delay = b[0]["start"] - a[0]["start"]
+        if not 0 <= delay <= flex:
+            return False
+        rest = [(x["end"], y["end"]) for x, y in zip(a, b)]
+        rest += [(x["start"], y["start"]) for x, y in zip(a[1:], b[1:])]
+        return all(0 <= y - x <= delay for x, y in rest)
+
+    def retro_schedule_proposal(self, year: int, month: int) -> dict:
+        """ΠΡΟΤΑΣΗ απολογιστικής δήλωσης: {eid: {date: (δηλωμένο, πραγματικό)}}
+        για τις ημέρες του μήνα όπου η ΚΑΡΤΑ αποκλίνει από το δηλωμένο πέρα
+        από την ευέλικτη προσέλευση του εργαζομένου (`flexible_arrival_minutes`).
+
+        - εργασία χωρίς χτύπημα (εκτός άδειας/αργίας/τηλεεργασίας) -> ρεπό·
+        - χτυπήματα σε ημέρα ρεπό ή εκτός ανοχής -> οι πραγματικές βάρδιες.
+        Read-only — η δήλωση γίνεται με `submit_retro_schedule`."""
+        out = {}
+        for emp in self.proj.employments.values():
+            if not emp.hire_submitted:
+                continue
+            try:
+                tol = int(emp.flexible_arrival_minutes or 0)
+            except ValueError:
+                tol = 0
+            leave_days = {
+                d for lv in emp.active_leaves()
+                for d in (lv.date_from + timedelta(days=i)
+                          for i in range((lv.date_to - lv.date_from).days + 1))
+            }
+            days = {}
+            for day in range(1, monthrange(year, month)[1] + 1):
+                d = date(year, month, day)
+                if not emp.active_on(d) or d in leave_days or emp.is_telework_only(d):
+                    continue
+                base = emp.day_baseline(d)
+                declared = emp.day_schedule(d) if base is None else base
+                actual = emp.actual_shifts(d)
+                if not actual and emp.holiday_off(d):
+                    continue  # αργία χωρίς παρουσία: κλειστά, όχι ρεπό
+                new = self._retro_text(actual)
+                if not self._within_tolerance(declared, new, tol):
+                    days[d] = (declared, new)
+            if days:
+                out[emp.employment_id] = days
+        return out
+
+    def submit_retro_schedule(self, year: int, month: int) -> dict:
+        """ΑΠΟΛΟΓΙΣΤΙΚΗ δήλωση του μήνα: οι ημέρες της πρότασης ΚΑΤΑΓΡΑΦΟΝΤΑΙ
+        ως πρόγραμμα (DailyScheduleAssigned) και μένουν «τροποποιημένες» — η
+        υποβολή στο ΕΡΓΑΝΗ γίνεται ΜΟΝΟ από το «Πρόγραμμα → ΕΡΓΑΝΗ». Κλείνει
+        την υποχρέωση RETRO_SCHEDULE.
+
+        ⚠️ ΣΚΟΠΙΜΗ εξαίρεση από το πάγωμα κλεισμένης περιόδου και τον έλεγχο
+        11ωρης ανάπαυσης (`validate_daily_schedule`): γίνεται τον ΕΠΟΜΕΝΟ
+        μήνα, αφού η μισθοδοσία έχει κλείσει, και καταγράφει ό,τι ΣΥΝΕΒΗ —
+        δεν αλλάζει ποσά (πληρώθηκαν από το εγκεκριμένο συγκεντρωτικό)."""
+        if self.proj.schedule_system_on(date(year, month, 1)) != "retro":
+            raise ValueError(f"Ο μήνας {month}/{year} δεν είναι σε απολογιστικό σύστημα")
+        if (year, month) not in self.proj.attendance_sheets:
+            raise ValueError(f"Εγκρίνετε πρώτα τις παρουσίες {month}/{year}")
+        proposal = self.retro_schedule_proposal(year, month)
+        for eid, days in proposal.items():
+            self.store.append(eid, DailyScheduleAssigned(
+                eid, {d.isoformat(): new for d, (_old, new) in days.items()}))
+        res = {"count": sum(len(v) for v in proposal.values()),
+               "employees": len(proposal)}
+        self.store.append("COMPANY", RetroScheduleSubmitted(
+            year, month, 0, res["count"]))
+        return res

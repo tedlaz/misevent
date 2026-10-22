@@ -8,6 +8,7 @@ from ..clock import today
 from ..helpers import flash_to, form_date, run_command
 from ..labels import TRACKS
 from ..system import proj, svc
+from .work_schedules import pending_count
 
 bp = Blueprint("obligations", __name__, url_prefix="/obligations")
 
@@ -49,6 +50,8 @@ def _panel(selected: str | None, ref, show_locked: bool = False, view: str = "ac
             if not (t[0] == "payment" and proj.misc_settings.get("auto_payments"))
         ],
         "detail": q.detail_payload(selected, ref) if selected else None,
+        # εκκρεμείς υποβολές προγράμματος (γίνονται ΜΟΝΟ από «Πρόγραμμα → ΕΡΓΑΝΗ»)
+        "schedule_pending": pending_count(),
     }
 
 

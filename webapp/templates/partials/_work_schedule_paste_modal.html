@@ -1,0 +1,29 @@
+{# Αντιγραφή εβδομάδας (Ζωντανά): το πρόγραμμα ΟΛΩΝ των εργαζομένων μιας
+   εβδομάδας γράφεται σε άλλη (μόνο οι ημέρες που διαφέρουν). #}
+<div class="modal-backdrop">
+  <div class="modal">
+    <form hx-post="{{ url_for('work_schedules.paste_week') }}"
+          hx-target="#modal-host" hx-swap="innerHTML">
+      <div class="mhead">
+        <h3>📋 Αντιγραφή εβδομάδας</h3>
+        <span class="muted" style="font-size:12.5px">
+          Όλοι οι εργαζόμενοι · οι εβδομάδες ξεκινούν Δευτέρα · ο προορισμός
+          πρέπει να είναι μελλοντικός</span>
+      </div>
+      <div class="mbody">
+        <div class="frm cols">
+          <label>Από την εβδομάδα (Δευτέρα)<input type="date" name="source_start"
+            value="{{ form.get('source_start', source.isoformat()) }}" required></label>
+          <label>Στην εβδομάδα (Δευτέρα)<input type="date" name="target_start"
+            value="{{ form.get('target_start', target.isoformat()) }}" required></label>
+        </div>
+      </div>
+      <div class="mfoot">
+        <button type="button" class="ghost"
+                hx-get="{{ url_for('work_schedules.modal_close') }}"
+                hx-target="#modal-host" hx-swap="innerHTML">Άκυρο</button>
+        <button class="run" type="submit">Αντιγραφή</button>
+      </div>
+    </form>
+  </div>
+</div>

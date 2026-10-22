@@ -234,4 +234,4 @@ def test_rejected_wto_is_not_recorded_as_declared():
     svc.submit_hire_wto(eid)
     assert proj.ergani_submissions[-1].status == "failed"
     assert not svc.ergani_hire_submitted(eid, "WTO")  # μπορεί να ξαναγίνει
-    assert proj.employments[eid].standing_weekly is None  # δεν «καλύπτει» ημέρες
+    assert proj.employments[eid].standing_history == []  # δεν «καλύπτει» ημέρες

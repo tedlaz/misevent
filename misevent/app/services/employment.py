@@ -252,16 +252,8 @@ class EmploymentMixin:
                 schedule_from, weekly_pattern, schedule_weeks
             )
             self.set_daily_schedule(employment_id, days)
-            # Ο χρήστης επέλεξε «ημερήσιο για N εβδομάδες» -> ΤΟ ΔΗΛΩΝΟΥΜΕ
-            # ΑΜΕΣΩΣ στο ΕΡΓΑΝΗ (ΟΧΕ μεταβλητού, αριθμημένο batch), ώστε οι
-            # ημέρες να μην μένουν αδήλωτες (pending). Χωρίς στοιχεία εταιρείας
-            # δεν υποβάλλεται — μένει καθαρός σχεδιασμός (όπως το standing fixed).
-            # ⚠️ Το ΕΡΓΑΝΗ δέχεται ΟΧΕ ΜΟΝΟ για ενεργή σχέση εργασίας, δηλ. ΜΕΤΑ
-            # την αναγγελία πρόσληψης. Στη ΜΕΤΑΦΟΡΑ (`ergani_hire_done`) αυτή έχει
-            # ήδη γίνει· αλλιώς οι ημέρες μένουν pending και δηλώνονται μετά το
-            # WebE3N από το κουμπί της καρτέλας.
-            if self.proj.company is not None and ergani_hire_done:
-                self.submit_schedule_days({employment_id: list(days)})
+            # Οι ημέρες μένουν αδήλωτες (pending): η δήλωση γίνεται ΜΟΝΟ από
+            # το «Πρόγραμμα → ΕΡΓΑΝΗ», μετά την αναγγελία πρόσληψης.
 
         # ΜΕΤΑΦΟΡΑ: η αναγγελία πρόσληψης έχει ήδη σταλεί από το προηγούμενο
         # πρόγραμμα — καταγράφεται ΩΣ ΥΠΟΒΛΗΘΕΙΣΑ χωρίς καμία κλήση στο ΕΡΓΑΝΗ.
@@ -490,13 +482,14 @@ class EmploymentMixin:
 
     # ------------------------------------------- Δήλωση προγράμματος στο ΕΡΓΑΝΗ
     def _declare_standing_weekly(
-        self, employment_id, effective_from=None, end_date=None
+        self, employment_id, effective_from=None, end_date=None, pattern=None
     ):
         """Υποβάλλει το σταθερό εβδομαδιαίο στο ΕΡΓΑΝΗ και το καταγράφει ως
         κάλυψη. Χωρίς στοιχεία εταιρείας δεν υποβάλλεται. `end_date` κενό =
         χωρίς λήξη· διαφορετικά το πρόγραμμα δηλώνεται με ισχύ έως τη λήξη."""
         emp = self.proj.employments[employment_id]
-        if not self.proj.company or not emp.schedule:
+        pattern = dict(pattern if pattern is not None else emp.schedule)
+        if not self.proj.company or not pattern:
             return
         res = self._ergani_submit(
             "WTO",
@@ -504,7 +497,7 @@ class EmploymentMixin:
             ergani_mod.build_wto(
                 self.proj.company,
                 emp,
-                emp.schedule,
+                pattern,
                 effective_from or emp.payroll_start,
                 end_date,
             ),
@@ -515,7 +508,10 @@ class EmploymentMixin:
         if res["status"] != "failed":
             self.store.append(
                 employment_id,
-                ScheduleDeclaredToErgani(employment_id, dict(emp.schedule)),
+                ScheduleDeclaredToErgani(
+                    employment_id, pattern,
+                    effective_from or emp.payroll_start, end_date,
+                ),
             )
 
     # -------------------------------------------------- Υποβολές πρόσληψης ΕΡΓΑΝΗ

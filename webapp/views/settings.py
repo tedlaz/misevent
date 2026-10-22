@@ -338,6 +338,7 @@ def misc_save():
             show_employer_cost=f.get("show_employer_cost") == "1",
             keep_wage_excess=f.get("keep_wage_excess") == "1",
             auto_payments=f.get("auto_payments") == "1",
+            obligations_horizon_months=form_int(f, "obligations_horizon_months", 1),
         )
         return "Αποθηκεύτηκαν οι προτιμήσεις (Διάφορα)"
 

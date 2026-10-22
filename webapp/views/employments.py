@@ -14,7 +14,7 @@ import base64
 import json
 from calendar import monthrange
 from copy import copy
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from types import SimpleNamespace
 
 from flask import Blueprint, Response, abort, jsonify, render_template, request, url_for
@@ -27,10 +27,11 @@ from misevent.domain.events import (
     LeaveType,
 )
 from misevent.domain.projections import profile_coverages
+from misevent.integrations import card_punches as cp
 from misevent.integrations import ergani as ergani_mod
 from misevent.integrations import ergani_parameters as ergani_params
+from misevent.integrations import karta_import
 from misevent.rules import config, constraints
-from misevent.rules.calendar_gr import is_working_day
 
 from .. import amka_pdf, labels
 from .. import queries as q
@@ -55,6 +56,7 @@ from ..helpers import (
 )
 from ..labels import LEAVE_LABELS, MONTHS_GEN, TERMINATION_REASONS
 from ..system import proj, store, svc
+from .work_schedules import _ensure_future, _retro_open
 
 bp = Blueprint("employments", __name__, url_prefix="/employments")
 
@@ -775,7 +777,6 @@ def _card(employment_id):
         "severance": svc.severance(employment_id),
         "attendance": sorted(per_month.items(), reverse=True),
         # Ημερήσιο πρόγραμμα (υπερισχύει του εβδομαδιαίου), πρόσφατο πρώτα
-        "daily_schedule": sorted(e.daily_schedule.items(), reverse=True)[:31],
         # Κατάσταση υποβολών πρόσληψης ΕΡΓΑΝΗ (ενεργοποιεί ο χρήστης)
         "e3_done": (
             svc.ergani_hire_submitted(employment_id, "WebE3N")
@@ -1031,6 +1032,202 @@ def modal_close():
     return ""
 
 
+# ponytail: υπερωρία = ό,τι ξεπερνά τις 9 ώρες κάρτας της ημέρας (ίδιο όριο
+# με το modal ημέρας)· η ακριβής κατάταξη είναι στο `svc.hours_analysis`.
+_OVERTIME_AFTER = 9 * 60
+
+
+def _calendar_day(e, d: date) -> list:
+    """Τα στοιχεία μιας ημέρας του ημερολογίου: [(κατηγορία, ώρες, ετικέτα)]."""
+    if not e.active_on(d):
+        return []
+    leave = next((lv for lv in e.active_leaves()
+                  if lv.date_from <= d <= lv.date_to), None)
+    if leave:
+        return [("leave", "", LEAVE_LABELS.get(leave.leave_type.value,
+                                               leave.leave_type.value))]
+    hours = e.day_schedule(d)
+    out = [("plan", hours.replace("-", " - "),
+            "ΕΡΓΑΣΙΑ" if hours else "ΑΝΑΠΑΥΣΗ/ΡΕΠΟ")]
+    worked = 0
+    for s in e.card_shifts(d):
+        a = cp.hhmm(s["s"]) if s["s"] is not None else "?"
+        b = cp.hhmm(s["e"]) if s["e"] is not None else "?"
+        out.append(("punch", f"{a} - {b}", "ΚΑΡΤΑ ΕΡΓΑΣΙΑΣ"))
+        if s["s"] is not None and s["e"] is not None:
+            worked += s["e"] - s["s"]
+    if worked > _OVERTIME_AFTER:
+        extra = worked - _OVERTIME_AFTER
+        out.append(("overtime", f"+{extra // 60}:{extra % 60:02d}", "ΥΠΕΡΩΡΙΑ"))
+    return out
+
+
+@bp.get("/<employment_id>/calendar")
+def calendar(employment_id):
+    """Μηνιαίο ημερολόγιο εργαζομένου (όπως το ΕΡΓΑΝΗ): πρόγραμμα, κάρτα,
+    υπερωρία, άδειες. Οι κατηγορίες κρύβονται με CSS (checkboxes)."""
+    e = proj.employments.get(employment_id)
+    if e is None:
+        abort(404)
+    try:
+        first = date.fromisoformat(request.args.get("m", "") + "-01")
+    except ValueError:
+        first = today().replace(day=1)
+    start = first - timedelta(days=first.weekday())
+    last = first.replace(day=monthrange(first.year, first.month)[1])
+    weeks = []
+    d = start
+    while d <= last:
+        weeks.append([(d + timedelta(days=i), _calendar_day(e, d + timedelta(days=i)))
+                      for i in range(7)])
+        d += timedelta(days=7)
+    return render_template(
+        "partials/_employment_calendar.html",
+        e=e, mid=employment_id, first=first, weeks=weeks, today=today(),
+        label=f"{labels.MONTHS_NOM[first.month]} {first.year}",
+        prev=(first - timedelta(days=1)).strftime("%Y-%m"),
+        next=(last + timedelta(days=1)).strftime("%Y-%m"),
+        now=today().strftime("%Y-%m"),
+    )
+
+
+def _covers(d: date, start, end) -> bool:
+    return (start is None or start <= d) and (end is None or d <= end)
+
+
+def _day_history(employment_id: str, d: date) -> list:
+    """Ό,τι έγινε για την ημέρα `d` του εργαζομένου, με τη σειρά του log:
+    [(χρονοσφραγίδα, εικονίδιο, τίτλος, λεπτομέρεια)]. Πρόγραμμα (αρχικό
+    εβδομαδιαίο / ημερήσιες αλλαγές), δηλώσεις ΕΡΓΑΝΗ, άδειες, κάρτα, παρουσία."""
+    # ponytail: σαρώνει όλο το log της εταιρείας ανά κλικ (όπως το Audit)·
+    # αν αργήσει, στοχευμένο read ανά aggregate στο EventStore.
+    iso, code = d.isoformat(), constraints.DAY_CODES[d.weekday()]
+    out, leaves, punches, first_weekly = [], set(), set(), True
+    for rec in store.load_log():
+        if rec["aggregate_id"] != employment_id:
+            continue
+        ev, t = rec["event"], rec["event_type"]
+        row = None
+        if t == "WorkScheduleAssigned":
+            if _covers(d, ev.effective_from, ev.end_date):
+                row = ("🗓️", "Αρχικό πρόγραμμα (εβδομαδιαίο)" if first_weekly
+                       else "Νέο εβδομαδιαίο πρόγραμμα",
+                       f"{ev.weekly_pattern.get(code) or 'ρεπό'} · ισχύς από "
+                       f"{ev.effective_from.strftime('%d/%m/%Y')}")
+            first_weekly = False
+        elif t == "DailyScheduleAssigned" and iso in ev.days:
+            row = ("📆", "Αλλαγή ημερήσιου προγράμματος", ev.days[iso] or "ρεπό")
+        elif t == "ScheduleDeclaredToErgani" and _covers(d, ev.effective_from, ev.end_date):
+            row = ("📤", "Δήλωση εβδομαδιαίου στο ΕΡΓΑΝΗ", ev.days.get(code) or "ρεπό")
+        elif t == "ScheduleDaysSubmitted" and iso in ev.days:
+            row = ("📤", f"Υποβολή ημερήσιου στο ΕΡΓΑΝΗ #{ev.batch_no}",
+                   ev.days[iso] or "ρεπό")
+        elif t in ("LeaveRecorded", "LeaveRescheduled") and (
+                _covers(d, ev.date_from, ev.date_to) or ev.leave_id in leaves):
+            leaves.add(ev.leave_id)
+            row = ("🏖️", ("Άδεια: " if t == "LeaveRecorded" else "Μετάθεση άδειας: ")
+                   + LEAVE_LABELS.get(ev.leave_type.value, ev.leave_type.value),
+                   f"{ev.date_from.strftime('%d/%m/%Y')} – {ev.date_to.strftime('%d/%m/%Y')}")
+        elif t == "LeaveCancelled" and ev.leave_id in leaves:
+            row = ("✖️", "Ακύρωση άδειας", "")
+        elif t == "CardPunchRecorded" and ev.punch_date == d:
+            punches.add(ev.punch_id)
+            row = ("💳", f"Κάρτα: {'είσοδος' if ev.kind == cp.IN else 'έξοδος'} "
+                   f"{cp.hhmm(ev.minute)}"
+                   f"{' — ΤΥΦΛΟ χτύπημα' if getattr(ev, 'blind', False) else ''}",
+                   ev.note or ev.source)
+        elif t == "CardPunchCancelled" and ev.punch_id in punches:
+            row = ("✖️", "Ακύρωση χτυπήματος κάρτας", ev.reason)
+        elif t == "AttendanceRecorded" and ev.work_date == d:
+            row = ("⏱️", "Καταγραφή παρουσίας",
+                   ", ".join(ev.shifts) or f"{ev.hours_worked:g} ώρες")
+        if row:
+            at = datetime.fromisoformat(rec["occurred_at"]).strftime("%d/%m/%Y %H:%M")
+            out.append((at, *row))
+    return out
+
+
+@bp.get("/<employment_id>/calendar/day")
+def calendar_day(employment_id):
+    """Modal ιστορικού μιας ημέρας του ημερολογίου."""
+    try:
+        d = date.fromisoformat(request.args.get("d", ""))
+    except ValueError:
+        abort(400)
+    return _day_modal(employment_id, d)
+
+
+def _day_modal(employment_id: str, d: date, form=None) -> str:
+    e = proj.employments.get(employment_id) or abort(404)
+    ref = today()
+    return render_template(
+        "partials/_emp_day_history_modal.html", e=e, d=d, form=form or {},
+        history=_day_history(employment_id, d), items=_calendar_day(e, d),
+        status={"pending": "αδήλωτο", "submitted": "δηλωμένο",
+                "modified": "τροποποιημένο — εκκρεμεί δήλωση",
+                "off": "εκτός απασχόλησης"}[e.day_status(d)],
+        # ίδιοι κανόνες με το «Ημερήσιο» / τα Ζωντανά· χτύπημα κάρτας μόνο
+        # σε ημέρα που έχει ξεκινήσει (η κάρτα καταγράφει ό,τι ΣΥΝΕΒΗ)
+        can_plan=e.active_on(d) and (d > ref or _retro_open(d, ref)),
+        can_punch=e.active_on(d) and d <= ref,
+        # διελεύσεις & βάρδιες της ημέρας (✕ ακύρωση, ⤓ ορφανό από πρόγραμμα)
+        card=q.card_day(d, employment_id),
+        **_punch_suggestion(e, d),
+    )
+
+
+def _punch_suggestion(e, d: date) -> dict:
+    """Προτεινόμενο χτύπημα από το ΠΡΟΓΡΑΜΜΑ της ημέρας: μετά από ζυγό πλήθος
+    διελεύσεων η επόμενη είσοδος, αλλιώς η αντίστοιχη έξοδος (σπαστό: ανά
+    τμήμα). Και οι δύο ώρες του τμήματος, για την αλλαγή κατεύθυνσης."""
+    try:
+        segs = constraints.parse_day_schedule(e.day_schedule(d))
+    except ValueError:
+        segs = []
+    n = len(e.punches_on(d))
+    seg = segs[min(n // 2, len(segs) - 1)] if segs else None
+    return {
+        "punch_kind": cp.IN if n % 2 == 0 else cp.OUT,
+        "punch_in": cp.hhmm(seg["start"]) if seg else "",
+        "punch_out": cp.hhmm(seg["end"]) if seg else "",
+    }
+
+
+@bp.post("/<employment_id>/calendar/day/punch")
+def calendar_day_punch(employment_id):
+    """Χτύπημα κάρτας από το modal της ημέρας: ανανεώνεται ΜΟΝΟ το modal
+    (#modal-host) και — με το event `ecal-refresh` — το ημερολόγιο στον μήνα
+    που βλέπει ο χρήστης· η καρτέλα δεν ξαναφορτώνεται.
+
+    `op`: κενό = νέα διέλευση · "cancel" = ακύρωση διέλευσης (αντισταθμιστικό
+    event) · "complete" = ΟΡΦΑΝΟ χτύπημα -> ταίρι από το πρόγραμμα (μηνιαίο
+    όριο ΕΡΓΑΝΗ). Η ΜΟΝΗ οθόνη χειρισμού της κάρτας (τα Ζωντανά μόνο δείχνουν)."""
+    f = request.form
+    d = form_date(f, "d")
+
+    def cmd():
+        op, pid = f.get("op", ""), f.get("punch_id", "")
+        if op == "cancel":
+            svc.cancel_card_punch(pid)
+            return "Η διέλευση ακυρώθηκε"
+        if op == "complete":
+            return svc.complete_punch_from_schedule(pid)
+        if d > today():
+            raise ValueError("Χτύπημα κάρτας μόνο για ημέρα που έχει ξεκινήσει")
+        svc.record_card_punch(employment_id, d, f.get("time", ""), f.get("kind", ""),
+                              note=f.get("note", "").strip())
+        kind = "Είσοδος" if f.get("kind") == cp.IN else "Έξοδος"
+        return f"{kind} {f.get('time')} καταγράφηκε στις {d.strftime('%d/%m/%Y')}"
+
+    ok, msg = run_command(cmd)
+    form = None if ok or f.get("op") else f
+    resp = flash_to(_day_modal(employment_id, d, form), msg, err=not ok)
+    if ok:
+        resp.headers["HX-Trigger"] = json.dumps(
+            {"flash": {"msg": msg, "err": False}, "ecal-refresh": True})
+    return resp
+
+
 @bp.get("/<employment_id>/modal/<name>")
 def modal(employment_id, name):
     """htmx: ανοίγει το modal της αντίστοιχης φόρμας της καρτέλας."""
@@ -1041,7 +1238,39 @@ def modal(employment_id, name):
         context["contracts"] = _contract_history(employment_id)
     if name == "terminate":
         context.update(_terminate_preview(employment_id, {}))
+    if name == "daily":
+        context.update(_daily_week(context["e"], request.args.get("week")))
     return render_template(f"partials/_emp_{name}_modal.html", **context)
+
+
+_FULL_DAYS = ("Δευτέρα", "Τρίτη", "Τετάρτη", "Πέμπτη", "Παρασκευή", "Σάββατο", "Κυριακή")
+
+
+def _daily_week(e, raw_week=None) -> dict:
+    """Η εβδομάδα (Δε–Κυ) του modal «Ημερήσιο»: ισχύον ωράριο ανά ημέρα και
+    αν αλλάζει (ίδιος κανόνας με τα Ζωντανά: μελλοντικές, ή αναδρομικά σε
+    απολογιστικό μήνα· εκτός απασχόλησης ποτέ). Προεπιλογή: η εβδομάδα
+    της αυριανής ημέρας."""
+    ref = today()
+    try:
+        day = date.fromisoformat(raw_week or "")
+    except ValueError:
+        day = ref + timedelta(days=1)
+    monday = day - timedelta(days=day.weekday())
+    rows = []
+    for i in range(7):
+        d = monday + timedelta(days=i)
+        rows.append({
+            "d": d, "label": f"{_FULL_DAYS[i]} {d.strftime('%d/%m')}",
+            "raw": e.day_schedule(d),
+            "editable": e.active_on(d) and (d > ref or _retro_open(d, ref)),
+        })
+    return {
+        "week_rows": rows, "monday": monday,
+        "prev_week": monday - timedelta(days=7), "next_week": monday + timedelta(days=7),
+        "week_label": f"{monday.strftime('%d/%m')} – "
+                      f"{(monday + timedelta(days=6)).strftime('%d/%m/%Y')}",
+    }
 
 
 def _term_window():
@@ -1295,27 +1524,6 @@ def ergani_e3_json(employment_id):
     )
 
 
-@bp.post("/<employment_id>/ergani/wto")
-def ergani_wto(employment_id):
-    def cmd():
-        emp = proj.employments.get(employment_id)
-        if emp is None:
-            raise ValueError(f"Άγνωστη απασχόληση {employment_id}")
-        # ΜΕΤΑΒΛΗΤΟ: δηλώνει τις αδήλωτες ημέρες του σχεδιασμένου ημερήσιου
-        # (όχι standing εβδομαδιαίο). ΣΤΑΘΕΡΟ: standing εβδομαδιαίο ΟΧΕ.
-        if emp.schedule_mode == "variable":
-            res = svc.submit_hire_wto_variable(employment_id)
-            return (
-                f"Δηλώθηκαν {res['count']} ημερήσια προγράμματα στο ΕΡΓΑΝΗ "
-                f"(υποβολή #{res['batch_no']})"
-            )
-        svc.submit_hire_wto(employment_id)
-        return "Υποβλήθηκε ΟΧΕ (σταθερό εβδομαδιαίο) στο ΕΡΓΑΝΗ"
-
-    ok, msg = run_command(cmd)
-    return flash_to(_fragment(employment_id), msg, err=not ok)
-
-
 @bp.post("/<employment_id>/insurance")
 def insurance(employment_id):
     def cmd():
@@ -1371,57 +1579,114 @@ def childcare(employment_id):
 
 @bp.post("/<employment_id>/schedule/daily")
 def schedule_daily(employment_id):
-    """ΗΜΕΡΗΣΙΟ πρόγραμμα σε εύρος ημερομηνιών — υπερισχύει του εβδομαδιαίου.
-    Νέα υποβολή αντικαθιστά τις ίδιες ημέρες (και υποβάλλεται στο ΕΡΓΑΝΗ)."""
+    """ΗΜΕΡΗΣΙΟ πρόγραμμα μιας εβδομάδας: κάθε ημέρα με το δικό της ωράριο
+    (`hours_<ISO>`, κενό = ρεπό) — υπερισχύει του εβδομαδιαίου. Γράφονται
+    ΜΟΝΟ όσες ημέρες άλλαξαν· η δήλωση στο ΕΡΓΑΝΗ γίνεται από το
+    «Πρόγραμμα → ΕΡΓΑΝΗ» (οι ημέρες μένουν τροποποιημένες/αδήλωτες ως τότε)."""
+    e = proj.employments.get(employment_id) or abort(404)
+    f = request.form
 
     def cmd():
-        f = request.form
-        d_from = form_date(f, "date_from")
-        d_to = form_date(f, "date_to")
-        if d_to < d_from:
-            raise ValueError("Η ημερομηνία «έως» προηγείται της «από»")
-        hours = (f.get("hours") or "").strip()  # κενό = ρεπό
-        days, d = {}, d_from
-        while d <= d_to:
-            days[d] = hours
-            d += timedelta(days=1)
+        days = {}
+        for key, value in f.items():
+            if not key.startswith("hours_"):
+                continue
+            d = date.fromisoformat(key[6:])
+            hours = value.strip()
+            if not _same_hours(hours, e.day_schedule(d)):
+                days[d] = hours
+        if not days:
+            return "Καμία αλλαγή — το πρόγραμμα της εβδομάδας μένει ως έχει"
+        _ensure_future(days)
         svc.set_daily_schedule(employment_id, days)
-        what = f"ωράριο {hours}" if hours else "ΡΕΠΟ"
-        return (
-            f"Ημερήσιο πρόγραμμα: {len(days)} ημέρες ({what}) — "
-            "υποβλήθηκε ΟΧΕ στο ΕΡΓΑΝΗ"
-        )
+        return (f"Καταγράφηκαν {len(days)} αλλαγές ημερών — υποβολή από το "
+                "«Πρόγραμμα → ΕΡΓΑΝΗ»")
 
     ok, msg = run_command(cmd)
     if ok:
-        return flash_to(_fragment(employment_id), msg, err=False)
-    return _modal_error(employment_id, "daily", msg)
+        return flash_to(_with_package(employment_id, f.get("week")), msg, err=False)
+    resp = _modal_error(employment_id, "daily", msg, **_daily_week(e, f.get("week")))
+    # μόνο το περιεχόμενο του modal (όχι το .modal -> χωρίς «αναβόσβημα»)
+    resp.headers.update({"HX-Retarget": "#daily-modal", "HX-Reswap": "outerHTML",
+                         "HX-Reselect": "#daily-modal"})
+    return resp
+
+
+def _same_hours(a: str, b: str) -> bool:
+    """Ίδιο ωράριο ημέρας ανεξάρτητα από τη γραφή (Τ/T, κενά, σειρά)."""
+    try:
+        key = lambda s: [(g["start"], g["end"], g["telework"])  # noqa: E731
+                         for g in constraints.parse_day_schedule(s)]
+        return key(a) == key(b)
+    except ValueError:
+        return a == b
+
+
+def _package(employment_id: str, week: str | None) -> dict:
+    """Το ΠΑΚΕΤΟ υποβολής της εβδομάδας: οι ημέρες που εκκρεμούν δήλωση
+    (αδήλωτες ή τροποποιημένες) — ό,τι θα σταλεί στο ΕΡΓΑΝΗ (WTODaily)."""
+    e = proj.employments[employment_id]
+    monday = _daily_week(e, week)["monday"]
+    return {
+        "pkg_monday": monday,
+        "pkg_label": _daily_week(e, week)["week_label"],
+        "pkg_rows": [
+            {"d": d, "old": e.day_baseline(d), "new": e.day_schedule(d)}
+            for d in svc.week_submittable_days(employment_id, monday)
+        ],
+    }
+
+
+def _with_package(employment_id: str, week: str | None):
+    """Η καρτέλα με ανοιχτό το modal του πακέτου υποβολής (μέσα στο
+    #modal-host της — αλλιώς το swap της καρτέλας θα το έσβηνε)."""
+    ctx = _card(employment_id)
+    pkg = _package(employment_id, week)
+    modal = (render_template("partials/_emp_daily_package_modal.html", **ctx, **pkg)
+             if pkg["pkg_rows"] else "")
+    return render_template("partials/_employment_card.html", **ctx, modal_html=modal)
+
 
 
 @bp.post("/<employment_id>/attendance")
 def attendance(employment_id):
-    """Καταγραφή παρουσιών σε εύρος ημερομηνιών (μόνο εργάσιμες).
+    """Καταγραφή παρουσιών όπως οι γραμμές της Κάρτας Εργασίας ΕΡΓΑΝΗ:
+    ημερομηνία · ώρα εισόδου · ώρα εξόδου (έξοδος ≤ είσοδο = επόμενη ημέρα).
 
-    ΑΠΑΡΑΙΤΗΤΟ για ημερομίσθιους: η μισθοδοσία τους είναι ημερομίσθιο x
-    ημέρες παρουσίας — χωρίς παρουσίες δεν υπολογίζεται τίποτα."""
+    Ίδια διαδρομή με την εισαγωγή xlsx (`record_attendance` → χτυπήματα
+    κάρτας): πολλές γραμμές της ίδιας ημέρας = διακοπτόμενο ωράριο. Νέα
+    καταγραφή ημέρας ΑΝΤΙΚΑΘΙΣΤΑ την προηγούμενη της ίδιας ημέρας."""
 
     def cmd():
         f = request.form
-        d_from = form_date(f, "date_from")
-        d_to = form_date(f, "date_to")
-        if d_to < d_from:
-            raise ValueError("Η ημερομηνία «έως» προηγείται της «από»")
-        hours = form_float(f, "hours", 8.0)
-        holidays = bool(f.get("holidays"))  # και αργίες/Σαββατοκύριακα
-        n, d = 0, d_from
-        while d <= d_to:
-            if holidays or is_working_day(d):
-                svc.record_attendance(employment_id, d, hours)
-                n += 1
-            d += timedelta(days=1)
-        if n == 0:
-            raise ValueError("Καμία εργάσιμη ημέρα στο διάστημα που επιλέξατε")
-        return f"Καταγράφηκαν {n} ημέρες παρουσίας ({hours:g} ώρες/ημέρα)"
+        e = proj.employments[employment_id]
+        punches = []
+        for day, t_in, t_out in zip(
+            f.getlist("day"), f.getlist("time_in"), f.getlist("time_out")
+        ):
+            if not (day or t_in or t_out):
+                continue  # κενή γραμμή
+            if not (day and t_in and t_out):
+                raise ValueError("Κάθε γραμμή θέλει ημερομηνία, είσοδο και έξοδο")
+            d = date.fromisoformat(day)
+            if not e.active_on(d):
+                raise ValueError(f"Η {d.strftime('%d/%m/%Y')} είναι εκτός "
+                                 "περιόδου απασχόλησης")
+            p = karta_import.KartaPunch(employment_id, "", "", d,
+                                        cp.hhmm(cp.parse_time(t_in)),
+                                        cp.hhmm(cp.parse_time(t_out)))
+            if p.minutes <= 0:
+                raise ValueError(f"{d.strftime('%d/%m/%Y')}: η είσοδος "
+                                 "ταυτίζεται με την έξοδο")
+            punches.append(p)
+        if not punches:
+            raise ValueError("Συμπληρώστε τουλάχιστον μία γραμμή")
+        daily = karta_import.daily_hours(punches)
+        shifts = karta_import.daily_shifts(punches)
+        for key, hours in sorted(daily.items()):
+            svc.record_attendance(employment_id, key[1], shifts[key])
+        return (f"Καταγράφηκαν {len(daily)} ημέρες παρουσίας "
+                f"({sum(daily.values()):g} ώρες)")
 
     ok, msg = run_command(cmd)
     if ok:

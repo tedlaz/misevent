@@ -56,7 +56,7 @@ def setup():
     d = date(2026, 7, 1)
     while d.month == 7:
         if d.weekday() < 5:
-            svc.record_attendance(eid, d, 8, shifts=["09:00-17:00"])
+            svc.record_attendance(eid, d, ["09:00-17:00"])
         d += timedelta(days=1)
     return svc, proj, eid
 
@@ -66,7 +66,7 @@ def test_draft_proposes_hours():
     svc, proj, eid = setup()
     # Κυριακή 12/7 βάρδια 22:00-02:00: 4ω νύχτα, 2ω αργία (οι 2 μετά τα
     # μεσάνυχτα είναι Δευτέρα)
-    svc.record_attendance(eid, date(2026, 7, 12), 4, shifts=["22:00-02:00"])
+    svc.record_attendance(eid, date(2026, 7, 12), ["22:00-02:00"])
     d = svc.attendance_draft(2026, 7)[eid]
     # 2ω Κυριακή-νύχτα (normal_nh), 2ω Δευτέρα-νύχτα (normal_n)
     assert d["normal_nh"] == 2.0 and d["normal_n"] == 2.0
@@ -77,7 +77,7 @@ def test_draft_proposes_hours():
 def test_payroll_includes_premiums():
     """Η μισθοδοσία προσθέτει τις προσαυξήσεις στα μικτά, με πλήρη ανάλυση."""
     svc, proj, eid = setup()
-    svc.record_attendance(eid, date(2026, 7, 12), 4, shifts=["22:00-02:00"])
+    svc.record_attendance(eid, date(2026, 7, 12), ["22:00-02:00"])
     svc.approve_attendance(2026, 7)
     res = svc.run_monthly_payroll(2026, 7)
     r = res[0][1]
@@ -116,7 +116,7 @@ def test_sheet_hours_and_payroll_analysis():
     """Το εγκεκριμένο φύλλο κρατά την κατάταξη ωρών και η μισθοδοσία την
     πλήρη ανάλυση — έτοιμα για reports/αποδείξεις."""
     svc, proj, eid = setup()
-    svc.record_attendance(eid, date(2026, 7, 12), 4, shifts=["22:00-02:00"])
+    svc.record_attendance(eid, date(2026, 7, 12), ["22:00-02:00"])
     svc.approve_attendance(2026, 7)
     svc.run_monthly_payroll(2026, 7)
 
@@ -170,7 +170,7 @@ def test_part_time_efka_days():
     d = date(2026, 7, 1)
     while d.month == 7:
         if d.weekday() < 5:
-            svc.record_attendance(eid, d, 4, shifts=["09:00-13:00"])
+            svc.record_attendance(eid, d, ["09:00-13:00"])
         d += timedelta(days=1)
     # Ιούλιος 2026: 23 ημέρες Δευ–Παρ -> 23 ημέρες ΕΦΚΑ
     draft = svc.attendance_draft(2026, 7)[eid]

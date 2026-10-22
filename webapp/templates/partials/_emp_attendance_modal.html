@@ -1,6 +1,9 @@
-{# Modal καταγραφής παρουσιών σε εύρος ημερομηνιών (μόνο εργάσιμες, εκτός αν
-   επιλεγεί το αντίθετο). Απαραίτητο για ημερομίσθιους. #}
+{# Modal καταγραφής παρουσιών — ίδια στοιχεία με την Κάρτα Εργασίας ΕΡΓΑΝΗ
+   (karta_*.xlsx): ημερομηνία · είσοδος · έξοδος. Κενές γραμμές αγνοούνται. #}
 {% set f = form or {} %}
+{% set days = f.getlist('day') if f.getlist is defined else [] %}
+{% set ins = f.getlist('time_in') if f.getlist is defined else [] %}
+{% set outs = f.getlist('time_out') if f.getlist is defined else [] %}
 <div class="modal-backdrop">
   <div class="modal">
     <form hx-post="{{ url_for('employments.attendance', employment_id=e.employment_id) }}"
@@ -8,21 +11,26 @@
       <div class="mhead">
         <h3>⏱️ Καταγραφή παρουσιών — {{ e.full_name }}</h3>
         <span class="muted" style="font-size:12.5px">
-          καταγράφονται μόνο οι εργάσιμες του διαστήματος
-          (ελληνικές αργίες εξαιρούνται), εκτός αν επιλέξετε το αντίθετο</span>
+          όπως η Κάρτα Εργασίας: μία γραμμή ανά βάρδια · δύο γραμμές την ίδια
+          ημέρα = διακοπτόμενο · έξοδος πριν την είσοδο = επόμενη ημέρα ·
+          νέα καταγραφή ημέρας αντικαθιστά την προηγούμενη</span>
       </div>
       <div class="mbody">
-        <div class="frm cols">
-          <label>Από<input type="date" name="date_from"
-            value="{{ f.get('date_from', '') }}" required></label>
-          <label>Έως<input type="date" name="date_to"
-            value="{{ f.get('date_to', '') }}" required></label>
-          <label>Ώρες/ημέρα<input type="number" name="hours"
-            value="{{ f.get('hours', 8) }}" min="1" max="12" step="0.5"></label>
-          <label class="chk"><input type="checkbox" name="holidays" value="1"
-            {{ 'checked' if f.get('holidays') }}>
-            Και αργίες/Σαββατοκύριακα</label>
-        </div>
+        <table class="tbl">
+          <thead><tr><th>Ημ/νία</th><th>Είσοδος</th><th>Έξοδος</th></tr></thead>
+          <tbody>
+            {% for i in range(7) %}
+              <tr>
+                <td><input type="date" name="day" aria-label="Ημερομηνία {{ i + 1 }}"
+                     value="{{ days[i] if i < days|length }}"></td>
+                <td><input type="time" name="time_in" aria-label="Είσοδος {{ i + 1 }}"
+                     value="{{ ins[i] if i < ins|length }}"></td>
+                <td><input type="time" name="time_out" aria-label="Έξοδος {{ i + 1 }}"
+                     value="{{ outs[i] if i < outs|length }}"></td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
       </div>
       <div class="mfoot">
         <button type="button" class="ghost"

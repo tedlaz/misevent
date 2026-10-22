@@ -9,6 +9,13 @@
 <div id="ob-panel"
      hx-vals='{"view": "{{ view }}", "locked": "{{ '1' if show_locked else '0' }}"}'>
 
+  {% if schedule_pending %}
+    <div class="work-next-alert" role="alert" style="margin-bottom:14px">
+      📤 Υπάρχουν <b>{{ schedule_pending }}</b> εκκρεμείς υποβολές προγράμματος στο
+      ΕΡΓΑΝΗ — <a class="lnk" href="{{ url_for('work_schedules.index') }}">Πρόγραμμα → ΕΡΓΑΝΗ</a>
+    </div>
+  {% endif %}
+
   <div class="card">
     <h2>Χρονολόγιο υποχρεώσεων</h2>
 

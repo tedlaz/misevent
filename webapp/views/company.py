@@ -2,10 +2,12 @@
 ΑΠΔ — και ΕΙΔΙΚΟΤΗΤΕΣ (θέσεις εργασίας) με την ασφαλιστική τριάδα ΕΦΚΑ/ΤΕΚΑ.
 Η πρόσληψη διαλέγει από τις ειδικότητες που δηλώνονται εδώ."""
 
+from datetime import timedelta
 from io import BytesIO
 
 from flask import Blueprint, abort, g, render_template, request, send_file
 
+from misevent.app.services.schedules import SCHEDULE_SYSTEMS
 from misevent.integrations import ergani, ergani_parameters, kpk_registry
 from misevent.rules import config
 from misevent.rules.constraints import norm_name
@@ -13,7 +15,7 @@ from misevent.rules.constraints import norm_name
 from .. import osyk
 from ..clock import today
 from ..ergani_credentials import ENVIRONMENTS
-from ..helpers import flash_to, run_command
+from ..helpers import flash_to, form_date, run_command
 from ..system import proj, registry, svc
 
 bp = Blueprint("company", __name__, url_prefix="/company")
@@ -88,8 +90,40 @@ def index():
     return render_template(
         "company.html", c=proj.company,
         company_values=_company_form_values(proj.company), **_panel_ctx(),
-        **_ergani_ctx(),
+        **_ergani_ctx(), **_system_ctx(),
     )
+
+
+# ------------------------------------- Σύστημα δήλωσης αλλαγών ωραρίου
+def _system_ctx() -> dict:
+    ref = today()
+    first = ref.replace(day=1)
+    months = []
+    for _ in range(12):  # από τον ΕΠΟΜΕΝΟ μήνα (δηλώνεται εκ των προτέρων)
+        first = (first + timedelta(days=32)).replace(day=1)
+        months.append(first)
+    return {
+        "systems": SCHEDULE_SYSTEMS,
+        "current": proj.schedule_system_on(ref),
+        "declared": sorted(proj.schedule_systems.items()),
+        "months": months,
+    }
+
+
+@bp.post("/schedule-system")
+def schedule_system():
+    f = request.form
+
+    def cmd():
+        svc.declare_schedule_system(
+            form_date(f, "month"), f.get("system", ""), today())
+        return (f"Δηλώθηκε {SCHEDULE_SYSTEMS[f['system']].lower()} σύστημα από "
+                f"{form_date(f, 'month').strftime('%m/%Y')} — υποβάλετε τη δήλωση "
+                "επιλογής και στο ΕΡΓΑΝΗ")
+
+    ok, msg = run_command(cmd)
+    return flash_to(render_template(
+        "partials/_company_schedule_system.html", **_system_ctx()), msg, err=not ok)
 
 
 # ------------------------------------------- Σύνδεση ΕΡΓΑΝΗ (ΜΟΝΟ διαχειριστές)

@@ -72,7 +72,7 @@ def test_fixed_standing_covers_all():
     svc.submit_hire_wto(eid)
     emp = proj.employments[eid]
     assert wto_count(proj, eid) == 1
-    assert emp.standing_weekly is not None
+    assert emp.standing_history
     assert emp.day_status(WED) == "submitted"
     assert emp.day_status(WED + timedelta(days=140)) == "submitted"
     assert svc.month_schedule_incomplete(2026, 3) is False
@@ -90,6 +90,29 @@ def test_daily_edit_is_modified_not_submitted():
     assert emp.day_status(FRI) == "modified"
     assert emp.day_status(WED) == "submitted"
     print("OK   αλλαγή ημέρας = modified, όχι αυτόματη υποβολή")
+
+
+def test_latest_submission_wins():
+    """Υποβολή = εβδομαδιαίο Ή ημερήσιο· ισχύει η ΤΕΛΕΥΤΑΙΑ που καλύπτει την ημέρα."""
+    svc, proj, eid = setup("fixed")
+    svc.submit_hire_wto(eid)  # αρχικό εβδομαδιαίο
+    svc.set_daily_schedule(eid, {FRI: "09:00-19:00"})
+    svc.submit_schedule_days({eid: [FRI]})  # ημερήσιο
+    emp = proj.employments[eid]
+    assert emp.day_schedule(FRI) == emp.day_baseline(FRI) == "09:00-19:00"
+    later = {k: "10:00-18:00" for k in FULL_WEEK}
+    svc.set_schedule(eid, HIRE, later)  # νεότερο εβδομαδιαίο: μόνο καταγραφή
+    assert emp.day_status(FRI) == "modified" and emp.pending_weekly
+    svc.submit_weekly_schedules({eid: [HIRE]})  # υποβολή από «Πρόγραμμα → ΕΡΓΑΝΗ»
+    assert not emp.pending_weekly
+    assert emp.day_schedule(FRI) == emp.day_baseline(FRI) == "10:00-18:00"
+    assert emp.day_status(FRI) == "submitted"
+    # νεότερο ημερήσιο ξανά επικρατεί
+    svc.set_daily_schedule(eid, {FRI: "08:00-18:00"})
+    svc.submit_schedule_days({eid: [FRI]})
+    assert emp.day_baseline(FRI) == "08:00-18:00"
+    assert emp.day_baseline(WED) == "10:00-18:00"
+    print("OK   η τελευταία υποβολή (εβδομαδιαία/ημερήσια) επικρατεί")
 
 
 def test_submit_batch_declares_and_numbers():

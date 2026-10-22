@@ -1,0 +1,122 @@
+{# Ιστορικό ΜΙΑΣ ημέρας (κλικ σε ημέρα του ημερολογίου): η τρέχουσα εικόνα
+   και, από κάτω, ό,τι καταγράφηκε για αυτήν με τη σειρά του event log. #}
+<div class="modal-backdrop">
+  <div class="modal">
+  {# Το χτύπημα κάρτας ανανεώνει ΜΟΝΟ αυτό το περιεχόμενο (hx-select), όχι το
+     .modal — αλλιώς ξαναπαίζει το animation εμφάνισης και «αναβοσβήνει».
+     .modal-swap = display:contents (app.css). #}
+  <div id="day-modal" class="modal-swap">
+    <div class="mhead">
+      <h3>📅 {{ d|date_gr }} — {{ e.full_name }}</h3>
+      <span class="muted" style="font-size:12.5px">
+        ισχύον πρόγραμμα <b>{{ e.day_schedule(d) or 'ρεπό' }}</b> · ΕΡΓΑΝΗ: {{ status }}</span>
+    </div>
+    <div class="mbody">
+      {% if items %}
+        <div class="ecal" style="margin-bottom:12px">
+          {% for k, hours, lbl in items %}
+            <div class="ecal-ev {{ k }}">{% if hours %}<b>{{ hours }}</b>{% endif %}<span>{{ lbl }}</span></div>
+          {% endfor %}
+        </div>
+      {% endif %}
+      {# Αλλαγή προγράμματος ημέρας: ίδια ροή με το «Ημερήσιο» — καταγράφεται
+         μόνο αν διαφέρει και ανοίγει το πακέτο υποβολής ΕΡΓΑΝΗ #}
+      {% if can_plan %}
+        <h3 class="sec">Πρόγραμμα ημέρας</h3>
+        <form class="frm" hx-post="{{ url_for('employments.schedule_daily', employment_id=e.employment_id) }}"
+              hx-target="#employment-card" hx-swap="outerHTML">
+          <input type="hidden" name="week" value="{{ d.isoformat() }}">
+          <label>Ωράριο (κενό = ρεπό)
+            <input name="hours_{{ d.isoformat() }}" placeholder="ρεπό" data-time-rail
+                   value="{{ e.day_schedule(d) }}"></label>
+          <div class="btnrow"><button class="run" type="submit">Αποθήκευση → πακέτο υποβολής</button></div>
+        </form>
+      {% endif %}
+
+      {# Χτύπημα κάρτας (ωμή διέλευση — το ζευγάρωμα σε βάρδιες γίνεται μόνο του) #}
+      {% if can_punch %}
+        <h3 class="sec">Χτύπημα κάρτας</h3>
+        <form class="frm cols" hx-post="{{ url_for('employments.calendar_day_punch', employment_id=e.employment_id) }}"
+              hx-target="#day-modal" hx-select="#day-modal" hx-swap="outerHTML">
+          <input type="hidden" name="d" value="{{ d.isoformat() }}">
+          {# Προτεινόμενη ώρα = του προγράμματος· αλλάζει μαζί με την κατεύθυνση #}
+          {% set kind = form.get('kind', punch_kind) %}
+          <label>Ώρα<input type="time" name="time" required
+            value="{{ form.get('time', punch_out if kind == 'out' else punch_in) }}"></label>
+          <label>Κατεύθυνση
+            <select name="kind" data-in="{{ punch_in }}" data-out="{{ punch_out }}"
+                    onchange="this.form.time.value = this.dataset[this.value] || this.form.time.value">
+              <option value="in" {{ 'selected' if kind != 'out' }}>Είσοδος</option>
+              <option value="out" {{ 'selected' if kind == 'out' }}>Έξοδος</option>
+            </select></label>
+          <label class="wide">Σημείωση <i>(προαιρετικό)</i>
+            <input name="note" value="{{ form.get('note', '') }}" placeholder="π.χ. ξεχασμένο χτύπημα"></label>
+          <div class="btnrow"><button class="run" type="submit">💳 Προσθήκη χτυπήματος</button></div>
+        </form>
+      {% endif %}
+
+      {# ΚΑΡΤΑ ΤΗΣ ΗΜΕΡΑΣ: οι ωμές διελεύσεις (✕ = ακύρωση) και οι ΒΑΡΔΙΕΣ που
+         παράγει το ζευγάρωμα· ελλιπής βάρδια = κίτρινη, με «⤓ πρόγραμμα»
+         (ορφανό χτύπημα, έως το μηνιαίο όριο). #}
+      {% for r in card.rows %}
+        {% set act = url_for('employments.calendar_day_punch', employment_id=e.employment_id) %}
+        <div class="cardday">
+          <div class="cd-head">
+            <b>Κάρτα</b>
+            <span class="muted">σύνολο {{ '%g'|format(r.hours) }}ω ·
+              ορφανά μήνα {{ r.orphans }}/{{ card.orphan_cap }}</span>
+          </div>
+          <div class="cd-chips">
+            {% for p in r.punches %}
+              <span class="punchchip {{ p.kind }}"
+                    title="{{ p.label }} {{ p.time }}{% if p.note %} · {{ p.note }}{% endif %}">
+                <b>{{ p.time }}</b> {{ p.label }}{% if p.blind %} <i title="Τυφλό χτύπημα: ήρθε χωρίς ταίρι">τυφλό</i>{% endif %}{% if p.source == 'schedule' %} <i title="Ταίρι τυφλού χτυπήματος από το πρόγραμμα">πρόγρ.</i>{% endif %}
+                <button type="button" class="x" title="Ακύρωση διέλευσης"
+                        hx-post="{{ act }}"
+                        hx-vals='{"op": "cancel", "punch_id": "{{ p.id }}", "d": "{{ d.isoformat() }}"}'
+                        hx-target="#day-modal" hx-select="#day-modal" hx-swap="outerHTML">✕</button>
+              </span>
+            {% endfor %}
+          </div>
+          <div class="cd-chips">
+            {% for s in r.shifts %}
+              <span class="shiftchip {{ 'open' if s.open }} {{ 'orphan' if s.orphan }}"
+                    title="{% if s.open %}Είσοδος χωρίς έξοδο — η βάρδια είναι ανοιχτή{% elif s.orphan %}Έξοδος χωρίς είσοδο — ελλιπής καταγραφή{% else %}Βάρδια από ζευγάρωμα εισόδου/εξόδου{% endif %}">
+                {{ s.text }}{% if s.h %} <i>{{ '%g'|format(s.h) }}ω</i>{% endif %}
+                {% if s.open or s.orphan %}
+                  <button type="button" class="x"
+                          title="Συμπλήρωση {{ 'εξόδου' if s.open else 'εισόδου' }} από το πρόγραμμα (ορφανό χτύπημα)"
+                          {{ 'disabled' if r.orphans >= card.orphan_cap }}
+                          hx-post="{{ act }}"
+                          hx-vals='{"op": "complete", "punch_id": "{{ s.lone_id }}", "d": "{{ d.isoformat() }}"}'
+                          hx-target="#day-modal" hx-select="#day-modal" hx-swap="outerHTML">⤓ πρόγραμμα</button>
+                {% endif %}
+              </span>
+            {% endfor %}
+          </div>
+        </div>
+      {% endfor %}
+
+      <h3 class="sec">Ιστορικό</h3>
+      {% if history %}
+        <table class="tbl">
+          <thead><tr><th>Καταχώρηση</th><th></th><th>Γεγονός</th><th>Λεπτομέρεια</th></tr></thead>
+          <tbody>
+            {% for at, icon, title, detail in history %}
+              <tr><td class="mono">{{ at }}</td><td>{{ icon }}</td>
+                <td>{{ title }}</td><td class="mono">{{ detail }}</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      {% else %}
+        <div class="empty">Καμία καταγραφή για την ημέρα.</div>
+      {% endif %}
+    </div>
+    <div class="mfoot">
+      <button type="button" class="ghost"
+              hx-get="{{ url_for('employments.modal_close') }}"
+              hx-target="#modal-host" hx-swap="innerHTML">Κλείσιμο</button>
+    </div>
+  </div>
+  </div>
+</div>

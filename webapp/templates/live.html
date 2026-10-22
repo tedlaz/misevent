@@ -14,11 +14,13 @@
          {# ΣΦΥΓΜΟΣ ψηφιακής κάρτας: ένας αριθμός που αλλάζει σε κάθε νέα
             διέλευση — το JS τον ρωτά και ξαναζητά γραμμές ΜΟΝΟ όταν άλλαξε #}
          data-pulse-url="{{ url_for('live.pulse') }}"
-         {# Double click σε ημέρα (εβδομάδα): ΙΔΙΑ οθόνη «Πρόγραμμα ημέρας»
-            με το Πρόγραμμα εργασίας (work-schedule-planner.js) #}
+         {# Double click σε ημέρα (εβδομάδα): «Πρόγραμμα ημέρας»
+            (επεξεργαστής: work-schedule-planner.js) #}
          data-day-url="{{ url_for('work_schedules.day_overview') }}"
          {# Μήνας: νέα άδεια με double click αρχή + double click τέλος #}
-         data-leave-url="{{ url_for('leaves.create_leave', employment_id='__EID__') }}">
+         data-leave-url="{{ url_for('leaves.create_leave', employment_id='__EID__') }}"
+         {# Κλικ σε ζώνη άδειας: επεξεργασία #}
+         data-leave-edit-url="{{ url_for('leaves.leave_modal', employment_id='__EID__', leave_id='__LID__') }}">
 
   <div class="lb-top">
     <div class="lb-clock">
@@ -32,14 +34,19 @@
       <span class="lb-t t-miss"><b>0</b> ασυμφωνία με κάρτα</span>
     </div>
     <span class="grow"></span>
-    {# Η ΜΟΝΗ ΕΝΤΟΛΗ αυτής της οθόνης: χειροκίνητη καταχώρηση διέλευσης
-       ψηφιακής κάρτας. Ό,τι καταγραφεί εμφανίζεται ΑΜΕΣΩΣ στο grid
-       (HX-Trigger `lb-refresh` -> live-board.js). #}
-    <button type="button" class="ghost" id="lb-punch"
-            hx-get="{{ url_for('live.punch_modal') }}"
-            hx-vals='{"pdate": "{{ day.isoformat() }}"}'
+    {# ΕΝΤΟΛΕΣ: modals στο #modal-host· ό,τι αποθηκευτεί εμφανίζεται ΑΜΕΣΩΣ
+       στο grid (HX-Trigger `lb-refresh` -> live-board.js). Οι αλλαγές
+       προγράμματος συγκεντρώνονται στο «Πρόγραμμα → ΕΡΓΑΝΗ» για υποβολή. #}
+    <button type="button" class="ghost"
+            hx-get="{{ url_for('work_schedules.range_modal') }}"
             hx-target="#modal-host" hx-swap="innerHTML"
-            title="Καταχώρηση εισόδου/εξόδου ψηφιακής κάρτας">🕘 Κάρτα</button>
+            title="Ίδιο ωράριο σε διάστημα ημερών για πολλούς εργαζομένους">📆 Μαζική</button>
+    <button type="button" class="ghost"
+            hx-get="{{ url_for('work_schedules.paste_modal') }}"
+            hx-target="#modal-host" hx-swap="innerHTML"
+            title="Αντιγραφή του προγράμματος μιας εβδομάδας σε άλλη">📋 Εβδομάδα</button>
+    <a class="ghost" href="{{ url_for('work_schedules.index') }}"
+       title="Εκκρεμείς αλλαγές προγράμματος — υποβολή στο ΕΡΓΑΝΗ">📤 ΕΡΓΑΝΗ</a>
     {# Μετακίνηση σε προηγούμενη/επόμενη ημέρα με ομαλό animation #}
     <div class="lb-nav">
       <button type="button" class="ghost" id="lb-prev"
@@ -94,7 +101,7 @@
     <span><i class="k-punch warn"></i> Αργοπορία / πρόωρη αποχώρηση</span>
     <span><i class="k-miss"></i> Χωρίς χτύπημα / ασυμφωνία με κάρτα</span>
     <span><i class="k-open"></i> Ανοιχτή βάρδια (χωρίς έξοδο)</span>
-    <span><i class="k-leave"></i> Άδεια (χρώμα ανά τύπο, όπως στις Άδειες)</span>
+    <span><i class="k-leave"></i> Άδεια (χρώμα ανά τύπο · κλικ: επεξεργασία)</span>
   </div>
 
   {# Μοτίβο MODAL (§9): ο host ζει ΜΕΣΑ στην κάρτα και το κενό περιεχόμενο
@@ -113,5 +120,5 @@
 
 {% block scripts %}
 <script src="{{ url_for('static', filename='live-board.js') }}" defer></script>
-<script src="{{ url_for('static', filename='work-schedule-planner.js', v=15) }}" defer></script>
+<script src="{{ url_for('static', filename='work-schedule-planner.js', v=16) }}" defer></script>
 {% endblock %}

@@ -186,6 +186,18 @@ def import_karta():
             f"Εισήχθησαν {res['recorded']} ημέρες παρουσίας για "
             f"{res['employees']} εργαζόμενους (περίοδοι: {periods})"
         )
+        if res["blind"]:
+            fixed = sum(b["fixed"] for b in res["blind"])
+            msg += (f" · ΤΥΦΛΑ ΧΤΥΠΗΜΑΤΑ: {len(res['blind'])} "
+                    f"(διορθώθηκαν από πρόγραμμα: {fixed})")
+            msg += "".join(
+                f" · {b['name']} {b['day'].strftime('%d/%m')}: {b['fix']}"
+                for b in res["blind"] if not b["fixed"]
+            )
+        if res["on_leave"]:
+            msg += " · ⚠️ ΧΤΥΠΗΜΑΤΑ ΣΕ ΗΜΕΡΕΣ ΑΔΕΙΑΣ: " + ", ".join(
+                f"{b['name']} {b['day'].strftime('%d/%m')}" for b in res["on_leave"]
+            )
         if res["unmatched"]:
             afms = ", ".join(
                 f"{afm} {name}".strip() for afm, name in res["unmatched"].items()

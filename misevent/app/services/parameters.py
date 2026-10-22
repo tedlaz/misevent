@@ -188,12 +188,15 @@ class ParametersMixin:
     def set_misc_settings(self, **fields):
         """Λειτουργικές προτιμήσεις («Διάφορα» στη σελίδα Παράμετροι) —
         αποθηκεύονται ως event (latest-wins). Δεκτά κλειδιά: όσα ορίζει το
-        `projections.MISC_DEFAULTS`. Οι τιμές αποθηκεύονται ως bool."""
+        `projections.MISC_DEFAULTS`, με τον τύπο του default (bool/int)."""
         from misevent.domain.projections import MISC_DEFAULTS
 
-        clean = {k: bool(v) for k, v in fields.items() if k in MISC_DEFAULTS}
+        clean = {k: type(MISC_DEFAULTS[k])(v)
+                 for k, v in fields.items() if k in MISC_DEFAULTS}
         if not clean:
             raise ValueError("Δεν δόθηκε καμία έγκυρη προτίμηση")
+        if not 0 <= clean.get("obligations_horizon_months", 0) <= 24:
+            raise ValueError("Ο ορίζοντας εκκρεμοτήτων πρέπει να είναι 0–24 μήνες")
         self.store.append("MISC", MiscSettingsChanged(clean))
 
     def misc_settings(self) -> dict:

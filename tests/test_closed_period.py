@@ -97,7 +97,7 @@ def test_schedule_is_frozen():
 
 def test_attendance_is_frozen():
     svc, _, eid = setup()
-    msg = refuses(svc.record_attendance, eid, date(2026, 1, 15), 8.0)
+    msg = refuses(svc.record_attendance, eid, date(2026, 1, 15), ["09:00-17:00"])
     assert "1/2026" in msg
     refuses(svc.approve_attendance, 2026, 1)
     print("OK παρουσίες: ούτε καταγραφή ούτε επανέγκριση σε κλεισμένη περίοδο")

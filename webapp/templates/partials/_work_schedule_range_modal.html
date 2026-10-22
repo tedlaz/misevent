@@ -1,0 +1,42 @@
+{# Μαζική αλλαγή προγράμματος (Ζωντανά): ίδιο ωράριο σε διάστημα ημερών
+   για έναν ή πολλούς εργαζομένους. Οι αλλαγές πάνε στην οθόνη
+   «Πρόγραμμα → ΕΡΓΑΝΗ» για υποβολή. #}
+{% set picked = form.getlist('eid') if form.getlist else [] %}
+<div class="modal-backdrop">
+  <div class="modal">
+    <form hx-post="{{ url_for('work_schedules.update_range') }}"
+          hx-target="#modal-host" hx-swap="innerHTML">
+      <div class="mhead">
+        <h3>📆 Μαζική αλλαγή προγράμματος</h3>
+        <span class="muted" style="font-size:12.5px">
+          Υπερισχύει του εβδομαδιαίου · κενό ωράριο = ΡΕΠΟ ·
+          σπαστό: 09:00-13:00+16:00-20:00 · πρόθεμα Τ = τηλεεργασία
+        </span>
+      </div>
+      <div class="mbody">
+        <div class="frm cols">
+          <label>Από<input type="date" name="date_from"
+            value="{{ form.get('date_from', tomorrow.isoformat()) }}" required></label>
+          <label>Έως<input type="date" name="date_to"
+            value="{{ form.get('date_to', tomorrow.isoformat()) }}" required></label>
+          <label class="wide">Ωράριο (κενό = ΡΕΠΟ)
+            <input name="hours" placeholder="ρεπό" value="{{ form.get('hours', '') }}"></label>
+          <fieldset class="wide" style="border:0;padding:0;margin:0">
+            <legend>Εργαζόμενοι</legend>
+            {% for e in employees %}
+              <label style="display:block;font-weight:normal">
+                <input type="checkbox" name="eid" value="{{ e.employment_id }}"
+                       {{ 'checked' if e.employment_id in picked }}> {{ e.full_name }}</label>
+            {% endfor %}
+          </fieldset>
+        </div>
+      </div>
+      <div class="mfoot">
+        <button type="button" class="ghost"
+                hx-get="{{ url_for('work_schedules.modal_close') }}"
+                hx-target="#modal-host" hx-swap="innerHTML">Άκυρο</button>
+        <button class="run" type="submit">Αποθήκευση</button>
+      </div>
+    </form>
+  </div>
+</div>

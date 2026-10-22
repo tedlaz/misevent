@@ -26,7 +26,7 @@ MONTHS_NOM = (
     "Νοέμβριος", "Δεκέμβριος",
 )
 
-# Σύντομα ονόματα ημερών (Δευτέρα=0) — ΜΙΑ πηγή: grid Προγράμματος & Ζωντανά
+# Σύντομα ονόματα ημερών (Δευτέρα=0) — ΜΙΑ πηγή για τα Ζωντανά
 DAY_NAMES = ("Δε", "Τρ", "Τε", "Πε", "Πα", "Σα", "Κυ")
 
 # Σύντομοι μήνες για άξονες γραφημάτων («Μαρ 2026») — index 1..12.
@@ -142,9 +142,7 @@ NAV_GROUPS = [
     ]),
     ("staff", "Προσωπικό", "👥", [
         ("persons.index", "👥", "Εργαζόμενοι", False),
-        ("work_schedules.index", "📅", "Πρόγραμμα", False),
         ("attendance.index", "⏱️", "Παρουσίες", False),
-        ("leaves.index", "🏖️", "Άδειες", False),
     ]),
     ("pay", "Αμοιβές", "🧮", [
         ("payroll.index", "🧮", "Μισθοδοσία", False),
@@ -152,6 +150,7 @@ NAV_GROUPS = [
     ]),
     ("filings", "Υποβολές", "🏛️", [
         ("ergani.index", "🏛️", "ΕΡΓΑΝΗ", False),
+        ("work_schedules.index", "📅", "Πρόγραμμα → ΕΡΓΑΝΗ", False),
         ("eapd.index", "📄", "Αρχεία ΑΠΔ", False),
         ("fmy.index", "🧾", "Αρχεία ΦΜΥ", False),
     ]),
@@ -230,6 +229,8 @@ EVENT_LABELS = {
     "EmploymentScheduleModeSet": "Τύπος προγράμματος",
     "ScheduleDeclaredToErgani": "Δήλωση ωραρίου στο ΕΡΓΑΝΗ",
     "ScheduleDaysSubmitted": "Υποβολή ημερήσιων προγραμμάτων ΕΡΓΑΝΗ",
+    "ScheduleSystemDeclared": "Σύστημα δήλωσης αλλαγών ωραρίου",
+    "RetroScheduleSubmitted": "Απολογιστική δήλωση ωραρίου",
     "AttendanceRecorded": "Παρουσία ημέρας",
     "CardPunchRecorded": "Χτύπημα κάρτας",
     "CardPunchCancelled": "Ακύρωση χτυπήματος κάρτας",

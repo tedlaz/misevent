@@ -78,9 +78,11 @@
          title="{{ r.name }}{% if r.specialty %} · {{ r.specialty }}{% endif %}
 {{ day|date_gr }}: {% if r.leave %}{{ r.leave }}{% elif r.start is none %}ρεπό{% else %}πρόγραμμα {{ '%g'|format(r.hours) }}ω{% if r.worked %} · παρουσία {{ '%g'|format(r.worked) }}ω{% endif %}{% endif %}">{{ r.name }}</a>
       {% if r.declared == 'pending' %}
-        <i class="lb-flag pend" title="Αδήλωτο πρόγραμμα στο ΕΡΓΑΝΗ">!</i>
+        <a class="lb-flag pend" href="{{ url_for('work_schedules.index') }}"
+           title="Αδήλωτο πρόγραμμα στο ΕΡΓΑΝΗ — υποβολή">!</a>
       {% elif r.declared == 'modified' %}
-        <i class="lb-flag mod" title="Το πρόγραμμα άλλαξε μετά τη δήλωση στο ΕΡΓΑΝΗ">~</i>
+        <a class="lb-flag mod" href="{{ url_for('work_schedules.index') }}"
+           title="Το πρόγραμμα άλλαξε μετά τη δήλωση στο ΕΡΓΑΝΗ — υποβολή">~</a>
       {% endif %}
     </div>
 
@@ -96,9 +98,9 @@
 
         {# Ημέρες άδειας — σε προβολή έτους ΔΙΑΣΤΗΜΑ συνεχόμενων ημερών #}
         {% for b in r.bands %}
-          <span class="lb-leaveband lv-{{ b.type }}"
+          <span class="lb-leaveband lv-{{ b.type }}" data-lid="{{ b.lid }}"
                 style="--s:{{ b.s }};--d:{{ b.e - b.s }}"
-                title="{{ b.label }}"></span>
+                title="{{ b.label }} · κλικ: επεξεργασία"></span>
         {% endfor %}
 
         {# ΠΡΟΒΟΛΗ ΕΤΟΥΣ: ΣΥΜΠΑΓΗΣ μπάρα ανά ΣΕΡΙ συνεχόμενων ημερών εργασίας

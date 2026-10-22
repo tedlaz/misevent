@@ -1,13 +1,22 @@
-<div class="modal-backdrop work-day-backdrop">
+{# ΧΤΥΠΗΜΑΤΑ ΚΑΡΤΑΣ της ημέρας: λωρίδα κάτω από το πρόγραμμα, ΑΚΡΙΒΕΙΣ ώρες
+   (η στρογγυλοποίηση αφορά μόνο τους υπολογισμούς). Χωρίς data-shift-bar,
+   άρα ο επεξεργαστής (work-schedule-planner.js) δεν τα αγγίζει. #}
+{% macro punch_strip(row) %}
+  {% for p in row.punches %}
+    <i class="work-punch {{ 'open' if p.open }} {{ 'orphan' if p.orphan }}"
+       style="left:{{ ((p.a-timeline_start)*100/timeline_minutes)|round(5) }}%;width:{{ ((p.b-p.a)*100/timeline_minutes)|round(5) }}%"
+       title="Κάρτα: {{ p.text }}{{ ' · χωρίς έξοδο' if p.open }}{{ ' · χωρίς είσοδο' if p.orphan }}"></i>
+  {% endfor %}
+{% endmacro %}
+{# `nav` = άνοιγμα από τα ◀ ▶: ΧΩΡΙΣ animation εισόδου, αλλιώς το backdrop
+   ξανακάνει fade και μοιάζει με ανανέωση όλης της οθόνης #}
+<div class="modal-backdrop work-day-backdrop {{ 'no-anim' if nav }}">
   <div class="modal work-day-modal" data-work-day-editor
        data-start="{{ timeline_start }}" data-end="{{ timeline_end }}"
        data-step="15">
-    {# back=live: ανοίχτηκε από τα «Ζωντανά» — η αποθήκευση κλείνει το modal #}
     <form hx-post="{{ url_for('work_schedules.update_day_overview') }}"
-          {% if back == 'live' %}hx-target="#modal-host" hx-swap="innerHTML"
-          {% else %}hx-target="#work-schedule-panel" hx-swap="outerHTML"{% endif %}>
+          hx-target="#modal-host" hx-swap="innerHTML">
       <input type="hidden" name="date" value="{{ selected.isoformat() }}">
-      <input type="hidden" name="back" value="{{ back or '' }}">
       <input type="hidden" name="focus" value="{{ focus_id or '' }}">
       <div class="mhead work-day-title">
         <div>
@@ -16,10 +25,10 @@
         </div>
         <div class="work-day-nav">
           <button type="button" class="ghost"
-                  hx-get="{{ url_for('work_schedules.day_overview', date=previous_day.isoformat(), back=back) }}"
+                  hx-get="{{ url_for('work_schedules.day_overview', date=previous_day.isoformat(), nav=1) }}"
                   hx-target="#modal-host" hx-swap="innerHTML" aria-label="Προηγούμενη ημέρα">◀</button>
           <button type="button" class="ghost"
-                  hx-get="{{ url_for('work_schedules.day_overview', date=next_day.isoformat(), back=back) }}"
+                  hx-get="{{ url_for('work_schedules.day_overview', date=next_day.isoformat(), nav=1) }}"
                   hx-target="#modal-host" hx-swap="innerHTML" aria-label="Επόμενη ημέρα">▶</button>
         </div>
       </div>
@@ -32,6 +41,7 @@
         <span><i class="work-time-key night"></i>Νυχτερινές ώρες</span>
         <span><i class="work-time-key next-day"></i>Επόμενη ημέρα · μόνο λήξη</span>
         <span><i class="work-time-key rest"></i>Υποχρεωτική ανάπαυση</span>
+        <span><i class="work-punch-key"></i>Κάρτα (πραγματική)</span>
         <small>Double click: νέο ωράριο · Δεξί click στη μπάρα: ενέργειες</small>
       </div>
 
@@ -58,6 +68,7 @@
               <div class="work-absence-track {{ 'focused' if focus_id == row.employment.employment_id }}"
                    aria-label="{{ row.employment.full_name }} · {{ row.absence_label }}">
                 <span>Απουσία — {{ row.absence_label }}</span>
+                {{ punch_strip(row) }}
               </div>
             {% else %}
             <div class="work-shift-track {{ 'focused' if focus_id == row.employment.employment_id }}"
@@ -83,6 +94,7 @@
                   <i class="work-shift-handle right" data-shift-resize="end"></i>
                 </div>
               {% endfor %}
+              {{ punch_strip(row) }}
             </div>
             {% endif %}
           {% else %}

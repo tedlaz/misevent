@@ -1,0 +1,40 @@
+{# Σύστημα καταχώρισης αλλαγών ωραρίου ΤΗΣ ΕΤΑΙΡΕΙΑΣ (ΥΑ 32689/2025, 2Α Δ):
+   ανά μήνα, έως νέα δήλωση. Δηλώνεται έως την τελευταία ημέρα του
+   προηγούμενου μήνα — γι' αυτό η λίστα ξεκινά από τον επόμενο μήνα. #}
+<div id="sched-system">
+  <h3 class="sec">Σύστημα δήλωσης αλλαγών ωραρίου
+    <span class="norm">— τώρα: <b>{{ systems[current] }}</b></span></h3>
+  <p class="muted" style="font-size:12.5px;margin:0 0 10px">
+    <b>Προαναγγελτικό</b>: οι αλλαγές ωραρίου/υπερωριών δηλώνονται πριν γίνουν.
+    <b>Απολογιστικό</b> (μόνο με ψηφιακή κάρτα): δηλώνονται έως το τέλος του
+    επόμενου μήνα, από τα χτυπήματα της κάρτας — μετά την έγκριση παρουσιών
+    εμφανίζεται η υποχρέωση «Απολογιστική δήλωση ωραρίου». Η δήλωση επιλογής
+    υποβάλλεται και στο ΕΡΓΑΝΗ έως το τέλος του προηγούμενου μήνα.</p>
+  {% if declared %}
+    <table class="tbl" style="margin-bottom:10px">
+      <thead><tr><th>Από μήνα</th><th>Σύστημα</th></tr></thead>
+      <tbody>
+        {% for start, system in declared %}
+          <tr><td class="mono">{{ start.strftime('%m/%Y') }}</td>
+            <td>{{ systems[system] }}</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  {% endif %}
+  <form class="frm cols" hx-post="{{ url_for('company.schedule_system') }}"
+        hx-target="#sched-system" hx-swap="outerHTML">
+    <label>Από μήνα
+      <select name="month">
+        {% for m in months %}
+          <option value="{{ m.isoformat() }}">{{ m.strftime('%m/%Y') }}</option>
+        {% endfor %}
+      </select></label>
+    <label>Σύστημα
+      <select name="system">
+        {% for code, label in systems.items() %}
+          <option value="{{ code }}">{{ label }}</option>
+        {% endfor %}
+      </select></label>
+    <div class="btnrow"><button class="run" type="submit">Δήλωση συστήματος</button></div>
+  </form>
+</div>

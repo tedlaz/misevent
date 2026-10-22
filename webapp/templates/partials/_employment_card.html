@@ -95,10 +95,10 @@
           <span class="tag off" title="Το ΕΡΓΑΝΗ δέχεται ΟΧΕ μόνο μετά την αναγγελία πρόσληψης">
             ΟΧΕ μετά το WebE3N</span>
         {% else %}
-          <button class="ghost sm"
-            hx-post="{{ url_for('employments.ergani_wto', employment_id=mid) }}"
-            hx-target="#employment-card" hx-swap="outerHTML"
-            title="Ψηφιακή Οργάνωση Χρόνου Εργασίας">Υποβολή ΟΧΕ</button>
+          {# Η υποβολή προγράμματος γίνεται ΜΟΝΟ από το «Πρόγραμμα → ΕΡΓΑΝΗ» #}
+          <a class="ghost sm" href="{{ url_for('work_schedules.index') }}"
+             title="Ψηφιακή Οργάνωση Χρόνου Εργασίας — υποβολή από το «Πρόγραμμα → ΕΡΓΑΝΗ»">
+            📤 ΟΧΕ → Πρόγραμμα → ΕΡΓΑΝΗ</a>
         {% endif %}
         {% if not (e3_done and wto_done) %}
           <span class="muted" style="font-size:12px">
@@ -277,54 +277,36 @@
           {% endif %}
         </span>
       </h3>
+      {# Ψηφιακή κάρτα (WebE3N) — προϋπόθεση του απολογιστικού συστήματος· η
+         ευέλικτη προσέλευση είναι η ανοχή της απολογιστικής πρότασης #}
+      <div class="muted" style="font-size:12px;margin-bottom:6px">
+        💳 Ψηφιακή κάρτα εργασίας:
+        {% if e.working_card|string == '1' %}<span class="tag ok">ΝΑΙ</span>
+          · ευέλικτη προσέλευση <b>{{ e.flexible_arrival_minutes }}΄</b>
+        {% else %}<span class="tag off">ΟΧΙ</span>{% endif %}
+        · διάλειμμα {{ e.break_minutes }}΄{{ ' (εντός ωραρίου)' if e.break_within_schedule|string == '1' }}
+      </div>
       {% for a, b, h in e.childcare_reduction %}
         <div class="muted" style="font-size:12px;margin-bottom:4px">
           👶 Μειωμένο ωράριο φροντίδας τέκνου: <b>{{ h }} ώρ./ημέρα</b>
           {{ a|date_gr }} – {{ b|date_gr }}
           (πληρώνεται ως πλήρες)</div>
       {% endfor %}
-      {% if e.schedule %}
-        <div class="wk">
-          {% for code, lbl in days %}
-            {% set segs = e.schedule.get(code, '')|day_segments %}
-            <div class="d {{ 'on' if segs else 'off' }}"><i>{{ lbl }}</i>
-              {% for sg in segs %}
-                {# Έναρξη/λήξη σε δικές τους γραμμές — χωράνε στο πλακίδιο #}
-                <b class="{{ 'tele' if sg.telework }}"
-                   title="{{ 'Τηλεεργασία' if sg.telework }}">
-                  {{- sg.text.split('-')[0] }}<br>{{ sg.text.split('-')[1] -}}
-                </b>
-              {% else %}<b class="rep">ρεπό</b>{% endfor %}
-            </div>
-          {% endfor %}
-        </div>
-        {% if e.schedule.values()|map('day_segments')|sum(start=[])
-              |selectattr('telework')|list %}
-          <div class="muted" style="font-size:11.5px;margin-top:6px">
-            <b class="tele-key">μοβ</b> = τηλεεργασία (λογίζεται ως
-            πραγματοποιηθείσα — δεν καταγράφεται από το σύστημα παρουσιών)</div>
-        {% endif %}
-      {% else %}
+      {% if not e.schedule %}
         <div class="empty">Δεν έχει οριστεί πρόγραμμα.</div>
       {% endif %}
 
-      {% if daily_schedule %}
-        <h3 class="sec">Ημερήσιο πρόγραμμα
-          <span class="norm">— υπερισχύει του εβδομαδιαίου</span></h3>
-        <table class="tbl">
-          <thead><tr><th>Ημέρα</th><th>Ωράριο</th></tr></thead>
-          <tbody>
-            {% for d, h in daily_schedule %}
-              <tr><td class="mono">{{ d|date_gr }}</td>
-                <td class="mono">{{ h or '— ΡΕΠΟ —' }}</td></tr>
-            {% endfor %}
-          </tbody>
-        </table>
-      {% endif %}
     </div>
   </div>
 
   {% if e.hire_submitted %}
+  {# ---------------------------------------------- Ημερολόγιο (htmx, ανά μήνα) #}
+  <div class="card" style="margin-top:20px">
+    <h2>Ημερολόγιο</h2>
+    <div hx-get="{{ url_for('employments.calendar', employment_id=mid) }}"
+         hx-trigger="load" hx-swap="outerHTML"></div>
+  </div>
+
   {# ------------------------------------------------------------ Παρουσίες #}
   <div class="card" style="margin-top:20px">
     <h2 class="bar"><span>Παρουσίες</span>
@@ -381,7 +363,7 @@
     {% set leaves = e.active_leaves() %}
     {% if leaves %}
       <table class="tbl">
-        <thead><tr><th>Τύπος</th><th>Από</th><th>Έως</th><th>Σημειώσεις</th>
+        <thead><tr><th>Τύπος</th><th>Από</th><th>Έως</th><th>Κατάσταση</th><th>Σημειώσεις</th>
           <th>Επίδομα ΕΦΚΑ</th><th></th></tr></thead>
         <tbody>
           {% for lv in leaves %}
@@ -389,6 +371,10 @@
               <td>{{ leave_labels.get(lv.leave_type.value, lv.leave_type.value) }}</td>
               <td class="mono">{{ lv.date_from|date_gr }}</td>
               <td class="mono">{{ lv.date_to|date_gr }}</td>
+              {% set st = leave_state(lv, today) %}
+              <td><span class="tag {{ 'ok' if st == 'taken' else ('warn' if st == 'ongoing' else '') }}">
+                {{ {'planned': 'προγραμματισμένη', 'ongoing': 'σε εξέλιξη',
+                    'taken': 'ληφθείσα'}[st] }}</span></td>
               <td class="muted">{{ lv.notes or '—' }}</td>
               {# Μόνο η ασθένεια επιδοτείται από τον ΕΦΚΑ. Το ποσό είναι γνωστό
                  εκ των υστέρων, γι' αυτό καταχωρείται χειροκίνητα (modal). #}
@@ -407,6 +393,7 @@
                 <button class="ghost sm"
                   hx-post="{{ url_for('employments.leave_cancel',
                                       employment_id=mid, leave_id=lv.leave_id) }}"
+                  {% if st != 'planned' %}hx-confirm="Η άδεια έχει ήδη ξεκινήσει/ληφθεί — η ακύρωση είναι ΔΙΟΡΘΩΣΗ του ιστορικού. Συνέχεια;"{% endif %}
                   hx-target="#employment-card" hx-swap="outerHTML">Ακύρωση</button>
               </td>
             </tr>
@@ -421,6 +408,6 @@
 
   {# Εδώ φορτώνονται τα modals της καρτέλας (κενό όσο είναι κλειστά).
      Επιτυχής εντολή αντικαθιστά όλη την κάρτα -> το modal κλείνει μόνο του. #}
-  <div id="modal-host"></div>
+  <div id="modal-host">{{ modal_html|safe if modal_html }}</div>
 
 </div>

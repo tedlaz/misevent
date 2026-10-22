@@ -41,6 +41,9 @@ NO_PROJECTION = {
     # Σύνοψη που κλείνει ΜΟΝΟ την υποχρέωση WAGE_ADJUSTMENT (scheduler.py).
     # Οι ίδιες οι προσαρμογές είναι ξεχωριστά ContractChanged events.
     "WageAdjustmentApplied",
+    # Ίδιο μοτίβο: κλείνει ΜΟΝΟ την RETRO_SCHEDULE — οι ημέρες είναι
+    # DailyScheduleAssigned + ScheduleDaysSubmitted.
+    "RetroScheduleSubmitted",
     # ΙΣΤΟΡΙΚΟ: η οικογένεια παραμέτρων «teka» καταργήθηκε (τα ποσοστά
     # επικουρικής έρχονται πάντα από το ΚΠΚ της κάλυψης). Το event μένει στο
     # μητρώο ΜΟΝΟ για να αποκωδικοποιούνται παλιά logs — καμία κατάσταση.

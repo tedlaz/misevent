@@ -146,7 +146,7 @@ def main():
     d = date(2026, 4, 2)
     while d <= date(2026, 4, 30):
         if is_working_day(d):
-            svc.record_attendance(eid3, d, 8)
+            svc.record_attendance(eid3, d, ["09:00-17:00"])
         d += timedelta(days=1)
 
     # 3. Άδειες / ασθένειες

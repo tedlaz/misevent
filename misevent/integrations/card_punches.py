@@ -98,6 +98,42 @@ def pair_punches(punches, max_shift: int = MAX_SHIFT_MIN) -> list[dict]:
     return shifts
 
 
+def rounded(shifts, step: int) -> list[dict]:
+    """Οι βάρδιες της ΗΜΕΡΑΣ με ΣΤΡΟΓΓΥΛΕΜΕΝΗ ΣΥΝΟΛΙΚΗ ΔΙΑΡΚΕΙΑ — ΜΟΝΟ για
+    τις ΠΡΟΤΕΙΝΟΜΕΝΕΣ ώρες του φύλλου· παρουσίες, ΕΡΓΑΝΗ και προβολή κρατούν
+    τις ακριβείς ώρες (ο νόμος δεν προβλέπει στρογγυλοποίηση/ανοχή).
+
+    Το σύνολο των κλειστών βαρδιών πάει στο κοντινότερο πολλαπλάσιο του
+    `step` (μισό βήμα προς τα πάνω· με 30΄: 7,2ω -> 7, 7,4ω -> 7,5, 8,2ω -> 8)
+    και η διαφορά μπαίνει στη ΛΗΞΗ της τελευταίας βάρδιας (η προσέλευση μένει
+    η πραγματική): 08:52-17:12 (8ω20΄) -> 08:52-17:22 (8,5ω).
+    Βάρδια που μηδενίζεται από τη στρογγυλοποίηση αφαιρείται."""
+    out = [dict(s) for s in shifts]
+    if step <= 1:
+        return out
+    closed = [s for s in out if s["s"] is not None and s["e"] is not None]
+    total = sum(s["e"] - s["s"] for s in closed)
+    delta = (total + step // 2) // step * step - total
+    for s in reversed(closed):  # αρνητική διαφορά μεγαλύτερη από βάρδια -> προηγούμενη
+        new_e = max(s["e"] + delta, s["s"])
+        delta -= new_e - s["e"]
+        s["e"] = new_e
+        if delta == 0:
+            break
+    return [s for s in out if s["s"] is None or s["e"] is None or s["s"] < s["e"]]
+
+
+def rounded_texts(texts, step: int) -> list[str]:
+    """`rounded` πάνω σε βάρδιες «ΩΩ:ΛΛ-ΩΩ:ΛΛ» (λήξη <= έναρξης = πέρασμα
+    μεσανύχτων)."""
+    shifts = []
+    for t in texts:
+        a, _, b = t.partition("-")
+        s, e = parse_time(a), parse_time(b)
+        shifts.append({"s": s, "e": e + 24 * 60 if e <= s else e})
+    return list(shift_texts(rounded(shifts, step)))
+
+
 def hhmm(minute) -> str:
     """Λεπτά -> «ΩΩ:ΛΛ» (24ωρη μορφή· τα λεπτά πέρα από το 24ωρο γυρίζουν)."""
     m = int(minute) % (24 * 60)

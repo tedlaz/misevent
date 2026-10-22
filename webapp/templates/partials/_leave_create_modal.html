@@ -1,12 +1,11 @@
 {% set f = form or {} %}
 <div class="modal-backdrop">
   <div class="modal">
-    <form hx-post="{{ url_for('leaves.create_leave', employment_id=e.employment_id, year=year, back=back or None) }}"
-          {% if back == 'live' %}hx-target="#modal-host" hx-swap="innerHTML"
-          {% else %}hx-target="{{ '#work-schedule-panel' if back else '#leave-planner-panel' }}" hx-swap="outerHTML"{% endif %}>
+    <form hx-post="{{ url_for('leaves.create_leave', employment_id=e.employment_id) }}"
+          hx-target="#modal-host" hx-swap="innerHTML">
       <div class="mhead">
         <h3>🏖️ Νέα άδεια — {{ e.full_name }}</h3>
-        <span class="muted" style="font-size:12.5px">{{ 'Οι ημέρες επιλέχθηκαν από τα Ζωντανά' if back == 'live' else 'Οι ημέρες επιλέχθηκαν από το πρόγραμμα εργασίας' if back else 'Η ημέρα επιλέχθηκε από το ετήσιο πλάνο' }}</span>
+        <span class="muted" style="font-size:12.5px">Οι ημέρες επιλέχθηκαν από τα Ζωντανά</span>
       </div>
       <div class="mbody">
         <div class="frm cols">

@@ -137,13 +137,17 @@ def obligation_list(ref: date, show_locked: bool = False, view: str = "active"):
 
     `view`: "active" (εκκρεμείς) | "done" (ολοκληρωμένες) | "all" (και τα δύο).
     Οι κλειδωμένες (με ανεκπλήρωτο προαπαιτούμενο) παραλείπονται, εκτός αν
-    ζητηθούν ρητά με `show_locked`."""
+    ζητηθούν ρητά με `show_locked`. Στις εκκρεμείς, οι μελλοντικές φτάνουν
+    έως το τέλος του μήνα `ref` + ορίζοντα (Παράμετροι → Διάφορα)."""
     index = deps.build_index(proj.obligations.values())
+    months = ref.month + int(proj.misc_settings.get("obligations_horizon_months", 1))
+    y, m = ref.year + (months - 1) // 12, (months - 1) % 12 + 1
+    horizon = date(y, m, monthrange(y, m)[1])
     out = []
     for o in sorted(
-        proj.obligations.values(), key=lambda o: (o.due_date, o.obligation_type)
+        proj.obligations.values(), key=ot.sort_key
     ):
-        if view == "active" and o.fulfilled:
+        if view == "active" and (o.fulfilled or o.due_date > horizon):
             continue
         if view == "done" and not o.fulfilled:
             continue
@@ -830,7 +834,7 @@ def month_detail(y: int, m: int, ref: date) -> dict:
     extras = [r for r in payroll_ledger(y) if r["month"] == m and r["kind"] != "payroll"]
 
     obs = []
-    for o in sorted(proj.obligations.values(), key=lambda o: (o.due_date, o.obligation_type)):
+    for o in sorted(proj.obligations.values(), key=ot.sort_key):
         if (o.period_year, o.period_month) != (y, m):
             continue
         obs.append({
@@ -2915,6 +2919,25 @@ def detail_payload(ob_id: str, ref: date):
                 )
                 d["steps"] = [f"{verb} για την περίοδο {per}."]
 
+    elif t == "RETRO_SCHEDULE":
+        if ob.fulfilled:
+            d["steps"] = [f"Υποβλήθηκε η απολογιστική δήλωση ωραρίου {per}."]
+        else:
+            d["rows"] = [
+                {"Εργαζόμενος": emp_name(eid), "Ημέρα": day.strftime("%d/%m/%Y"),
+                 "Δηλωμένο": old or "ρεπό", "Κάρτα": new or "ρεπό"}
+                for eid, days in svc.retro_schedule_proposal(y, m).items()
+                for day, (old, new) in sorted(days.items())
+            ]
+            d["steps"] = [
+                f"Απολογιστικό σύστημα {per}: οι ημέρες όπου η κάρτα απέκλινε "
+                "από το δηλωμένο (πέρα από την ευέλικτη προσέλευση) δηλώνονται "
+                "στο ΕΡΓΑΝΗ με τις πραγματικές ώρες, έως το τέλος του επόμενου μήνα.",
+                "Καμία απόκλιση — η ενεργοποίηση απλώς καταγράφει τη δήλωση."
+                if not d["rows"] else
+                f"{len(d['rows'])} ημέρες προς δήλωση σε ΕΝΑ batch.",
+            ]
+
     elif t == "WAGE_ADJUSTMENT":
         # ΑΙΤΙΑ: νέα ΓΣΣΕ ή/και ωρίμανση τριετίας — να ΜΗΝ εμφανίζεται πάντα
         # ως ΓΣΣΕ.
@@ -3005,26 +3028,6 @@ def _hhmm(minute) -> str:
     return f"{m // 60:02d}:{m % 60:02d}"
 
 
-def _punch_intervals(shifts) -> list:
-    """Οι βάρδιες της κάρτας ("ΩΩ:ΛΛ-ΩΩ:ΛΛ") σε λεπτά από τα μεσάνυχτα.
-    Βάρδια που περνά τα μεσάνυχτα επιστρέφεται με λήξη +24ω (όπως το
-    `constraints.parse_day_schedule`)."""
-    out = []
-    for text in shifts or []:
-        try:
-            a, _sep, b = str(text).partition("-")
-            ah, am = (int(x) for x in a.strip().split(":"))
-            bh, bm = (int(x) for x in b.strip().split(":"))
-        except ValueError:
-            continue
-        start, end = ah * 60 + am, bh * 60 + bm
-        if end < start:
-            end += 24 * 60
-        out.append({"s": start, "e": end})
-    out.sort(key=lambda x: x["s"])
-    return out
-
-
 def _punch_bounds(intervals, plan) -> list:
     """ΠΟΙΟ όριο του προγράμματος συγκρίνεται με κάθε βάρδια της κάρτας:
     [(όριο προσέλευσης, όριο αποχώρησης)] — `None` = δεν συγκρίνεται.
@@ -3089,31 +3092,23 @@ def _day_segments(e, d: date) -> list:
 
 
 def _leave_on(e, d: date):
-    """(ετικέτα, κωδικός τύπου) της άδειας που καλύπτει την ημέρα `d`, ή
-    (None, None). Ο ΚΩΔΙΚΟΣ δίνει το χρώμα: το widget χρωματίζει την άδεια
-    ανά ΤΥΠΟ, με την ίδια παλέτα που χρησιμοποιεί η σελίδα «Άδειες» — το
+    """(ετικέτα, κωδικός τύπου, leave_id) της άδειας που καλύπτει την ημέρα `d`, ή
+    (None, None, None). Ο ΚΩΔΙΚΟΣ δίνει το χρώμα: το widget χρωματίζει την άδεια
+    ανά ΤΥΠΟ (παλέτα `lv-*` του app.css) — το
     πορτοκαλί μένει αποκλειστικά για την ασυμφωνία με την κάρτα."""
     for lv in e.active_leaves():
         if lv.date_from <= d <= lv.date_to:
             code = getattr(lv.leave_type, "value", lv.leave_type)
-            return LEAVE_LABELS.get(code, "Άδεια"), code
-    return None, None
+            return LEAVE_LABELS.get(code, "Άδεια"), code, lv.leave_id
+    return None, None, None
 
 
 def _day_shifts(e, d: date) -> list:
-    """Οι ΒΑΡΔΙΕΣ της ημέρας σε λεπτά της ημέρας, με ΣΕΙΡΑ ΠΡΟΤΕΡΑΙΟΤΗΤΑΣ:
-
-    1. **ΨΗΦΙΑΚΗ ΚΑΡΤΑ** (ωμές διελεύσεις, ζευγαρωμένες): η ζωντανή πηγή —
-       δείχνει και τις ΑΝΟΙΧΤΕΣ βάρδιες (μπήκε, δεν έχει βγει ακόμη).
-    2. οι βάρδιες του `AttendanceRecorded` (εισαγωγή Κάρτας ΕΡΓΑΝΗ ή
-       χειροκίνητη καταγραφή), όπως πριν.
+    """Οι ΒΑΡΔΙΕΣ της ημέρας σε λεπτά της ημέρας, από την ΨΗΦΙΑΚΗ ΚΑΡΤΑ
+    (τη μόνη πηγή παρουσιών) — δείχνει και τις ΑΝΟΙΧΤΕΣ βάρδιες.
 
     Επιστρέφει [{"s", "e", "open", "orphan"}] — `e` = None στην ανοιχτή."""
-    shifts = e.card_shifts(d)
-    if shifts:
-        return shifts
-    return [{"s": iv["s"], "e": iv["e"], "open": False, "orphan": False}
-            for iv in _punch_intervals(e.attendance_shifts.get(d))]
+    return e.card_shifts(d)
 
 
 def _punch_note(dev, plan, kind, shift) -> str:
@@ -3204,7 +3199,7 @@ def _year_marks(e, dates, base: date):
     Επιστρέφει (combs, att, bands):
       combs — διαστήματα ημερών ΠΡΟΓΡΑΜΜΑΤΟΣ {s, e}
       att   — διαστήματα ημερών με ΠΡΑΓΜΑΤΙΚΗ ΠΑΡΟΥΣΙΑ (πάνω από τα combs)
-      bands — {"s", "e", "type", "label"} ανά διάστημα άδειας
+      bands — {"s", "e", "type", "lid", "label"} ανά διάστημα άδειας
     Η ημέρα με άδεια ΔΕΝ παίρνει γραμμή: μιλάει η μπάρα."""
     work_days, att_days, bands = [], [], []
     run = None
@@ -3214,7 +3209,7 @@ def _year_marks(e, dates, base: date):
         if run:
             days = (run["e"] - run["s"]) // (24 * 60)
             bands.append({
-                "s": run["s"], "e": run["e"], "type": run["type"],
+                "s": run["s"], "e": run["e"], "type": run["type"], "lid": run["lid"],
                 "label": "{} {} – {} ({} ημέρες)".format(
                     run["label"], run["from"].strftime("%d/%m/%Y"),
                     run["to"].strftime("%d/%m/%Y"), days),
@@ -3226,14 +3221,14 @@ def _year_marks(e, dates, base: date):
         if not e.active_on(d):
             flush()
             continue
-        label, code = _leave_on(e, d)
+        label, code, lid = _leave_on(e, d)
         if label:
-            if run and run["type"] == code and run["e"] == off:
+            if run and run["lid"] == lid and run["e"] == off:
                 run["e"] = off + 24 * 60          # συνέχεια του διαστήματος
                 run["to"] = d
             else:
                 flush()
-                run = {"s": off, "e": off + 24 * 60, "type": code,
+                run = {"s": off, "e": off + 24 * 60, "type": code, "lid": lid,
                        "label": label, "from": d, "to": d}
             continue
         flush()
@@ -3385,14 +3380,14 @@ def live_board(day: date, base: date | None = None, days: int = 3) -> dict:
             actual += [{**iv, "e": min(iv["e"], span)} for iv in a]
             if detail:
                 punches += [pu for pu in p if pu["m"] <= span]
-            band_label, band_type = _leave_on(e, d)
+            band_label, band_type, lid = _leave_on(e, d)
             if band_label and bands and bands[-1]["e"] == off \
-                    and bands[-1]["type"] == band_type:
+                    and bands[-1]["lid"] == lid:
                 # ΣΥΝΕΧΟΜΕΝΗ μπάρα αρχή→τέλος, όχι ένα κουτάκι ανά ημέρα
                 bands[-1]["e"] = off + 24 * 60
             elif band_label:
                 bands.append({"s": off, "e": off + 24 * 60,
-                              "label": band_label, "type": band_type})
+                              "label": band_label, "type": band_type, "lid": lid})
         # Ουρά νυχτερινής βάρδιας της ΠΡΟΗΓΟΥΜΕΝΗΣ του παραθύρου. Χωρίς
         # αυτήν, όταν το νέο παράθυρο άρχιζε την ημέρα της εξόδου, η παρουσία
         # 22:00→06:00 κοβόταν στα μεσάνυχτα και χανόταν και το χτύπημα 06:00.
@@ -3433,7 +3428,7 @@ def live_board(day: date, base: date | None = None, days: int = 3) -> dict:
             {**s, "start": 0, "end": s["end"] - 24 * 60}
             for s in ref_prev_segs
         ] + ref_segs
-        ref_leave, ref_leave_type = _leave_on(e, day) if ref_on else (None, None)
+        ref_leave, ref_leave_type, _ = _leave_on(e, day) if ref_on else (None, None, None)
         # ⚠️ Η ΚΑΤΑΣΤΑΣΗ «ΤΩΡΑ» (κουκκίδα, σύνολα κεφαλίδας) ΔΕΝ βγαίνει από
         # τις μπάρες του παραθύρου: σε προβολή έτους αυτές είναι εβδομαδιαία
         # ΣΥΝΟΛΑ (μια «μπάρα 3 ημερών» δεν είναι χρονικό διάστημα) και σε
@@ -3525,17 +3520,6 @@ def live_board(day: date, base: date | None = None, days: int = 3) -> dict:
 
 
 # --------------------------------------------------- ΨΗΦΙΑΚΗ ΚΑΡΤΑ ΕΡΓΑΣΙΑΣ
-def card_employees(day: date) -> list:
-    """Οι ενεργές απασχολήσεις της ημέρας — ο κατάλογος του επιλογέα στη
-    χειροκίνητη καταχώρηση διέλευσης."""
-    return sorted(
-        ({"eid": e.employment_id, "name": e.full_name}
-         for e in proj.employments.values()
-         if e.lifecycle == "active" and e.active_on(day)),
-        key=lambda r: r["name"],
-    )
-
-
 def card_day(day: date, eid: str = "") -> dict:
     """Η ΨΗΦΙΑΚΗ ΚΑΡΤΑ μιας ημέρας: οι ωμές διελεύσεις ανά εργαζόμενο και οι
     ΒΑΡΔΙΕΣ που παράγονται από το ζευγάρωμά τους.
@@ -3557,6 +3541,7 @@ def card_day(day: date, eid: str = "") -> dict:
             "punches": [{
                 "id": p["id"], "time": _hhmm(p["m"]), "kind": p["kind"],
                 "source": p["source"], "note": p["note"],
+                "blind": p.get("blind", False),
                 "label": "Είσοδος" if p["kind"] == "in" else "Έξοδος",
             } for p in punches],
             "shifts": [{
@@ -3565,13 +3550,17 @@ def card_day(day: date, eid: str = "") -> dict:
                          else ("{}-…".format(_hhmm(s["s"])) if s["open"]
                                else "…-{}".format(_hhmm(s["e"])))),
                 "open": s["open"], "orphan": s["orphan"],
+                # η ΜΟΝΑΧΙΚΗ διέλευση — αυτή συμπληρώνεται από το πρόγραμμα
+                "lone_id": s["in_id"] if s["open"] else s["out_id"],
                 "h": (round((s["e"] - s["s"]) / 60, 2)
                       if s["s"] is not None and s["e"] is not None else None),
             } for s in shifts],
             "hours": round(cp.worked_minutes(shifts) / 60, 2),
+            "orphans": e.schedule_completions(day.year, day.month),
         })
     out.sort(key=lambda r: r["name"])
-    return {"day": day, "rows": out}
+    cap = config.work_hour_rules_for(day).orphan_month_cap
+    return {"day": day, "rows": out, "orphan_cap": cap}
 
 
 def card_pulse() -> int:
