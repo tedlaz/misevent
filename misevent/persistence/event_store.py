@@ -14,7 +14,10 @@ Event Store — append-only αποθήκευση events + pub/sub.
 
 import hashlib
 import json
+import uuid
 from collections.abc import Callable, Iterable
+from contextlib import contextmanager
+from contextvars import ContextVar
 from dataclasses import fields
 from datetime import UTC, date, datetime
 
@@ -25,6 +28,25 @@ from misevent.domain.events import (
     LeaveType,
 )
 from misevent.persistence.database import Database
+
+# Το TRANSACTION της τρέχουσας εντολής: ό,τι γράφεται μέσα σε ένα
+# `with transaction():` (και τα αλυσιδωτά events των subscribers) παίρνει το
+# ίδιο `tx` -> το audit το δείχνει ως ΜΙΑ κίνηση με πολλές γραμμές.
+_TX: ContextVar[str | None] = ContextVar("misevent_tx", default=None)
+
+
+@contextmanager
+def transaction():
+    """Ομαδοποιεί τα events μιας εντολής (φωλιασμένο = το εξωτερικό)."""
+    if _TX.get() is not None:
+        yield
+        return
+    token = _TX.set(uuid.uuid4().hex[:12])
+    try:
+        yield
+    finally:
+        _TX.reset(token)
+
 
 BACKUP_FORMAT = "misevent-event-backup"
 BACKUP_VERSION = 1
@@ -100,10 +122,10 @@ class EventStore:
         # και σε κούρσα σκάει το PRIMARY KEY (store, seq) αντί να χαθεί event.
         self.conn.execute(
             "INSERT INTO events "
-            "(store, seq, event_id, aggregate_id, event_type, occurred_at, payload) "
+            "(store, seq, event_id, aggregate_id, event_type, occurred_at, payload, tx) "
             "SELECT :store, COALESCE(MAX(seq), 0) + 1, :event_id, :aggregate_id, "
-            ":event_type, :occurred_at, :payload FROM events WHERE store = :store",
-            {**rec, "store": self.name},
+            ":event_type, :occurred_at, :payload, :tx FROM events WHERE store = :store",
+            {**rec, "store": self.name, "tx": _TX.get()},
         )
         self.conn.commit()
         for handler in self._subscribers:
@@ -152,10 +174,10 @@ class EventStore:
         """Επιστρέφει το event log μαζί με το σταθερό sequence metadata."""
         out = []
         q = (
-            "SELECT seq, event_id, aggregate_id, event_type, occurred_at, payload "
+            "SELECT seq, event_id, aggregate_id, event_type, occurred_at, payload, tx "
             "FROM events WHERE store = ? ORDER BY seq"
         )
-        for seq, event_id, agg, etype, occurred_at, payload in self.conn.execute(
+        for seq, event_id, agg, etype, occurred_at, payload, tx in self.conn.execute(
             q, (self.name,)
         ):
             cls = self.registry[etype]
@@ -166,6 +188,7 @@ class EventStore:
                     "aggregate_id": agg,
                     "event_type": etype,
                     "occurred_at": occurred_at,
+                    "tx": tx,  # transaction της εντολής (None = μεμονωμένο)
                     "event": _coerce(cls, json.loads(payload)),
                 }
             )
@@ -222,7 +245,7 @@ class EventStore:
     def _raw_events(self) -> list[dict]:
         """Σειριοποιήσιμα records χωρίς upcasting ή απώλεια metadata."""
         q = (
-            "SELECT seq, event_id, aggregate_id, event_type, occurred_at, payload "
+            "SELECT seq, event_id, aggregate_id, event_type, occurred_at, payload, tx "
             "FROM events WHERE store = ? ORDER BY seq"
         )
         return [
@@ -233,10 +256,10 @@ class EventStore:
                 "event_type": event_type,
                 "occurred_at": occurred_at,
                 "payload": json.loads(payload),
+                **({"tx": tx} if tx else {}),
             }
-            for seq, event_id, aggregate_id, event_type, occurred_at, payload in self.conn.execute(
-                q, (self.name,)
-            )
+            for seq, event_id, aggregate_id, event_type, occurred_at, payload, tx
+            in self.conn.execute(q, (self.name,))
         ]
 
     @staticmethod
@@ -318,7 +341,8 @@ class EventStore:
                 _coerce(self.registry[event_type], rec["payload"])
             except (TypeError, ValueError) as exc:
                 raise ValueError(f"Μη έγκυρο event #{seq}: {exc}") from None
-            validated.append({k: rec[k] for k in required})
+            # `tx` προαιρετικό: backups πριν από τα transactions δεν το έχουν
+            validated.append({k: rec[k] for k in required} | {"tx": rec.get("tx")})
         return validated
 
     def restore_backup(self, document: dict) -> int:
@@ -329,9 +353,9 @@ class EventStore:
             self.conn.execute("DELETE FROM events WHERE store = ?", (self.name,))
             self.conn.executemany(
                 """INSERT INTO events
-                   (store, seq, event_id, aggregate_id, event_type, occurred_at, payload)
+                   (store, seq, event_id, aggregate_id, event_type, occurred_at, payload, tx)
                    VALUES (:store, :seq, :event_id, :aggregate_id, :event_type,
-                           :occurred_at, :payload_json)""",
+                           :occurred_at, :payload_json, :tx)""",
                 [
                     {
                         **rec,

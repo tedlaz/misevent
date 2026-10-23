@@ -58,7 +58,26 @@ def blocked_reason(ob):
         v = svc.wage_violations(ob.period_year, ob.period_month)
         if v:
             return "Κατώτατος μισθός: " + " | ".join(v)
+    if ob.obligation_type == "ATTENDANCE_APPROVAL" and not ob.fulfilled and ob.period_month:
+        missing = _schedule_pending_days(ob.period_year, ob.period_month)
+        if missing:
+            return ("Αδήλωτο πρόγραμμα στο ΕΡΓΑΝΗ (Πρόγραμμα → ΕΡΓΑΝΗ): "
+                    + " · ".join(missing))
     return None
+
+
+def _schedule_pending_days(y: int, m: int) -> list[str]:
+    """«Όνομα: ΗΗ/ΜΜ–ΗΗ/ΜΜ» για όσους έχουν ενεργή ημέρα του μήνα ΧΩΡΙΣ
+    δηλωμένο πρόγραμμα στο ΕΡΓΑΝΗ (ίδιο κριτήριο με `svc.month_schedule_pending`)."""
+    out = []
+    for emp in proj.employments.values():
+        if not emp.hire_submitted or not svc.month_schedule_pending(emp, y, m):
+            continue
+        days = [d for d in (date(y, m, n) for n in range(1, monthrange(y, m)[1] + 1))
+                if emp.active_on(d) and emp.day_status(d) == "pending"]
+        span = f"{days[0]:%d/%m}" + (f"–{days[-1]:%d/%m}" if len(days) > 1 else "")
+        out.append(f"{emp.full_name}: {span} ({len(days)} ημέρες)")
+    return out
 
 
 def days_late(ob, ref: date) -> int:
@@ -120,16 +139,12 @@ def is_locked(ob, index) -> bool:
     ενεργοποιηθεί η προαπαιτούμενη υποχρέωση. (Άλλα προβλήματα — π.χ.
     παράβαση κατώτατου μισθού — ΔΕΝ κλειδώνουν: είναι ενεργά προς επίλυση.)
 
-    ➜ Η «Έγκριση Παρουσιών» κλειδώνει ΕΠΙΠΛΕΟΝ όσο ο μήνας έχει ενεργή ημέρα
-    χωρίς δηλωμένο πρόγραμμα στο ΕΡΓΑΝΗ (§5.7α): εμφανίζεται μόλις δηλωθεί
-    πρόγραμμα για όλες τις ημέρες του μήνα."""
+    ➜ Αδήλωτο πρόγραμμα ΕΡΓΑΝΗ του μήνα (§5.7α) ΔΕΝ κρύβει την «Έγκριση
+    Παρουσιών»: εμφανίζεται ΜΠΛΟΚΑΡΙΣΜΕΝΗ με τις ημέρες που λείπουν
+    (`blocked_reason`) — αλλιώς ο χρήστης δεν βλέπει τι περιμένει."""
     if ob.fulfilled:
         return False
-    if deps.unmet_prerequisites(ob, index):
-        return True
-    if ob.obligation_type == "ATTENDANCE_APPROVAL" and ob.period_month:
-        return svc.month_schedule_incomplete(ob.period_year, ob.period_month)
-    return False
+    return bool(deps.unmet_prerequisites(ob, index))
 
 
 def obligation_list(ref: date, show_locked: bool = False, view: str = "active"):
@@ -591,6 +606,12 @@ def _attendance_row(y, m, eid, d, line, wh_rules) -> dict:
         "expected_efka": d["efka_days"],
         "source": g("source", d["source"]),
         "hourly_rate": hourly,
+        # Συμφωνία προγράμματος ↔ κάρτας (§5.11): ημέρες με απόκλιση κάρτας
+        # και ημέρες χωρίς χτύπημα (μετρούν με το πρόγραμμα)
+        "card_days": d["card_days"],
+        "no_punch_days": d["no_punch_days"],
+        "card_unreported": bool(d["card_days"])
+        and proj.schedule_system_on(date(y, m, 1)) == "pre",
     }
     for _name, key, cast in SHEET_INPUTS:
         row[key] = cast(g(key, d[key]))
@@ -618,6 +639,37 @@ def attendance_row(y: int, m: int, eid: str, override: dict | None = None):
         line.update({k: v for k, v in override.items() if v not in (None, "")})
     wh_rules = config.work_hour_rules_for(date(y, m, 1))
     return _attendance_row(y, m, eid, d, line, wh_rules)
+
+
+# Τα πεδία ΗΜΕΡΩΝ του φύλλου με την ετικέτα και τη μονάδα τους
+_DAY_ITEMS = [
+    ("planned", "Προγραμματισμένες ημέρες", "ημ."),
+    ("worked", "Ημέρες εργασίας", "ημ."),
+    ("unpaid", "Άνευ αποδοχών", "ημ."),
+    ("leave", "Λοιπές άδειες", "ημ."),
+    ("efka_days", "Ημέρες ΕΦΚΑ", "ημ."),
+    ("sick_half", "Ασθένεια — μισές (τριήμερο)", "ημ."),
+    ("sick_full", "Ασθένεια — πλήρεις", "ημ."),
+    ("sick_benefit", "Επίδομα ασθενείας ΕΦΚΑ", "€"),
+]
+
+
+def attendance_items(row: dict) -> list[tuple[str, str]]:
+    """[(ετικέτα, τιμή)] μιας γραμμής του φύλλου — ΜΟΝΟ τα μη μηδενικά:
+    ημέρες, ασθένεια και κάθε κατηγορία ωρών (κλάση × ημέρα/νύχτα ×
+    εργάσιμη/αργία, π.χ. «Υπερεργασία (νύχτα)»)."""
+    def num(v):
+        return f"{v:g}".replace(".", ",")
+
+    out = [(lbl, f"{num(row[k])} {unit}") for k, lbl, unit in _DAY_ITEMS
+           if row.get(k)]
+    for f in work_hours.SHEET_HOUR_FIELDS:
+        if row.get(f):
+            cls = next(c for c in work_hours.RATE_CLASSES if f.startswith(c))
+            variant = work_hours.VARIANT_LABELS[f[len(cls):]]
+            out.append((f"{work_hours.RATE_LABELS[cls]} ({variant})",
+                        f"{num(row[f])} ώρ."))
+    return out
 
 
 def attendance_premium(y: int, m: int, eid: str, override: dict | None = None):
@@ -662,6 +714,11 @@ def attendance_sheet(y: int, m: int) -> dict:
         # Υποβολές ΕΡΓΑΝΗ πρόσληψης που εκκρεμούν — προαπαιτούμενο των παρουσιών.
         # Όσο υπάρχει έστω μία, η έγκριση μπλοκάρεται (και στο command layer).
         "ergani_pending": svc.attendance_ergani_pending(y, m),
+        # «Διάφορα → card_required»: εκκρεμής έλεγχος κάρτας — μπλοκάρει κι αυτός
+        "card_pending": [
+            {"eid": eid, "name": d["name"]} for eid, d in draft.items()
+            if svc.card_month_pending(proj.employments[eid], y, m)
+        ],
         # Κλεισμένη μισθοδοσία = κλειδωμένες παρουσίες (§5.6): η επανέγκριση
         # θα άλλαζε ημέρες ΕΦΚΑ που έχουν ήδη πληρωθεί/υποβληθεί.
         "period_closed": svc.is_period_closed(y, m),
@@ -1110,6 +1167,8 @@ def gift_analysis(kind: str, year: int, month: int | None = None):
             "gross": g.gross,
             "efka_employee": g.efka_employee,
             "subsidy_employee": g.subsidy_employee,
+            "subsidy_code": g.subsidy_code,
+            "subsidy_employer": g.subsidy_employer,
             "taxable": round(g.gross - g.efka_employee, 2),
             "fmy": g.fmy,
             "net": g.net,
@@ -1119,7 +1178,7 @@ def gift_analysis(kind: str, year: int, month: int | None = None):
         }
         if e is not None:
             rates = svc.contribution_rates(e.insurance_profile, ref)
-            a["efka_employer"] = round(g.gross * rates.employer, 2)
+            a["efka_employer"] = g.efka_employer or round(g.gross * rates.employer, 2)
         if kind == "allowance":
             # Το Επίδομα Αδείας δεν έχει προσαύξηση συντελεστή αδείας
             a["base"], a["leave_coeff"] = g.gross, 0.0
@@ -2051,14 +2110,15 @@ def _forecast_payroll(emp, y: int, m: int) -> tuple[float, float, float]:
 
 
 def _gift_cost(g) -> float:
-    """Κόστος εργοδότη ενός ΥΠΟΛΟΓΙΣΜΕΝΟΥ Δώρου/Επιδόματος: το event κρατά
-    μόνο την κράτηση του εργαζόμενου, οι εισφορές ΕΡΓΟΔΟΤΗ ανασυντίθενται από
-    τα ποσοστά της ημέρας καταβολής (ίδια λογική με το `gift_analysis`)."""
+    """Κόστος εργοδότη ενός ΥΠΟΛΟΓΙΣΜΕΝΟΥ Δώρου/Επιδόματος: οι εισφορές
+    ΕΡΓΟΔΟΤΗ του event (ήδη μειωμένες κατά την επιδότηση 107)· παλιά events
+    χωρίς αυτές → ανασύνθεση από τα ποσοστά της ημέρας καταβολής."""
     kind = getattr(g, "gift_type", "allowance")
     on = (date(g.year, 7, 31) if kind == "allowance"
           else pe.gift_payment_date(kind, g.year))
     emp = proj.employments.get(g.employee_id)
-    er = round(g.gross * _rates_on(emp, on).employer, 2) if emp else 0.0
+    er = g.efka_employer or (
+        round(g.gross * _rates_on(emp, on).employer, 2) if emp else 0.0)
     return round(g.gross + er, 2)
 
 
@@ -2631,18 +2691,37 @@ def detail_payload(ob_id: str, ref: date):
     d["original_due"] = ob.original_due
     per = d["period"]
 
-    if t == "ATTENDANCE_APPROVAL":
+    if t == "CARD_IMPORT":
+        d["upload"] = not ob.fulfilled
+        if not ob.fulfilled:
+            d["rows"] = [
+                {"Εργαζόμενος": i["name"],
+                 "Ημέρα": i["day"].strftime("%d/%m/%Y") if i["day"] else "—",
+                 "Εκκρεμότητα": i["text"],
+                 "Μπλοκάρει": "ναι" if i["blocking"] else "όχι"}
+                for i in svc.card_period_issues(y, m)
+            ]
+        d["steps"] = (
+            [f"Εισήχθη και ελέγχθηκε η κάρτα εργασίας {per}."]
+            if ob.fulfilled
+            else [
+                "Ανέβασε το αρχείο «Κάρτα Εργασίας» του ΕΡΓΑΝΗ (xlsx) της περιόδου "
+                "— αντιστοίχιση με ΑΦΜ· επανεισαγωγή αντικαθιστά.",
+                "Ο έλεγχος απορρίπτει όσο κάποιος εργαζόμενος δεν έχει κανένα "
+                "χτύπημα, έχει χτύπημα χωρίς ταίρι ή χτύπημα σε ημέρα άδειας — "
+                "διορθώνονται στο ΗΜΕΡΟΛΟΓΙΟ του εργαζομένου. Ημέρες χωρίς "
+                "χτύπημα μετρούν με το πρόγραμμα.",
+                f"Με την ολοκλήρωση ξεκλειδώνει η έγκριση παρουσιών {per}.",
+            ]
+        )
+
+    elif t == "ATTENDANCE_APPROVAL":
         sheet = attendance_sheet(y, m)
-        d["rows"] = [
-            {
-                "Εργαζόμενος": r["name"],
-                "Προγραμ/νες": r["planned"],
-                "Ημέρες εργασίας": r["worked"],
-                "Άνευ αποδοχών": r["unpaid"],
-                "Λοιπές άδειες": r["leave"],
-                "Ημέρες ΕΦΚΑ": r["efka_days"],
-                "Πηγή": sheet["sources"].get(r["source"], r["source"]),
-            }
+        # ΑΝΑΛΥΤΙΚΑ ανά εργαζόμενο, ΜΟΝΟ ό,τι έχει τιμή
+        d["blocks"] = [
+            {"title": r["name"],
+             "note": sheet["sources"].get(r["source"], r["source"]),
+             "items": attendance_items(r)}
             for r in sheet["rows"]
         ]
         d["steps"] = (
@@ -2931,11 +3010,12 @@ def detail_payload(ob_id: str, ref: date):
             ]
             d["steps"] = [
                 f"Απολογιστικό σύστημα {per}: οι ημέρες όπου η κάρτα απέκλινε "
-                "από το δηλωμένο (πέρα από την ευέλικτη προσέλευση) δηλώνονται "
+                "από το δηλωμένο (πέρα από ανοχή/ευέλικτη προσέλευση) δηλώνονται "
                 "στο ΕΡΓΑΝΗ με τις πραγματικές ώρες, έως το τέλος του επόμενου μήνα.",
-                "Καμία απόκλιση — η ενεργοποίηση απλώς καταγράφει τη δήλωση."
+                "Τίποτα εκκρεμές (π.χ. υποβλήθηκε ήδη από «Πρόγραμμα → ΕΡΓΑΝΗ») — "
+                "η ενεργοποίηση απλώς κλείνει την υποχρέωση."
                 if not d["rows"] else
-                f"{len(d['rows'])} ημέρες προς δήλωση σε ΕΝΑ batch.",
+                f"Η ενεργοποίηση ΥΠΟΒΑΛΛΕΙ {len(d['rows'])} ημέρες στο ΕΡΓΑΝΗ σε ΕΝΑ batch.",
             ]
 
     elif t == "WAGE_ADJUSTMENT":
@@ -3498,6 +3578,10 @@ def live_board(day: date, base: date | None = None, days: int = 3) -> dict:
     for y in range(base.year, end.year + 1):
         hol.update(holiday_names(y))
     hols = [i * 24 * 60 for i, d in enumerate(dates) if d in hol]
+    # ΚΛΕΙΣΜΕΝΗ ΜΙΣΘΟΔΟΣΙΑ: λεπτά [0, closed) του παραθύρου είναι κλειδωμένα
+    closed_end = svc.closed_period_end()
+    closed = (min(((closed_end - base).days + 1) * 24 * 60, span)
+              if closed_end and closed_end >= base else 0)
     # Σημάνσεις χάρακα: ΗΜΕΡΕΣ κανονικά, ΜΗΝΕΣ στην προβολή έτους
     if agg:
         marks = _month_marks(base, end, day)
@@ -3514,7 +3598,7 @@ def live_board(day: date, base: date | None = None, days: int = 3) -> dict:
     # Επάνω επίπεδο χάρακα στην προβολή μήνα: ο ΜΗΝΑΣ πάνω από τις ημερομηνίες
     months = [] if agg else _month_marks(base, end, day)
     return {"day": day, "base": base, "days": days, "span": span,
-            "marks": marks, "months": months, "hols": hols,
+            "marks": marks, "months": months, "hols": hols, "closed": closed,
             "hours": span // 60, "detail": detail,
             "agg": agg, "rows": rows}
 

@@ -21,6 +21,7 @@ from misevent.app.services import PayrollService
 from misevent.domain.events import LeaveType
 from misevent.domain.projections import Projections
 from misevent.domain.scheduler import ObligationScheduler
+from misevent.integrations import ergani_parameters
 from misevent.persistence.database import Database
 
 FULL_WEEK = {d: "09:00-17:00" for d in ("MON", "TUE", "WED", "THU", "FRI")}
@@ -35,7 +36,8 @@ def setup_teka(monthly_gross=1500.0, hire=date(2026, 1, 5)):
     return svc, proj, eid
 
 
-def setup(monthly_gross=1500.0, hire=date(2026, 1, 5), teka=False):
+def setup(monthly_gross=1500.0, hire=date(2026, 1, 5), teka=False,
+          birth_date=date(1990, 5, 5), sex=""):
     store = Database().store("test")
     proj = Projections()
     store.subscribe(proj.handle)
@@ -64,8 +66,13 @@ def setup(monthly_gross=1500.0, hire=date(2026, 1, 5), teka=False):
     )
     pid = svc.register_person(
         last_name="ΠΑΠΑΔΟΠΟΥΛΟΣ", first_name="ΙΩΑΝΝΗΣ", father_name="ΝΙΚΟΛΑΟΣ",
-        mother_name="ΜΑΡΙΑ", birth_date=date(1990, 5, 5), afm="111222336",
+        mother_name="ΜΑΡΙΑ", birth_date=birth_date, afm="111222336",
         amka="05059012343", ama="123456789",
+        # Φύλο ⇒ ΟΛΑ τα στοιχεία ταυτότητας WebE3N (`check_web_e3n_identity`)
+        **({"sex": sex,
+            "nationality_code": ergani_parameters.nationalities()[0]["code"],
+            "identity_type": ergani_parameters.identity_types()[0]["code"],
+            "identity_number": "ΑΒ123456"} if sex else {}),
     )
     eid = svc.start_employment(
         pid, hire_date=hire, monthly_gross=monthly_gross,

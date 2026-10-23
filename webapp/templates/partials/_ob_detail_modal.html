@@ -54,6 +54,33 @@
         {{ rows_table(detail.rows, detail.totals) }}
       {% endif %}
 
+      {% if detail.blocks %}
+        {# ΑΝΑΛΥΤΙΚΑ ανά εργαζόμενο — μόνο στοιχεία με τιμή #}
+        <div class="ob-blocks">
+          {% for b in detail.blocks %}
+            <div class="ob-block">
+              <div class="ob-block-h"><b>{{ b.title }}</b>
+                {% if b.note %}<span class="muted">{{ b.note }}</span>{% endif %}</div>
+              {% for k, v in b["items"] %}
+                <div class="fact"><span>{{ k }}</span><b>{{ v }}</b></div>
+              {% else %}
+                <div class="muted">—</div>
+              {% endfor %}
+            </div>
+          {% endfor %}
+        </div>
+      {% endif %}
+
+      {% if detail.upload %}
+        {# «Εισαγωγή κάρτας περιόδου»: το αρχείο ανεβαίνει με την Ενεργοποίηση #}
+        <form id="ob-upload" class="btnrow" style="margin-top:10px">
+          <label class="muted" style="font-size:12.5px">📎 Αρχείο κάρτας ΕΡΓΑΝΗ {{ detail.period }} (xlsx — μόνο ο μήνας)
+            <input type="file" name="karta" accept=".xlsx"></label>
+        </form>
+        <div class="muted" style="font-size:12px;margin-top:4px">
+          Προαιρετικό αν η κάρτα έχει ήδη εισαχθεί (Παρουσίες / Ζωντανά).</div>
+      {% endif %}
+
       {% if detail.extended %}
         <div class="muted" style="font-size:12.5px;margin-top:8px">
           🕓 Η προθεσμία έχει παραταθεί
@@ -132,6 +159,7 @@
         <button class="run {{ 'danger' if detail.late and not detail.reason }}"
                 hx-post="{{ url_for('obligations.run', ob_id=detail.id) }}"
                 hx-target="#ob-panel" hx-swap="outerHTML"
+                {% if detail.upload %}hx-include="#ob-upload" hx-encoding="multipart/form-data"{% endif %}
                 {{ 'disabled' if detail.reason else '' }}>
           {% if detail.late and not detail.reason %}
             ⚠️ Εκπρόθεσμη ενεργοποίηση

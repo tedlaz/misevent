@@ -273,3 +273,63 @@ def daily_shifts(punches: list[KartaPunch]) -> dict[tuple[str, date], list[str]]
             (a if a is not None else b, f"{tin}-{tout}")
         )
     return {k: [s for _, s in sorted(v)] for k, v in out.items()}
+
+
+def build_karta(punches: list[KartaPunch], branch: int = 0) -> bytes:
+    """Το ΑΝΤΙΣΤΡΟΦΟ του `parse_karta`: xlsx με τη γραμμογράφηση ΕΡΓΑΝΗ
+    (`COLUMNS`, ημ/νία Η/Μ/ΕΕΕΕ, ΑΑ παραρτήματος `branch`) — ελάχιστο έγκυρο πακέτο που
+    ανοίγει στο Excel και ξαναδιαβάζεται από την εισαγωγή. Μόνο stdlib."""
+    import io
+    from xml.sax.saxutils import escape
+
+    def row(i, vals):
+        return f'<row r="{i}">' + "".join(
+            f'<c r="{c}{i}" t="inlineStr"><is><t>{escape(str(v))}</t></is></c>'
+            for c, v in zip("ABCDEFG", vals)
+        ) + "</row>"
+
+    rows = [COLUMNS] + [
+        (branch, p.afm, p.last_name, p.first_name,
+         f"{p.day.day}/{p.day.month}/{p.day.year}", p.time_in, p.time_out)
+        for p in punches
+    ]
+    main = "http://schemas.openxmlformats.org/spreadsheetml/2006/main"
+    rel = "http://schemas.openxmlformats.org/officeDocument/2006/relationships"
+    pkg = "http://schemas.openxmlformats.org/package/2006"
+    ct = "application/vnd.openxmlformats"
+    sml = f"{ct}-officedocument.spreadsheetml"
+    parts = {
+        "[Content_Types].xml": (
+            f'<Types xmlns="{pkg}/content-types">'
+            f'<Default Extension="rels" ContentType="{ct}-package.relationships+xml"/>'
+            '<Default Extension="xml" ContentType="application/xml"/>'
+            '<Override PartName="/xl/workbook.xml" '
+            f'ContentType="{sml}.sheet.main+xml"/>'
+            '<Override PartName="/xl/worksheets/sheet1.xml" '
+            f'ContentType="{sml}.worksheet+xml"/>'
+            "</Types>"),
+        "_rels/.rels": (
+            f'<Relationships xmlns="{pkg}/relationships">'
+            f'<Relationship Id="rId1" Type="{rel}/officeDocument" Target="xl/workbook.xml"/>'
+            "</Relationships>"),
+        "xl/workbook.xml": (
+            f'<workbook xmlns="{main}" xmlns:r="{rel}"><sheets>'
+            '<sheet name="Sheet1" sheetId="1" r:id="rId1"/></sheets></workbook>'),
+        "xl/_rels/workbook.xml.rels": (
+            f'<Relationships xmlns="{pkg}/relationships">'
+            f'<Relationship Id="rId1" Type="{rel}/worksheet" Target="worksheets/sheet1.xml"/>'
+            "</Relationships>"),
+        "xl/worksheets/sheet1.xml": (
+            f'<worksheet xmlns="{main}"><cols>'
+            '<col min="1" max="1" width="12.8" customWidth="1"/>'
+            '<col min="2" max="3" width="16.8" customWidth="1"/>'
+            '<col min="4" max="4" width="14.8" customWidth="1"/>'
+            '<col min="5" max="7" width="10.8" customWidth="1"/></cols><sheetData>'
+            + "".join(row(i, r) for i, r in enumerate(rows, 1))
+            + "</sheetData></worksheet>"),
+    }
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as z:
+        for name, xml in parts.items():
+            z.writestr(name, '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n' + xml)
+    return buf.getvalue()

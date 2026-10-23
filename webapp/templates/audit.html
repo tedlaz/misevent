@@ -60,12 +60,13 @@
 
   {% if rows %}
     <div class="muted" style="font-size:12.5px;margin-bottom:8px">
-      Εμφανίζονται τα {{ rows|length }} νεότερα (από {{ total }}).
+      Εμφανίζονται οι {{ rows|length }} νεότερες κινήσεις (από {{ total }} events) —
+      κάθε κίνηση είναι ΜΙΑ ενέργεια, με όλες τις γραμμές (events) που έγραψε.
     </div>
     <form id="rollback-form" method="post" action="{{ url_for('audit.rollback') }}"
           onsubmit="return confirm('Να διαγραφούν ΟΡΙΣΤΙΚΑ όλα τα events μετά το επιλεγμένο σημείο; Η ενέργεια δεν αναιρείται και δεν ακυρώνει εξωτερικές υποβολές ή πληρωμές.');">
       <div class="audit-actions">
-        <span>Επίλεξε τη γραμμή που θα παραμείνει ως τελευταίο event.<br>
+        <span>Επίλεξε την κίνηση που θα παραμείνει ως τελευταία (ολόκληρη).<br>
           <b>Δεν αναιρούνται ενέργειες που έγιναν ήδη σε ΕΡΓΑΝΗ, ΕΦΚΑ, ΑΑΔΕ ή τράπεζα.</b>
         </span>
         <button id="rollback-button" class="run danger" type="submit" disabled>
@@ -85,7 +86,7 @@
                      form="rollback-form" aria-label="Επιλογή event {{ r.seq }}"
                      onchange="document.getElementById('rollback-button').disabled=false">
             </td>
-            <td class="mono">{{ r.seq }}</td>
+            <td class="mono">{% if r.lines|length > 1 %}{{ r.first_seq }}–{% endif %}{{ r.seq }}</td>
             <td class="mono muted" style="font-size:11.5px;white-space:nowrap">
               {{ r.occurred_at.strftime('%d/%m/%Y %H:%M:%S') }}
             </td>
@@ -93,12 +94,26 @@
               <div class="mono muted" style="font-size:11px">{{ r.event }}</div></td>
             <td>{{ r.who }}</td>
             <td class="mono muted" style="font-size:11.5px">{{ r.aggregate }}</td>
-            <td class="mono" style="font-size:11.5px">
-              {% for k, v in r.payload.items() %}
-                {# ΩΜΟ payload event: οι ημερομηνίες σε ΗΗ/ΜΜ/ΕΕΕΕ (val_gr —
-                   αναδρομικά, ώστε να πιάνει και τα ISO κλειδιά των dict) #}
-                <span class="tag">{{ k }}={{ v|val_gr }}</span>
-              {% endfor %}
+            <td class="mono" style="font-size:11.5px" onclick="event.stopPropagation()">
+              {% if r.lines|length > 1 %}
+                {# TRANSACTION: μία εντολή, πολλές γραμμές #}
+                <details class="audit-tx">
+                  <summary>▸ {{ r.lines|length }} γραμμές</summary>
+                  <table class="tbl">
+                    {% for x in r.lines %}
+                      <tr><td class="mono">{{ x.seq }}</td>
+                        <td><b>{{ x.label }}</b></td><td>{{ x.who }}</td>
+                        <td>{% for k, v in x.payload.items() %}<span class="tag">{{ k }}={{ v|val_gr }}</span>{% endfor %}</td></tr>
+                    {% endfor %}
+                  </table>
+                </details>
+              {% else %}
+                {% for k, v in r.payload.items() %}
+                  {# ΩΜΟ payload event: οι ημερομηνίες σε ΗΗ/ΜΜ/ΕΕΕΕ (val_gr —
+                     αναδρομικά, ώστε να πιάνει και τα ISO κλειδιά των dict) #}
+                  <span class="tag">{{ k }}={{ v|val_gr }}</span>
+                {% endfor %}
+              {% endif %}
             </td>
           </tr>
         {% endfor %}

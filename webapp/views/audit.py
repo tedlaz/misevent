@@ -7,6 +7,7 @@ Audit log: το πλήρες event log — η ΜΟΝΑΔΙΚΗ πηγή αλήθ
 """
 
 import json
+from collections import Counter
 from dataclasses import asdict
 from datetime import UTC, datetime
 from io import BytesIO
@@ -37,6 +38,32 @@ def _describe(agg: str) -> str:
     return agg
 
 
+def _transactions(rows: list[dict]) -> list[dict]:
+    """ΜΙΑ γραμμή ανά TRANSACTION (ό,τι έγραψε μία εντολή — `tx`, βλ.
+    `event_store.transaction`), με τα events της ως `lines`. Τα events μιας
+    εντολής είναι συνεχόμενα (το lock σειριοποιεί)· χωρίς `tx` (παλιά
+    events, scripts) κάθε event είναι μόνο του. Το `seq` της γραμμής είναι το
+    ΤΕΛΕΥΤΑΙΟ του transaction: η επαναφορά κρατά ολόκληρη την κίνηση."""
+    groups: list[dict] = []
+    for r in rows:
+        last = groups[-1] if groups else None
+        if last and r["tx"] and last["tx"] == r["tx"]:
+            last["lines"].append(r)
+            last["seq"] = r["seq"]
+        else:
+            groups.append({**r, "first_seq": r["seq"], "lines": [r]})
+    for g in groups:
+        if len(g["lines"]) > 1:
+            counts = Counter(x["label"] for x in g["lines"])
+            g["label"] = " · ".join(
+                f"{lbl} ×{n}" if n > 1 else lbl for lbl, n in counts.most_common())
+            g["event"] = f"{len(g['lines'])} events"
+            who = list(dict.fromkeys(x["who"] for x in g["lines"]))
+            g["who"] = ", ".join(who[:3]) + (f" +{len(who) - 3}" if len(who) > 3 else "")
+            g["aggregate"] = ""
+    return groups
+
+
 @bp.get("/")
 def index():
     etype = request.args.get("type") or ""
@@ -50,6 +77,7 @@ def index():
         rows.append(
             {
                 "seq": rec["seq"],
+                "tx": rec["tx"],
                 "event": name,
                 "label": EVENT_LABELS.get(name, name),
                 "aggregate": agg,
@@ -61,7 +89,7 @@ def index():
             }
         )
     total = len(rows)
-    rows = rows[::-1][:PAGE]  # νεότερα πρώτα
+    rows = _transactions(rows)[::-1][:PAGE]  # νεότερα πρώτα
     types = sorted(
         ((t, EVENT_LABELS.get(t, t)) for t in {rec["event_type"] for rec in log}),
         key=lambda x: x[1],

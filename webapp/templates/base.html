@@ -34,6 +34,8 @@
 <body>
 <div class="shell">
 
+  {# ΚΙΝΗΤΑ: το μενού κρύβεται πίσω από το ☰ του header — checkbox, μηδέν JS #}
+  <input type="checkbox" id="navtog" hidden>
   <nav class="side">
     <div class="brand">misevent</div>
     {# ΕΝΕΡΓΗ ΕΤΑΙΡΕΙΑ: ο επιλογέας ορίζει τι δείχνουν ΟΛΕΣ οι σελίδες.
@@ -78,9 +80,11 @@
       </details>
     {% endfor %}
   </nav>
+  <label for="navtog" class="navshade" aria-hidden="true"></label>
 
   <div>
     <header>
+      <label for="navtog" class="navbtn" aria-label="Μενού">☰</label>
       <h1>{% block heading %}{% endblock %}</h1>
       <span class="sub">{% block subheading %}{% endblock %}</span>
       <span class="grow"></span>

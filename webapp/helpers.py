@@ -10,6 +10,8 @@ import json
 
 from flask import Response, make_response
 
+from misevent.persistence.event_store import transaction
+
 from .system import lock
 
 
@@ -45,8 +47,9 @@ def run_command(fn, *args, **kwargs):
     ελληνικό μήνυμα — το πιάνουμε και το δείχνουμε ως toast, ποτέ 500."""
     from .actions import auto_settle_payments  # actions -> queries -> ... κύκλος
 
+    # ΜΙΑ εντολή = ΕΝΑ transaction στο audit (μαζί με τα αλυσιδωτά events)
     try:
-        with lock:
+        with lock, transaction():
             msg = fn(*args, **kwargs) or "Ολοκληρώθηκε"
             paid = auto_settle_payments()
         if paid:

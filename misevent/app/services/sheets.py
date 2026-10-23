@@ -12,9 +12,20 @@ from datetime import date
 import misevent.domain.payroll_engine as pe
 import misevent.domain.work_hours as work_hours
 import misevent.rules.config as config
-from misevent.domain.events import AttendanceSheetApproved, LeaveType
+from misevent.domain.events import AttendanceSheetApproved, LeaveType, RetroScheduleSubmitted
 from misevent.integrations import card_punches as cp
+from misevent.rules import constraints
 from misevent.rules.calendar_gr import last_working_day_of_month
+
+
+def _physical_segments(day_text: str) -> list:
+    """Τα τμήματα ΦΥΣΙΚΗΣ παρουσίας ενός ωραρίου ημέρας (η τηλεεργασία δεν
+    κατατάσσεται — §5.10)."""
+    try:
+        segs = constraints.parse_day_schedule(day_text)
+    except ValueError:
+        return []
+    return [seg["text"] for seg in segs if not seg["telework"]]
 
 
 class SheetsMixin:
@@ -60,25 +71,20 @@ class SheetsMixin:
         unpaid = unpaid_leave + sick["over"]
         on_leave = len(emp.leave_days_in_month(year, month)) - unpaid_leave - sick["over"]
 
+        # Ημέρα προγράμματος ΧΩΡΙΣ χτύπημα και χωρίς άδεια ΜΕΤΡΑ ΜΕ ΤΟ
+        # ΠΡΟΓΡΑΜΜΑ (`emp.pay_source`): τηλεεργασία (η κάρτα καταγράφει μόνο
+        # φυσική παρουσία), βλάβη/ξεχασμένη κάρτα. Πραγματική απουσία
+        # δηλώνεται ρητά (άδεια) ή διορθώνεται στο φύλλο.
         recorded = emp.attendance_days_in_month(year, month)
-        if recorded:
-            # ΤΗΛΕΕΡΓΑΣΙΑ = ΔΕΔΟΜΕΝΗ: το σύστημα παρουσιών (κάρτα) καταγράφει
-            # μόνο τη φυσική παρουσία. Ημέρες προγράμματος ΜΟΝΟ τηλεεργασίας
-            # χωρίς καταγραφή και χωρίς άδεια προσμετρώνται ως
-            # πραγματοποιηθείσες.
-            leave_days = set(emp.leave_days_in_month(year, month))
-            tele_given = sum(
-                1
-                for d in planned
-                if emp.is_telework_only(d)
-                and d not in emp.attendance
-                and d not in leave_days
-            )
-            worked, source = recorded + tele_given, "recorded"
-        else:
-            # Χωρίς καμία καταγραφή όλα τεκμαίρονται από το πρόγραμμα —
-            # οι ημέρες τηλεεργασίας περιλαμβάνονται ήδη στις planned.
-            worked, source = max(len(planned) - unpaid - on_leave, 0), "schedule"
+        leave_days = set(emp.leave_days_in_month(year, month))
+        unpunched = [d for d in planned if d not in emp.attendance and d not in leave_days]
+        worked = recorded + len(unpunched)
+        source = "recorded" if recorded else "schedule"
+        # Σε μήνα με κάρτα, οι ημέρες χωρίς χτύπημα (εκτός της αναμενόμενης
+        # τηλεεργασίας) δείχνονται πριν την έγκριση
+        no_punch = (
+            [d for d in unpunched if not emp.is_telework_only(d)] if recorded else []
+        )
 
         # Ημέρες προγράμματος ΟΛΟΥ του μήνα — παρονομαστής της αναλογίας
         # των 25 (πρόσληψη/αποχώρηση στη μέση του μήνα)
@@ -105,17 +111,22 @@ class SheetsMixin:
                 emp, worked, on_leave, unpaid, month_planned
             ),
             "source": source,
+            "no_punch_days": no_punch,
+            # ημέρες όπου η κάρτα ΑΠΟΚΛΙΝΕΙ πέρα από την ανοχή — ίδια
+            # ταξινόμηση με την κατάταξη ωρών και την απολογιστική πρόταση
+            "card_days": self.card_pay_days(emp, year, month),
         }
 
     def hours_analysis(self, year: int, month: int) -> dict:
         """Κατάταξη ωρών & προσαυξήσεις της περιόδου, ανά απασχόληση.
 
-        Πηγή ανά ΜΗΝΑ: αν υπάρχει αναλυτική καταγραφή κάρτας
-        (`attendance_shifts`), κατατάσσονται οι βάρδιες της κάρτας· αλλιώς οι
-        βάρδιες ΤΕΚΜΑΙΡΟΝΤΑΙ από το πρόγραμμα (`scheduled_shifts_in_month`),
-        ώστε π.χ. μια προγραμματισμένη βάρδια 15:00-23:00 να προτείνει τη
-        νυχτερινή προσαύξηση ακόμη και χωρίς Κάρτα Εργασίας. Ημέρες με σκέτο
-        σύνολο ωρών (καταγραφή χωρίς βάρδιες) δεν κατατάσσονται.
+        Πηγή ανά ΗΜΕΡΑ (ARCH_REF §5.11 «Συμφωνία προγράμματος ↔ κάρτας»):
+        - ημέρα με κάρτα που ΑΠΟΚΛΙΝΕΙ (`card_pay_days`) -> οι βάρδιες της
+          κάρτας (στο προαναγγελτικό μόνο αν `pre_major_by_card`)·
+        - ημέρα με κάρτα εντός ανοχής -> το ΔΗΛΩΜΕΝΟ πρόγραμμα·
+        - ημέρα χωρίς κάρτα -> οι βάρδιες ΤΕΚΜΑΙΡΟΝΤΑΙ από το πρόγραμμα
+          (`scheduled_shifts_in_month`), ώστε π.χ. μια βάρδια 15:00-23:00 να
+          προτείνει τη νυχτερινή προσαύξηση και χωρίς Κάρτα Εργασίας.
         Η κατάταξη τρέχει σε ΟΛΟ το έτος ως το τέλος της περιόδου, ώστε το
         ετήσιο όριο των 150 ωρών υπερωρίας να μετρήσει σωστά, και μετά
         φιλτράρεται στον μήνα.
@@ -128,27 +139,7 @@ class SheetsMixin:
         for emp in self.proj.employments.values():
             if not emp.hire_submitted:
                 continue
-            # Πηγή ανά μήνα: κάρτα αν υπάρχει καταγραφή, αλλιώς πρόγραμμα.
-            year_shifts = {}
-            for m in range(1, month + 1):
-                if emp.attendance_days_in_month(year, m):
-                    # Στρογγυλοποίηση (`card_rounding_minutes`, 0 = καμία) ΜΟΝΟ
-                    # εδώ: οι ώρες είναι ΠΡΟΤΑΣΗ, εγκρίνονται στο φύλλο.
-                    step = config.work_hour_rules_for(date(year, m, 1)).card_rounding_minutes
-                    year_shifts.update(
-                        {
-                            d: cp.rounded_texts(s, step)
-                            for d, s in emp.attendance_shifts.items()
-                            if d.year == year and d.month == m
-                        }
-                    )
-                else:
-                    year_shifts.update(emp.scheduled_shifts_in_month(year, m))
-            if not year_shifts:
-                continue
-            system = emp.weekly_system  # όρος σύμβασης
-            buckets = work_hours.classify_shifts(year_shifts, emp.weekly_hours, system)
-            month_buckets = [b for b in buckets if b.day.month == month]
+            month_buckets = self._month_buckets(emp, year, month)
             if not month_buckets:
                 continue
             rate = work_hours.hourly_rate(
@@ -163,6 +154,85 @@ class SheetsMixin:
                 "supplement": work_hours.pay_supplement(rate, fields, rules)["total"],
             }
         return out
+
+    def _month_buckets(self, emp, year: int, month: int) -> list:
+        """Η κατάταξη ωρών (`HourBucket`) του μήνα για ΜΙΑ απασχόληση — η
+        πηγή του `hours_analysis` (βλ. εκεί ποια ημέρα μετρά με τι)."""
+        year_shifts = {}
+        for m in range(1, month + 1):
+            year_shifts.update(emp.scheduled_shifts_in_month(year, m))
+            # Στρογγυλοποίηση (`card_rounding_minutes`, 0 = καμία) ΜΟΝΟ
+            # εδώ: οι ώρες είναι ΠΡΟΤΑΣΗ, εγκρίνονται στο φύλλο.
+            step = config.work_hour_rules_for(date(year, m, 1)).card_rounding_minutes
+            major = set(self.card_pay_days(emp, year, m))
+            # ημέρες με κάρτα — και ΜΟΝΟ ορφανό χτύπημα (συμπληρώνεται από
+            # το πρόγραμμα στο `actual_shifts`)
+            for d in set(emp.attendance_shifts) | set(emp.card_punches):
+                if d.year != year or d.month != m:
+                    continue
+                s = emp.actual_shifts(d)
+                if not s:
+                    continue
+                if d in major and self._major_by_card(d, emp):
+                    year_shifts[d] = cp.rounded_texts(s, step)
+                else:
+                    year_shifts[d] = _physical_segments(emp.declared_on(d))
+        year_shifts = {d: s for d, s in year_shifts.items() if s}
+        if not year_shifts:
+            return []
+        system = emp.weekly_system  # όρος σύμβασης
+        buckets = work_hours.classify_shifts(year_shifts, emp.weekly_hours, system)
+        return [b for b in buckets if b.day.month == month]
+
+    def month_premiums(self, emp, year: int, month: int) -> dict:
+        """Οι ΠΡΟΣΑΥΞΗΣΕΙΣ του μήνα (αργία, νύχτα, υπερεργασία, υπερωρία…)
+        ανά ημέρα + σύνολο, με ποσά (`pay_supplement`) — για τη σύγκριση
+        προγράμματος ↔ κάρτας. Ίδια κατάταξη με το `hours_analysis`, άρα
+        ακολουθεί τον τρόπο υπολογισμού του μήνα. Read-only."""
+        rules = config.work_hour_rules_for(date(year, month, 1))
+        rate = work_hours.hourly_rate(
+            emp.pay_type, emp.monthly_gross, emp.daily_wage, emp.weekly_hours
+        )
+        buckets = self._month_buckets(emp, year, month)
+        by_day = {}
+        for b in buckets:
+            by_day.setdefault(b.day, []).append(b)
+        days = []
+        for d in sorted(by_day):
+            fields = work_hours.sheet_fields_from_buckets(by_day[d])
+            br = work_hours.pay_supplement(rate, fields, rules)
+            if br["lines"]:
+                days.append({"day": d, "lines": list(br["lines"].values()),
+                             "total": br["total"], "premium": br["premium"]})
+        br = work_hours.pay_supplement(
+            rate, work_hours.sheet_fields_from_buckets(buckets), rules)
+        return {"rate": rate, "days": days, "lines": list(br["lines"].values()),
+                "total": br["total"], "premium": br["premium"]}
+
+    def card_pay_days(self, emp, year: int, month: int) -> list:
+        """Οι ημέρες του μήνα όπου η κάρτα ΑΠΟΚΛΙΝΕΙ από το δηλωμένο πέρα από
+        την ευέλικτη προσέλευση + `card_tolerance_minutes`
+        (`emp.pay_source` == "card"), χρονολογικά."""
+        return sorted(
+            d for d in set(emp.attendance_shifts) | set(emp.card_punches)
+            if d.year == year and d.month == month
+            and emp.pay_source(d, config.work_hour_rules_for(d).card_tolerance_minutes,
+                               config.work_hour_rules_for(d).card_rounding_minutes)
+            == "card"
+        )
+
+    def _major_by_card(self, d: date, emp=None) -> bool:
+        """Πληρώνεται με την ΚΑΡΤΑ μια ημέρα απόκλισης; Πρώτα η ρητή επιλογή
+        του μήνα του `emp` (`MonthPayBasisChosen`, σύγκριση στο ΗΜΕΡΟΛΟΓΙΟ —
+        χωρίς `emp` = ο κανόνας του συστήματος)· αλλιώς
+        απολογιστικό: πάντα (δηλώνεται εκ των υστέρων)· προαναγγελτικό: κατά
+        την προτίμηση «Διάφορα → pre_major_by_card»."""
+        basis = emp.pay_basis.get((d.year, d.month), ("auto", True))[0] if emp else "auto"
+        if basis != "auto":
+            return basis == "card"
+        return self.proj.schedule_system_on(d) == "retro" or bool(
+            self.proj.misc_settings.get("pre_major_by_card", True)
+        )
 
     def month_schedule_pending(self, emp, year: int, month: int) -> bool:
         """Έχει ο μήνας ΕΝΕΡΓΗ ημέρα ΑΔΗΛΩΤΗ (pending) στο ΕΡΓΑΝΗ;
@@ -181,7 +251,7 @@ class SheetsMixin:
     def month_schedule_incomplete(self, year: int, month: int) -> bool:
         """True αν ΕΣΤΩ μία ενεργή απασχόληση του μήνα έχει ημέρα χωρίς
         δηλωμένο πρόγραμμα στο ΕΡΓΑΝΗ. Η «Έγκριση Παρουσιών» του μήνα ΔΕΝ
-        εμφανίζεται όσο ισχύει αυτό (προαπαιτούμενο — βλ. queries.is_locked)."""
+        ενεργοποιείται όσο ισχύει αυτό (προαπαιτούμενο — βλ. queries.blocked_reason)."""
         return any(
             self.month_schedule_pending(emp, year, month)
             for emp in self.proj.employments.values()
@@ -258,6 +328,14 @@ class SheetsMixin:
                 "Εκκρεμούν υποβολές ΕΡΓΑΝΗ πρόσληψης πριν την έγκριση "
                 f"παρουσιών: {names}"
             )
+        # «Διάφορα → card_required»: η κάρτα ελέγχεται στο ΗΜΕΡΟΛΟΓΙΟ πριν
+        card = [d["name"] for eid, d in draft.items()
+                if self.card_month_pending(self.proj.employments[eid], year, month)]
+        if card:
+            raise ValueError(
+                "Εκκρεμεί ο έλεγχος κάρτας (ΗΜΕΡΟΛΟΓΙΟ εργαζομένου) για: "
+                + "· ".join(card)
+            )
 
         final = {}
         for eid, d in draft.items():
@@ -314,4 +392,11 @@ class SheetsMixin:
                 "source": "manual" if manual else d["source"],
             }
         self.store.append("COMPANY", AttendanceSheetApproved(year, month, final))
+        # Απολογιστικό: η έγκριση ΕΤΟΙΜΑΖΕΙ αμέσως την απολογιστική δήλωση
+        # (οι ημέρες απόκλισης -> «τροποποιημένες»)· η RETRO_SCHEDULE που μόλις
+        # γέννησε ο scheduler μένει ανοιχτή για την ΥΠΟΒΟΛΗ στο ΕΡΓΑΝΗ — ή
+        # κλείνει αμέσως αν δεν υπάρχει τίποτα προς δήλωση.
+        if self.proj.schedule_system_on(date(year, month, 1)) == "retro":
+            if not self._prepare_retro_schedule(year, month):
+                self.store.append("COMPANY", RetroScheduleSubmitted(year, month))
         return final

@@ -138,6 +138,13 @@ def approve():
     y, m = _period()
 
     def cmd():
+        # Ψηφιακή κάρτα: ίδιο προαπαιτούμενο με την ενεργοποίηση από το
+        # χρονολόγιο (requires της ATTENDANCE_APPROVAL)
+        if any(o.obligation_type == "CARD_IMPORT" and not o.fulfilled
+               and (o.period_year, o.period_month) == (y, m)
+               for o in proj.obligations.values()):
+            raise ValueError(f"Προαπαιτείται η «Εισαγωγή κάρτας περιόδου» {m}/{y} "
+                             "(Υποχρεώσεις)")
         f = request.form
         lines = {}
         for eid in f.getlist("eid"):
@@ -180,12 +187,16 @@ def import_karta():
         up = request.files.get("karta")
         if up is None or not up.filename:
             raise ValueError("Δεν επιλέχθηκε αρχείο καρτών (xlsx)")
-        res = svc.import_karta_attendance(up.read())
+        y, m = _period()
+        res = svc.import_karta_attendance(up.read(), y, m)
         periods = ", ".join(f"{mm}/{yy}" for yy, mm in res["periods"]) or "—"
         msg = (
             f"Εισήχθησαν {res['recorded']} ημέρες παρουσίας για "
             f"{res['employees']} εργαζόμενους (περίοδοι: {periods})"
         )
+        if res["skipped"]:
+            msg += (f" · ΠΑΡΑΛΕΙΦΘΗΚΑΝ {len(res['skipped'])} ημέρες εκτός {m}/{y} "
+                    f"({res['skipped'][0]:%d/%m/%Y}–{res['skipped'][-1]:%d/%m/%Y})")
         if res["blind"]:
             fixed = sum(b["fixed"] for b in res["blind"])
             msg += (f" · ΤΥΦΛΑ ΧΤΥΠΗΜΑΤΑ: {len(res['blind'])} "

@@ -44,6 +44,9 @@ NO_PROJECTION = {
     # Ίδιο μοτίβο: κλείνει ΜΟΝΟ την RETRO_SCHEDULE — οι ημέρες είναι
     # DailyScheduleAssigned + ScheduleDaysSubmitted.
     "RetroScheduleSubmitted",
+    # Ίδιο μοτίβο: κλείνει ΜΟΝΟ την CARD_IMPORT — τα χτυπήματα είναι
+    # CardPunchRecorded.
+    "CardPeriodChecked",
     # ΙΣΤΟΡΙΚΟ: η οικογένεια παραμέτρων «teka» καταργήθηκε (τα ποσοστά
     # επικουρικής έρχονται πάντα από το ΚΠΚ της κάλυψης). Το event μένει στο
     # μητρώο ΜΟΝΟ για να αποκωδικοποιούνται παλιά logs — καμία κατάσταση.

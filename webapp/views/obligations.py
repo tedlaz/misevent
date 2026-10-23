@@ -93,7 +93,22 @@ def run(ob_id):
     ob = proj.obligations.get(ob_id)
     late = q.days_late(ob, ref) if ob else 0
 
-    ok, msg = run_command(trigger, ob_id)
+    def cmd():
+        # «Εισαγωγή κάρτας περιόδου»: το αρχείο του modal εισάγεται ΠΡΙΝ τον
+        # έλεγχο — τα χτυπήματα μένουν ακόμη κι αν ο έλεγχος αποτύχει, ώστε
+        # να διορθωθούν στο ΗΜΕΡΟΛΟΓΙΟ και να ξαναενεργοποιηθεί.
+        up = request.files.get("karta")
+        skipped = []
+        if ob is not None and up is not None and up.filename:
+            skipped = svc.import_karta_attendance(
+                up.read(), ob.period_year, ob.period_month)["skipped"]
+        msg = trigger(ob_id)
+        if skipped:
+            msg += (f" · παραλείφθηκαν {len(skipped)} ημέρες άλλου μήνα "
+                    f"({skipped[0]:%d/%m/%Y}–{skipped[-1]:%d/%m/%Y})")
+        return msg
+
+    ok, msg = run_command(cmd)
     if ok and late:
         msg = f"{msg} — ΕΚΠΡΟΘΕΣΜΑ κατά {late} ημέρες"
     # Μετά την ενεργοποίηση, ό,τι ξεκλείδωσε εμφανίζεται πλέον στο χρονολόγιο.

@@ -1,0 +1,30 @@
+{# Modal τοκετού → μείωση εισφοράς μητέρας (ΑΠΔ 103). Νέα δήλωση αντικαθιστά
+   την προηγούμενη· κενή ημερομηνία = κατάργηση. #}
+{% set f = form or {} %}
+<div class="modal-backdrop">
+  <div class="modal">
+    <form hx-post="{{ url_for('employments.childbirth', employment_id=e.employment_id) }}"
+          hx-target="#employment-card" hx-swap="outerHTML">
+      <div class="mhead">
+        <h3>🍼 Τοκετός — {{ e.full_name }}</h3>
+        <span class="muted" style="font-size:12.5px">
+          μείωση 50% εισφοράς σύνταξης εργαζομένης για 12 μήνες απασχόλησης
+          μετά τον μήνα τοκετού · ΑΠΔ κωδ. 103</span>
+      </div>
+      <div class="mbody">
+        <div class="frm cols">
+          <label>Ημερομηνία τοκετού<input type="date" name="birth_date"
+            value="{{ f.get('birth_date', e.child_birth_date.isoformat() if e.child_birth_date else '') }}"></label>
+        </div>
+        <div class="muted" style="font-size:12px;margin-top:8px">
+          Κενή ημερομηνία = κατάργηση (καταχώρηση εκ παραδρομής).</div>
+      </div>
+      <div class="mfoot">
+        <button type="button" class="ghost"
+                hx-get="{{ url_for('employments.modal_close') }}"
+                hx-target="#modal-host" hx-swap="innerHTML">Άκυρο</button>
+        <button class="run" type="submit">Αποθήκευση</button>
+      </div>
+    </form>
+  </div>
+</div>

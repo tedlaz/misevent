@@ -77,14 +77,7 @@ def _day_context(selected: date, focus_id=None, supplied=None) -> dict:
         (item for item in proj.employments.values() if item.hire_submitted),
         key=lambda item: item.full_name,
     ):
-        active = (
-            (employment.hire_date is None or selected >= employment.hire_date)
-            and (
-                employment.termination_date is None
-                or selected <= employment.termination_date
-            )
-        )
-        if not active:
+        if not employment.active_on(selected):
             continue
         scheduled_raw = (
             supplied.get(employment.employment_id, employment.day_schedule(selected))
@@ -100,9 +93,7 @@ def _day_context(selected: date, focus_id=None, supplied=None) -> dict:
         following_day = selected + timedelta(days=1)
 
         def adjacent_segments(day):
-            if employment.hire_date and day < employment.hire_date:
-                return []
-            if employment.termination_date and day > employment.termination_date:
+            if not employment.active_on(day):
                 return []
             try:
                 return constraints.parse_day_schedule(employment.day_schedule(day))
@@ -352,7 +343,7 @@ def _pending_rows() -> list[dict]:
     floor = date(ref.year - 1, 1, 1)
     rows = []
     for e in _staff():
-        lo = max(e.hire_date or floor, floor)
+        lo = max(e.payroll_start or floor, floor)
         hi = max([ref + timedelta(days=28), *e.daily_schedule])
         if e.termination_date:
             hi = min(hi, e.termination_date)

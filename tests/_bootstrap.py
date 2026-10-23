@@ -69,3 +69,16 @@ def ui_client(app):
             },
         )
     return client
+
+
+def seed(client):
+    """POST /seed (δοκιμαστικά δεδομένα) ΧΩΡΙΣ ψηφιακή κάρτα: το demo δεν
+    έχει αρχείο κάρτας, οπότε η «Εισαγωγή κάρτας περιόδου» θα κλείδωνε την
+    έγκριση παρουσιών. Για tests που τρέχουν την αλυσίδα και δεν αφορούν την
+    κάρτα (η ροή της κάρτας: tests/test_card_period.py)."""
+    from webapp.system import svc
+
+    resp = client.post("/seed")
+    if resp.status_code == 200:
+        svc.set_misc_settings(digital_card=False)
+    return resp

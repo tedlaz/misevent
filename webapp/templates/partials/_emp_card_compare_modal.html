@@ -1,0 +1,166 @@
+{# ΣΥΓΚΡΙΣΗ προγράμματος ↔ κάρτας του μήνα (κουμπί του ΗΜΕΡΟΛΟΓΙΟΥ) +
+   τρόπος υπολογισμού / απολογιστική δήλωση (`MonthPayBasisChosen`).
+   Η ταξινόμηση των ημερών είναι η `emp.pay_source` (ARCH_REF §5.11). #}
+{% macro hm(m, sign=False) %}{% if sign and m > 0 %}+{% elif m < 0 %}−{% endif %}{{ '%d:%02d'|format((m|abs) // 60, (m|abs) % 60) }}{% endmacro %}
+<div class="modal-backdrop">
+  <div class="modal wide cmp-big">
+  <div id="cmp-modal" class="modal-swap">
+    <div class="mhead">
+      <h3>⚖️ Πρόγραμμα ↔ Κάρτα — {{ label }}</h3>
+      <span class="muted" style="font-size:12.5px">{{ e.full_name }} · σύστημα
+        <b>{{ 'απολογιστικό' if c.system == 'retro' else 'προαναγγελτικό' }}</b></span>
+    </div>
+    <div class="mbody">
+      <div class="cmp-stats">
+        <div><b>{{ hm(c.plan_min) }}</b><span>ώρες προγράμματος</span></div>
+        <div><b>{{ hm(c.card_min) }}</b><span>ώρες με κάρτα</span></div>
+        <div class="{{ 'up' if c.card_min > c.plan_min else ('down' if c.card_min < c.plan_min) }}">
+          <b>{{ hm(c.card_min - c.plan_min, True) }}</b><span>διαφορά</span></div>
+        <div class="{{ 'diff' if c.diff_days }}"><b>{{ c.diff_days }}</b><span>ημέρες απόκλισης</span></div>
+        <div><b>{{ c.nopunch_days }}</b><span>χωρίς χτύπημα</span></div>
+      </div>
+
+      <p class="muted" style="font-size:12.5px;margin:0 0 8px">
+        Λαμβάνονται υπόψη η ευέλικτη προσέλευση της σύμβασης
+        (<b>{{ e.flexible_arrival_minutes or 0 }}΄</b>) και η στρογγυλοποίηση της ημερήσιας
+        απασχόλησης (<b>{{ c.step }}΄</b>, Παράμετροι → «Στρογγυλοποίηση κάρτας»).</p>
+      {% if c.diff_days %}
+      <div class="cmp-wrap">
+        <table class="tbl cmp-tbl">
+          <thead><tr><th>Ημέρα</th><th>Πρόγραμμα</th><th>Κάρτα</th><th class="num">Διαφορά</th></tr></thead>
+          <tbody>
+            {% for r in c.days if r.state == 'diff' %}
+              <tr class="cmp-diff">
+                <td>{{ r.day|date_gr }}</td>
+                <td class="mono">{{ r.declared or 'ρεπό' }}</td>
+                <td class="mono">{{ r.card }}</td>
+                <td class="num mono">{{ hm(r.diff, True) if r.diff else 'ωράριο' }}</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}
+        <p class="ecal-ok">✔ Καμία διαφορά — η κάρτα συμφωνεί με το πρόγραμμα όλες τις ημέρες.</p>
+      {% endif %}
+
+      {% if c.settled_days %}
+      <h3 class="sec">Διαφορές που τακτοποιούνται με τους κανόνες ({{ c.settled_days }})</h3>
+      <div class="cmp-wrap">
+        <table class="tbl cmp-tbl">
+          <thead><tr><th>Ημέρα</th><th>Πρόγραμμα</th><th>Κάρτα</th><th class="num">Ώρες προγρ.</th>
+            <th class="num">Ώρες κάρτας</th><th class="num">Διαφορά</th>
+            <th class="num">Πληρωτέα διαφορά</th><th>Κανόνας</th></tr></thead>
+          <tbody>
+            {# τακτοποιημένη ημέρα = πληρώνεται με το ΠΡΟΓΡΑΜΜΑ -> πληρωτέα διαφορά 0 #}
+            {% for r in c.days if r.rule %}
+              <tr class="cmp-ok">
+                <td>{{ r.day|date_gr }}</td>
+                <td class="mono">{{ r.declared }}</td>
+                <td class="mono">{{ r.card }}</td>
+                <td class="num mono">{{ hm(r.plan_min) }}</td>
+                <td class="num mono">{{ hm(r.card_exact) }}</td>
+                <td class="num mono">{{ hm(r.card_exact - r.plan_min, True) }}</td>
+                <td class="num mono">{{ hm(0) }}</td>
+                <td>{{ r.rule }}</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% endif %}
+
+      {# ΠΡΟΣΑΥΞΗΣΕΙΣ: ίδια κατάταξη με το φύλλο (`svc.month_premiums`), κατά
+         τον ΑΠΟΘΗΚΕΥΜΕΝΟ τρόπο υπολογισμού — ξαναβγαίνει μετά την αποθήκευση #}
+      <h3 class="sec">Προσαυξήσεις μήνα
+        <span class="muted" style="font-size:12.5px;font-weight:400">· ωρομίσθιο {{ prem.rate|money }} €
+          · κατά τον τρόπο υπολογισμού «{{ pay_bases[c.basis] }}»</span></h3>
+      {% if prem.days %}
+      <div class="cmp-wrap">
+        <table class="tbl cmp-tbl cmp-prem">
+          <thead><tr><th>Ημέρα</th><th>Κατηγορία</th><th class="num">Ώρες</th>
+            <th class="num">Συντελεστής</th><th class="num">Ποσό €</th>
+            <th class="num">Προσαύξηση €</th></tr></thead>
+          <tbody>
+            {% for dd in prem.days %}{% for l in dd.lines %}
+              <tr>
+                {% if loop.first %}<td rowspan="{{ dd.lines|length }}">{{ dd.day|date_gr }}</td>{% endif %}
+                <td>{{ l.label }}</td>
+                <td class="num mono">{{ l.hours|hours_gr }}</td>
+                <td class="num mono">× {{ ('%g'|format(l.mult))|replace('.', ',') }}</td>
+                <td class="num mono">{{ l.amount|money }}</td>
+                <td class="num mono">{{ l.premium|money }}</td>
+              </tr>
+            {% endfor %}{% endfor %}
+          </tbody>
+        </table>
+      </div>
+      <table class="tbl cmp-tbl cmp-prem" style="margin-top:8px">
+        <thead><tr><th>Σύνολο μήνα ανά κατηγορία</th><th class="num">Ώρες</th>
+          <th class="num">Συντελεστής</th><th class="num">Ποσό €</th><th class="num">Προσαύξηση €</th></tr></thead>
+        <tbody>
+          {% for l in prem.lines %}
+            <tr><td>{{ l.label }}</td><td class="num mono">{{ l.hours|hours_gr }}</td>
+              <td class="num mono">× {{ ('%g'|format(l.mult))|replace('.', ',') }}</td>
+              <td class="num mono">{{ l.amount|money }}</td><td class="num mono">{{ l.premium|money }}</td></tr>
+          {% endfor %}
+          <tr class="cmp-total"><td>Σύνολο</td><td></td><td></td>
+            <td class="num mono">{{ prem.total|money }}</td><td class="num mono">{{ prem.premium|money }}</td></tr>
+        </tbody>
+      </table>
+      <p class="muted" style="font-size:12px;margin:6px 0 0">«Ποσό» = ωρομίσθιο × συντελεστής × ώρες ·
+        «Προσαύξηση» = το καθαρό επιπλέον ποσό (εντός ωραρίου όλο· πέραν ωραρίου ό,τι υπερβαίνει την απλή ώρα).
+        Πρόταση — στη μισθοδοσία περνά μέσω του εγκεκριμένου φύλλου παρουσιών.</p>
+      {% else %}
+        <p class="muted">Καμία εργασία με προσαύξηση (αργία, νύχτα, υπερεργασία, υπερωρία) τον μήνα.</p>
+      {% endif %}
+
+      <h3 class="sec">Τρόπος υπολογισμού μισθοδοσίας</h3>
+      {% if c.closed %}
+        <div class="warnbox closedbox">Η μισθοδοσία του μήνα έχει κλείσει — η επιλογή δεν αλλάζει
+          ({{ pay_bases[c.basis] }}).</div>
+      {% else %}
+      <form class="frm" hx-post="{{ url_for('employments.calendar_basis', employment_id=mid, m=first.strftime('%Y-%m')) }}"
+            hx-target="#cmp-modal" hx-select="#cmp-modal" hx-swap="outerHTML">
+        <div class="cmp-opts">
+          {% for k, lbl in pay_bases.items() %}
+            <label class="cmp-opt"><input type="radio" name="basis" value="{{ k }}" {{ 'checked' if c.basis == k }}>
+              <b>{{ lbl }}</b>
+              <small class="muted">{% if k == 'auto' %}τώρα: {{ 'κάρτα' if c.auto_card else 'πρόγραμμα' }}
+                ({{ 'απολογιστικό' if c.system == 'retro' else '«Διάφορα → προαναγγελτικό»' }})
+                {% elif k == 'schedule' %}οι ημέρες απόκλισης πληρώνονται όπως το πρόγραμμα
+                {% else %}οι ημέρες απόκλισης πληρώνονται με τις πραγματικές ώρες{% endif %}</small>
+            </label>
+          {% endfor %}
+        </div>
+
+        <h3 class="sec">Απολογιστική δήλωση προγράμματος</h3>
+        {% if c.system != 'retro' %}
+          <p class="muted">Ο μήνας είναι σε <b>προαναγγελτικό</b> σύστημα: δεν γίνεται απολογιστική
+            δήλωση.{% if c.diff_days %} Οι {{ c.diff_days }} ημέρες απόκλισης έπρεπε να έχουν δηλωθεί πριν συμβούν.{% endif %}</p>
+        {% elif not c.diff_days %}
+          <p class="ecal-ok">✔ Δεν χρειάζεται — η κάρτα συμφωνεί με το δηλωμένο πρόγραμμα.</p>
+        {% else %}
+          <label class="chk"><input type="checkbox" name="retro" value="1" {{ 'checked' if c.retro }}>
+            Προετοιμασία απολογιστικής δήλωσης για τις <b>{{ c.diff_days }}</b> ημέρες απόκλισης</label>
+          <ul class="cmp-retro">
+            {% for r in c.days if r.state == 'diff' %}
+              <li><span>{{ r.day|date_gr }}</span> <s class="mono">{{ r.declared or 'ρεπό' }}</s> → <b class="mono">{{ r.retro }}</b></li>
+            {% endfor %}
+          </ul>
+          <p class="muted" style="font-size:12.5px">Ετοιμάζεται αυτόματα με την έγκριση παρουσιών (οι ημέρες
+            γίνονται «τροποποιημένες») και υποβάλλεται με την υποχρέωση «Υποβολή απολογιστικού ΕΡΓΑΝΗ».</p>
+        {% endif %}
+        {% if c.system != 'retro' or not c.diff_days %}<input type="hidden" name="retro" value="{{ '1' if c.retro }}">{% endif %}
+        <div class="btnrow"><button class="run" type="submit">💾 Αποθήκευση επιλογής</button></div>
+      </form>
+      {% endif %}
+    </div>
+    <div class="mfoot">
+      <button type="button" class="ghost"
+              hx-get="{{ url_for('employments.modal_close') }}"
+              hx-target="#modal-host" hx-swap="innerHTML">Κλείσιμο</button>
+    </div>
+  </div>
+  </div>
+</div>

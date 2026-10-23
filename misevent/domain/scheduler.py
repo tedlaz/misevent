@@ -59,6 +59,7 @@ import misevent.rules.obligation_types as ot
 from misevent.domain.events import (
     APDSubmitted,
     AttendanceSheetApproved,
+    CardPeriodChecked,
     EmploymentStarted,
     ErganiSubmissionRecorded,
     FMYSubmitted,
@@ -68,6 +69,7 @@ from misevent.domain.events import (
     LeaveRecorded,
     LeaveType,
     MinimumWageDefined,
+    MiscSettingsChanged,
     MonthlyPayrollCalculated,
     ObligationFulfilled,
     ObligationScheduled,
@@ -82,6 +84,7 @@ COMPANY = "COMPANY"
 # Παράγονται από το ΜΗΤΡΩΟ ΤΥΠΩΝ (obligation_types.py) — όχι hardcoded εδώ
 PERIOD_TYPES = [t.code for t in ot.by_spawn("period")]
 TEKA_TYPES = [t.code for t in ot.by_spawn("period_teka")]
+CARD_TYPES = [t.code for t in ot.by_spawn("period_card")]
 ANNUAL_TYPES = [t.code for t in ot.by_spawn("annual")]
 
 # Ποιο event κλείνει ποια υποχρέωση: PaymentMade.payment_type -> τύπος
@@ -124,6 +127,9 @@ class ObligationScheduler:
         self._allowance_periods: set[tuple[int, int]] = set()
         self._wage_adjust_periods: set[tuple[int, int]] = set()
         self._retro_periods: set[tuple[int, int]] = set()
+        # «Διάφορα → digital_card» ως τώρα: η φόρμα στέλνει ΟΛΑ τα κλειδιά
+        # σε κάθε αποθήκευση, οπότε αντιδρούμε ΜΟΝΟ σε πραγματική αλλαγή
+        self._digital_card = bool(projections.misc_settings.get("digital_card", True))
         self._bootstrap()
 
     def _bootstrap(self):
@@ -157,6 +163,7 @@ class ObligationScheduler:
         self._allowance_periods.clear()
         self._wage_adjust_periods.clear()
         self._retro_periods.clear()
+        self._digital_card = bool(self.proj.misc_settings.get("digital_card", True))
         self._bootstrap()
 
     # ------------------------------------------------------------------
@@ -199,6 +206,14 @@ class ObligationScheduler:
 
         elif isinstance(event, RetroScheduleSubmitted):
             self._fulfill("RETRO_SCHEDULE", event.period_year, event.period_month)
+
+        elif isinstance(event, CardPeriodChecked):
+            self._fulfill("CARD_IMPORT", event.year, event.month)
+
+        elif (isinstance(event, MiscSettingsChanged) and "digital_card" in event.fields
+              and bool(event.fields["digital_card"]) != self._digital_card):
+            self._digital_card = bool(event.fields["digital_card"])
+            self._digital_card_toggled(self._digital_card)
 
         elif isinstance(event, MonthlyPayrollCalculated):
             y, m = event.period_year, event.period_month
@@ -286,6 +301,30 @@ class ObligationScheduler:
         """Όλοι οι τύποι με spawn="period" — προθεσμίες από το μητρώο."""
         for code in PERIOD_TYPES:
             self._schedule(code, ot.due_date(code, y, m), y, m)
+        if self.proj.misc_settings.get("digital_card", True):
+            for code in CARD_TYPES:
+                self._schedule(code, ot.due_date(code, y, m), y, m)
+
+    def _digital_card_toggled(self, on: bool):
+        """«Διάφορα → digital_card» άλλαξε. ΟΝ: νέα CARD_IMPORT σε κάθε ανοιχτή
+        περίοδο (μη εγκεκριμένες παρουσίες) χωρίς εκκρεμή — ο έλεγχος
+        ξαναγίνεται. OFF: οι εκκρεμείς κλείνουν — αλλιώς θα κλείδωναν για πάντα
+        την έγκριση παρουσιών."""
+        obs = list(self.proj.obligations.values())
+        if not on:
+            for ob in obs:
+                if ob.obligation_type in CARD_TYPES and not ob.fulfilled:
+                    self.store.append(COMPANY, ObligationFulfilled(ob.obligation_id, ""))
+            return
+        have = {(o.obligation_type, o.period_year, o.period_month)
+                for o in obs if not o.fulfilled}
+        for ob in obs:
+            if ob.obligation_type != "ATTENDANCE_APPROVAL" or ob.fulfilled:
+                continue
+            y, m = ob.period_year, ob.period_month
+            for code in CARD_TYPES:
+                if (code, y, m) not in have:
+                    self._schedule(code, ot.due_date(code, y, m), y, m)
 
     def _schedule_teka_period(self, y: int, m: int):
         for code in TEKA_TYPES:

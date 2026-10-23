@@ -261,6 +261,33 @@
           αύξηση· προεπιλογή)</span>
       </label>
       <label class="chk">
+        <input type="checkbox" name="pre_major_by_card" value="1"
+               {{ 'checked' if misc.pre_major_by_card }}>
+        Προαναγγελτικό σύστημα: ημέρες με <b>απόκλιση κάρτας</b> πέρα από την
+        ανοχή πληρώνονται <b>με την κάρτα</b>
+        <span class="muted" style="font-size:12.5px">— οι ώρες οφείλονται,
+          η απόκλιση μένει αδήλωτη (προειδοποίηση στις Παρουσίες). Αν
+          ξετσεκαριστεί: με το <b>πρόγραμμα</b>. Ανοχή: Παράμετροι → Κατάταξη
+          ωρών. Προεπιλογή: με την κάρτα</span>
+      </label>
+      <label class="chk">
+        <input type="checkbox" name="digital_card" value="1"
+               {{ 'checked' if misc.digital_card }}>
+        Η εταιρεία είναι <b>ενταγμένη στην ψηφιακή κάρτα εργασίας</b>
+        <span class="muted" style="font-size:12.5px">— κάθε περίοδος έχει
+          υποχρέωση «Εισαγωγή κάρτας περιόδου» (αρχείο κάρτας + έλεγχος) πριν
+          την έγκριση παρουσιών. Προεπιλογή: ναι</span>
+      </label>
+      <label class="chk">
+        <input type="checkbox" name="card_required" value="1"
+               {{ 'checked' if misc.card_required }}>
+        Η <b>κάρτα εργασίας είναι προαπαιτούμενο</b> της μισθοδοσίας
+        <span class="muted" style="font-size:12.5px">— η έγκριση παρουσιών
+          περιμένει τον έλεγχο αρτιότητας κάρτας (εισαγωγή αρχείου, χτυπήματα
+          χωρίς ταίρι, ημέρες χωρίς χτύπημα) στο «ΗΜΕΡΟΛΟΓΙΟ» κάθε
+          εργαζομένου. Προεπιλογή: όχι</span>
+      </label>
+      <label class="chk">
         <input type="checkbox" name="auto_payments" value="1"
                {{ 'checked' if misc.auto_payments }}>
         <b>Αυτόματη εξόφληση πληρωμών</b> — δεν εμφανίζονται στο χρονολόγιο

@@ -173,6 +173,7 @@ class InsuranceRow:
     contrib_employer: float
     subsidy_employee: float = 0.0
     subsidy_employer: float = 0.0
+    subsidy_code: str = "102"  # τύπος επιδότησης ΑΣΦΑΛΙΣΜΕΝΟΥ (102/103)
     lawyer_advance: float = 0.0  # ΕΦΚΑ μόνο: Γραμμάτιο προείσπραξης
     aux_fund_code: str = ""  # ΕΦΚΑ μόνο: Φορέας Επικουρικής εκτός
     # e-ΕΦΚΑ ("01"=ΤΕΚΑ, κενό αν e-ΕΦΚΑ)

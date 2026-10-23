@@ -32,7 +32,7 @@ from datetime import timedelta
 from flask import abort, g, redirect, render_template_string, request, session, url_for
 
 from . import clock, filters
-from .labels import EMP_LIFECYCLE, MONTHS_GEN, NAV_HOME, nav_for
+from .labels import EMP_LIFECYCLE, MONTHS_GEN, NAV_HOME, SUBSIDY_LABELS, nav_for
 from .system import auth, registry, set_tenant
 from .tenancy import data_dir
 
@@ -72,6 +72,7 @@ def create_app():
     app.jinja_env.globals["EMP_LIFECYCLE"] = EMP_LIFECYCLE
     # Μήνες σε γενική («Μισθοδοσία Ιουνίου 2026») — ΜΙΑ πηγή αλήθειας
     app.jinja_env.globals["months_gen"] = MONTHS_GEN
+    app.jinja_env.globals["SUBSIDY_LABELS"] = SUBSIDY_LABELS
     # Λίστες «Είδος άδειας» της καρτέλας τρίτων χωρών (3 forms την κάνουν include)
     from misevent.integrations import ergani_parameters
 

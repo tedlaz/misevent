@@ -26,7 +26,7 @@ def test_cost_report(fresh_system):
 
     app = create_app()
     c = _bootstrap.ui_client(app)
-    assert c.post("/seed").status_code == 200
+    assert _bootstrap.seed(c).status_code == 200
 
     # ── Μία περίοδος μισθοδοσίας ΥΠΟΛΟΓΙΣΜΕΝΗ, οι υπόλοιπες πρόβλεψη ──────
     with app.test_request_context("/"):
@@ -135,7 +135,7 @@ def test_hourly_cost(fresh_system):
 
     app = create_app()
     c = _bootstrap.ui_client(app)
-    assert c.post("/seed").status_code == 200
+    assert _bootstrap.seed(c).status_code == 200
 
     with app.test_request_context("/"):
         year = today().year
@@ -224,7 +224,7 @@ def test_monthly_hours_column(fresh_system):
 
     app = create_app()
     c = _bootstrap.ui_client(app)
-    assert c.post("/seed").status_code == 200
+    assert _bootstrap.seed(c).status_code == 200
 
     with app.test_request_context("/"):
         year = today().year
@@ -302,7 +302,7 @@ def test_take_home_per_hour(fresh_system):
 
     app = create_app()
     c = _bootstrap.ui_client(app)
-    assert c.post("/seed").status_code == 200
+    assert _bootstrap.seed(c).status_code == 200
 
     with app.test_request_context("/"):
         year = today().year
@@ -342,7 +342,7 @@ def test_period_totals_are_per_year(fresh_system):
 
     app = create_app()
     c = _bootstrap.ui_client(app)
-    assert c.post("/seed").status_code == 200
+    assert _bootstrap.seed(c).status_code == 200
 
     with app.test_request_context("/"):
         y, m = q.next_payroll_period()
@@ -387,7 +387,7 @@ def test_ledger_has_every_kind(fresh_system):
 
     app = create_app()
     c = _bootstrap.ui_client(app)
-    assert c.post("/seed").status_code == 200
+    assert _bootstrap.seed(c).status_code == 200
 
     with app.test_request_context("/"):
         y, m = q.next_payroll_period()
@@ -461,7 +461,7 @@ def test_report_measures(fresh_system):
 
     app = create_app()
     c = _bootstrap.ui_client(app)
-    assert c.post("/seed").status_code == 200
+    assert _bootstrap.seed(c).status_code == 200
 
     with app.test_request_context("/"):
         year = today().year
@@ -527,7 +527,7 @@ def test_unused_leave_is_deducted_after_the_total(fresh_system):
 
     app = create_app()
     c = _bootstrap.ui_client(app)
-    assert c.post("/seed").status_code == 200
+    assert _bootstrap.seed(c).status_code == 200
 
     with app.test_request_context("/"):
         year = today().year

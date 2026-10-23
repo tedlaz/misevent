@@ -42,7 +42,7 @@ def test_pages_render_the_strip_in_the_header(fresh_system):
     from webapp import create_app
 
     c = ui_client(create_app())
-    assert c.post("/seed").status_code == 200  # δοκιμαστικά δεδομένα: υπάρχουν υποχρεώσεις
+    assert _bootstrap.seed(c).status_code == 200  # δοκιμαστικά δεδομένα: υπάρχουν υποχρεώσεις
     for url in ("/", "/obligations/", "/payroll/"):
         html = c.get(url, follow_redirects=True).get_data(as_text=True)
         head = html.split("</header>")[0]
@@ -60,7 +60,7 @@ def test_htmx_command_returns_the_strip_oob_with_open_year_kept(fresh_system):
     from webapp.system import proj
 
     c = ui_client(create_app())
-    assert c.post("/seed").status_code == 200
+    assert _bootstrap.seed(c).status_code == 200
     ob = next(o for o in sorted(proj.obligations.values(), key=lambda o: o.due_date)
               if o.obligation_type == "ATTENDANCE_APPROVAL" and not o.fulfilled)
     ym = (ob.period_year, ob.period_month)
@@ -94,7 +94,7 @@ def test_month_page_renders_everything_about_the_month(fresh_system):
     from webapp.system import proj
 
     c = ui_client(create_app())
-    assert c.post("/seed").status_code == 200
+    assert _bootstrap.seed(c).status_code == 200
     y, m = min((o.period_year, o.period_month) for o in proj.obligations.values()
                if o.period_month)
 

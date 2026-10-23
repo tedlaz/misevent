@@ -248,11 +248,17 @@
                 εισφορές {{ a.premium_exempt|money }} €, Εγκ. e-ΕΦΚΑ 21/2025)
               {%- elif a.gross > a.efka_cap %} (πλαφόν {{ a.efka_cap|money }} €)
               {%- else %} (= μικτά, κάτω από το πλαφόν {{ a.efka_cap|money }} €){% endif %}
-              × συνολικό ποσοστό ταμείων — ανάλυση παρακάτω
-              {%- if a.subsidy_employee %} · μείον επιδότηση εργατικής εισφοράς
-                (ΔΥΠΑ, ΑΠΔ κωδ. 102) {{ a.subsidy_employee|money }} € — δεν παρακρατείται{% endif %}</small></td>
-          <td class="lv sub">− {{ a.efka_employee|money }} €</td>
+              × συνολικό ποσοστό ταμείων — ανάλυση παρακάτω</small></td>
+          <td class="lv sub">− {{ (a.efka_employee + (a.subsidy_employee or 0))|money }} €</td>
         </tr>
+        {% if a.subsidy_employee %}
+        <tr class="l-subsidy">
+          <td class="lt"><span class="dot"></span>+ {{ SUBSIDY_LABELS[a.subsidy_code or '102'] }}
+            <small>δεν παρακρατείται — παρακρατούνται
+              {{ a.efka_employee|money }} €</small></td>
+          <td class="lv">+ {{ a.subsidy_employee|money }} €</td>
+        </tr>
+        {% endif %}
         <tr class="l-taxable">
           <td class="lt"><span class="dot"></span>Φορολογητέο υπόλοιπο
             <small>μικτά {{ a.gross|money }} − εισφορές {{ a.efka_employee|money }} =
@@ -505,8 +511,15 @@
               {%- if a.efka_detail %}
                 ({{ '%.3f'|format(a.efka_detail|map(attribute='employer')|sum * 100) }}%
                 — ανάλυση παραπάνω){% endif %}</small></td>
-          <td class="lv">{{ a.efka_employer|money }} €</td>
+          <td class="lv">{{ (a.efka_employer + (a.subsidy_employer or 0))|money }} €</td>
         </tr>
+        {% if a.subsidy_employer %}
+        <tr class="l-subsidy">
+          <td class="lt"><span class="dot"></span>− {{ SUBSIDY_LABELS['107'] }}
+            <small>δεν καταβάλλεται — καταβάλλονται {{ a.efka_employer|money }} €</small></td>
+          <td class="lv">− {{ a.subsidy_employer|money }} €</td>
+        </tr>
+        {% endif %}
         <tr class="l-cost">
           <td class="lt">Συνολικό κόστος
             <small>μικτά {{ a.gross|money }} + εισφορές εργοδότη

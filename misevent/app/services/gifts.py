@@ -61,7 +61,8 @@ class GiftsMixin:
             ("christmas", False): pe.calc_christmas_gift,
         }[(gift_type, daily)]
         extra = {} if daily else {"subsidy_full": self.labor_subsidy_full(
-            emp, terms.wage, terms.weekly_hours, pe.gift_wage_date(gift_type, year))}
+            emp, terms.wage, terms.weekly_hours, pe.gift_wage_date(gift_type, year)),
+            **self.subsidy_pcts(emp, on)}
         return fn(
             terms.wage,
             emp.children_on(on),
@@ -94,6 +95,8 @@ class GiftsMixin:
                     exit_settlement,
                     efka_employer=res.efka_employer,
                     subsidy_employee=res.subsidy_employee,
+                    subsidy_code=res.subsidy_code,
+                    subsidy_employer=res.subsidy_employer,
                 ),
             )
             return res
@@ -119,7 +122,8 @@ class GiftsMixin:
         wage = emp.daily_wage if daily else emp.monthly_gross
         fn = pe.calc_leave_allowance_daily if daily else pe.calc_leave_allowance
         extra = {} if daily else {"subsidy_full": self.labor_subsidy_full(
-            emp, wage, emp.weekly_hours, date(year, 7, 31))}
+            emp, wage, emp.weekly_hours, date(year, 7, 31)),
+            **self.subsidy_pcts(emp, date(year, 7, 31))}
         return fn(
             wage,
             emp.children_on(date(year, 7, 31)),
@@ -150,6 +154,8 @@ class GiftsMixin:
                     exit_settlement,
                     efka_employer=res.efka_employer,
                     subsidy_employee=res.subsidy_employee,
+                    subsidy_code=res.subsidy_code,
+                    subsidy_employer=res.subsidy_employer,
                 ),
             )
             return res

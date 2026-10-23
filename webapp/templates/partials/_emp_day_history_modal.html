@@ -19,6 +19,26 @@
           {% endfor %}
         </div>
       {% endif %}
+      {# ΑΠΟΥΣΙΑ (απολογιστικό): η κάρτα έχει λιγότερες ώρες από το
+         πρόγραμμα — τα κενά δηλώνονται με λόγο (ΜΕ / ωροάδεια ΩΑ…) #}
+      {% if absence_gaps %}
+        <h3 class="sec">Λόγος απουσίας</h3>
+        <form class="frm cols" hx-post="{{ url_for('employments.calendar_day_punch', employment_id=e.employment_id) }}"
+              hx-target="#day-modal" hx-select="#day-modal" hx-swap="outerHTML">
+          <input type="hidden" name="d" value="{{ d.isoformat() }}">
+          <input type="hidden" name="op" value="absence">
+          <label class="wide">Απουσία <b class="mono">{{ absence_gaps|join(' · ') }}</b> — δηλώνεται στο απολογιστικό ως
+            <select name="code" required>
+              <option value="">— επιλέξτε λόγο —</option>
+              {% for r in absence_reasons %}
+                <option value="{{ r.code }}" {{ 'selected' if e.absence_reasons.get(d) == r.code }}>
+                  {{ r.code }} · {{ r.description }}</option>
+              {% endfor %}
+            </select></label>
+          <div class="btnrow"><button class="run" type="submit">Αποθήκευση λόγου</button></div>
+        </form>
+      {% endif %}
+
       {# Αλλαγή προγράμματος ημέρας: ίδια ροή με το «Ημερήσιο» — καταγράφεται
          μόνο αν διαφέρει και ανοίγει το πακέτο υποβολής ΕΡΓΑΝΗ #}
       {% if can_plan %}

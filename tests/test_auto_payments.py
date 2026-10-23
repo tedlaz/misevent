@@ -20,7 +20,7 @@ def test_auto_payments(fresh_system):
 
     app = create_app()
     c = _bootstrap.ui_client(app)
-    assert c.post("/seed").status_code == 200
+    assert _bootstrap.seed(c).status_code == 200
 
     def ob(code):
         return next(

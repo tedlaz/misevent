@@ -76,6 +76,7 @@ def _tax_row(entry):
 
 SPAWN_LABELS = {
     "period": "μηνιαία", "period_teka": "μηνιαία (ΤΕΚΑ)",
+    "period_card": "μηνιαία (ψηφιακή κάρτα)",
     "annual": "ετήσια", "reactive": "αντιδραστική",
     "on_source": "καταβολή",
 }
@@ -337,6 +338,9 @@ def misc_save():
             save_zip=f.get("save_zip") == "1",
             show_employer_cost=f.get("show_employer_cost") == "1",
             keep_wage_excess=f.get("keep_wage_excess") == "1",
+            pre_major_by_card=f.get("pre_major_by_card") == "1",
+            card_required=f.get("card_required") == "1",
+            digital_card=f.get("digital_card") == "1",
             auto_payments=f.get("auto_payments") == "1",
             obligations_horizon_months=form_int(f, "obligations_horizon_months", 1),
         )

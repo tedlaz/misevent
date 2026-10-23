@@ -22,6 +22,7 @@ _TABLES = {
     "kad": "kad",
     "koinotites": "koinotites",
     "residence_permit_types": "typoi_adeias_paramonis",
+    "work_time_types": "typoi_parousias",
 }
 
 # Κωδικοί υπηκοότητας της τρέχουσας ΕΕ-27, όπως αποθηκεύονται στον πίνακα
@@ -67,6 +68,14 @@ def residence_permit_types(direct: bool) -> tuple[dict, ...]:
     `direct` -> άμεση πρόσβαση στην αγορά εργασίας (inst), αλλιώς απαιτεί
     πρόσθετη έγκριση (ap). «ΕΓΓΡΙΣΗ» [sic] όπως είναι γραμμένο στη βάση."""
     return _rows("residence_permit_types", "ΑΜΕΣΗ" if direct else "ΕΓΓΡΙΣΗ")
+
+
+def absence_reasons() -> tuple[dict, ...]:
+    """Λόγοι ΑΠΟΥΣΙΑΣ ΜΕΣΑ ΣΤΟ ΩΡΑΡΙΟ για την ημερήσια δήλωση (WTODaily,
+    `f_type` με ώρες από-έως): «ΜΕ» μη εργασία + οι ΩΡΟΑΔΕΙΕΣ (ΩΑ…) της
+    λίστας WorkTimeType."""
+    return (tuple(r for r in _rows("work_time_types") if r["code"] == "ΜΕ")
+            + _rows("work_time_types", "ΑΔΕΙΑ-ΩΡΟΑΔΕΙΑ"))
 
 
 def education_levels() -> tuple[dict, ...]:

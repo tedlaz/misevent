@@ -22,7 +22,7 @@ def test_schedule_changes_go_through_ergani_screen(fresh_system):
 
     app = create_app()
     c = _bootstrap.ui_client(app)
-    assert c.post("/seed").status_code == 200
+    assert _bootstrap.seed(c).status_code == 200
 
     with app.test_request_context("/"):
         ref = today()
@@ -75,7 +75,7 @@ def test_work_schedule_leaves(fresh_system):
 
     app = create_app()
     c = _bootstrap.ui_client(app)
-    assert c.post("/seed").status_code == 200
+    assert _bootstrap.seed(c).status_code == 200
 
     with app.test_request_context("/"):
         year = today().year

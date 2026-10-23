@@ -331,3 +331,21 @@ def test_rebuild_preserves_coverage():
     assert before == after == "modified", (before, after)
     assert rebuilt.schedule_batches[1]["count"] == 1
     print("OK   rebuild: η κάλυψη & τα batches παραμένουν ακέραια")
+
+
+def test_unsubmitted_schedule_blocks_approval_visibly(monkeypatch):
+    """Αδήλωτο πρόγραμμα: η «Έγκριση παρουσιών» ΔΕΝ κρύβεται — εμφανίζεται
+    μπλοκαρισμένη με τον εργαζόμενο και τις ημέρες που λείπουν."""
+    from types import SimpleNamespace
+
+    from webapp import queries as q
+
+    svc, proj, eid = setup("fixed")
+    monkeypatch.setattr(q, "proj", proj)
+    monkeypatch.setattr(q, "svc", svc)
+    ob = SimpleNamespace(obligation_type="ATTENDANCE_APPROVAL", fulfilled=False,
+                         period_year=2026, period_month=3, obligation_id="x")
+    assert not q.is_locked(ob, {})
+    assert "Αδήλωτο πρόγραμμα" in q.blocked_reason(ob)
+    svc.submit_hire_wto(eid)
+    assert q.blocked_reason(ob) is None

@@ -142,9 +142,17 @@ def _pay_fmy(y, m):
 def _submit_retro_schedule(y, m):
     res = svc.submit_retro_schedule(y, m)
     if not res["count"]:
-        return f"Απολογιστική δήλωση {m}/{y}: καμία απόκλιση της κάρτας — τίποτα προς δήλωση"
-    return (f"Απολογιστική δήλωση {m}/{y}: καταγράφηκαν {res['count']} ημέρες "
-            f"({res['employees']} εργαζόμενοι) — υποβολή από το «Πρόγραμμα → ΕΡΓΑΝΗ»")
+        return f"Απολογιστικό {m}/{y}: τίποτα προς υποβολή (καμία εκκρεμής απόκλιση)"
+    return (f"Υποβλήθηκε το απολογιστικό {m}/{y} στο ΕΡΓΑΝΗ: {res['count']} ημέρες "
+            f"({res['employees']} εργαζόμενοι), batch {res['batch_no']}")
+
+
+def _check_card_period(y, m):
+    # Το αρχείο κάρτας (αν ανέβηκε στο modal) εισάγεται ΠΡΙΝ — views/obligations.run
+    res = svc.check_card_period(y, m)
+    return (f"Η κάρτα {m}/{y} ελέγχθηκε για όλους τους εργαζόμενους"
+            + (f" · {res['no_punch']} ημέρες χωρίς χτύπημα μετρούν με το πρόγραμμα"
+               if res["no_punch"] else ""))
 
 
 # όνομα εντολής (obligation_types.command) -> υλοποίηση
@@ -166,6 +174,7 @@ COMMANDS = {
     "pay_fmy": _pay_fmy,
     "apply_minimum_adjustments": _apply_minimum_adjustments,
     "submit_retro_schedule": _submit_retro_schedule,
+    "check_card_period": _check_card_period,
 }
 
 # Δίχτυ ασφαλείας: κάθε τύπος του μητρώου πρέπει να έχει υλοποιημένη εντολή

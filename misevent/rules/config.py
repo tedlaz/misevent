@@ -802,6 +802,42 @@ def labor_subsidy_for(d: date) -> LaborSubsidy:
     return _pick("labor_subsidy", d, f"Δεν υπάρχει επιδότηση εργατικής εισφοράς για {gr_date(d)}")
 
 
+# --- Μείωση 50% εισφοράς σύνταξης μητέρας (αρ. 141§2 ν. 3655/2008, ΑΠΔ κωδ. 103) ---
+# Το δωδεκάμηνο απασχόλησης μετά τον μήνα τοκετού η μητέρα πληρώνει το ΜΙΣΟ
+# ποσοστό σύνταξης εργαζομένου· η διαφορά είναι επιδότηση (No 49).
+@dataclass(frozen=True)
+class MotherSubsidy:
+    valid_from: date
+    pct: float = 0.03335  # ½ × 6,67% σύνταξης εργαζομένου, επί ασφαλιστέων
+    repealed: bool = False
+
+
+MOTHER_SUBSIDY_HISTORY = [
+    MotherSubsidy(valid_from=date(2020, 1, 1)),
+]
+
+
+def mother_subsidy_for(d: date) -> MotherSubsidy:
+    return _pick("mother_subsidy", d, f"Δεν υπάρχει μείωση εισφοράς μητέρας για {gr_date(d)}")
+
+
+# --- Μειωμένη εργοδοτική εισφορά νέων έως 25 (αρ. 86 ν. 4583/2018, ΑΠΔ κωδ. 107) ---
+@dataclass(frozen=True)
+class YouthSubsidy:
+    valid_from: date
+    pct: float = 0.0666  # εργοδοτική σύνταξης, επί ασφαλιστέων αποδοχών
+    repealed: bool = False
+
+
+YOUTH_SUBSIDY_HISTORY = [
+    YouthSubsidy(valid_from=date(2019, 1, 1)),
+]
+
+
+def youth_subsidy_for(d: date) -> YouthSubsidy:
+    return _pick("youth_subsidy", d, f"Δεν υπάρχει επιδότηση εισφοράς νέων για {gr_date(d)}")
+
+
 # --- Απαλλαγή εισφορών προσαυξήσεων (αρ. 41 ν. 5184/2025, Εγκ. e-ΕΦΚΑ 21/2025) ---
 # Πλήρης απασχόληση: οι ΠΡΟΣΑΥΞΗΣΕΙΣ νύχτας/υπερεργασίας/υπερωρίας/Κυριακών-
 # αργιών ΔΕΝ έχουν εισφορές (εργαζομένου ΚΑΙ εργοδότη) — η απλή αξία της ώρας
@@ -1026,11 +1062,21 @@ class WorkHourRules:
     # ΟΡΦΑΝΑ χτυπήματα κάρτας που το ΕΡΓΑΝΗ δέχεται να συμπληρωθούν από το
     # πρόγραμμα, ανά εργαζόμενο και μήνα (`svc.complete_punch_from_schedule`)
     orphan_month_cap: int = 3
+    # ΑΠΟΛΟΓΙΣΤΙΚΟ: ημέρα με ΟΡΦΑΝΟ χτύπημα δηλώνεται ΠΑΝΤΑ (συμπληρωμένη από
+    # το πρόγραμμα), ακόμη κι αν συμφωνεί με το δηλωμένο. 1 = ναι, 0 = μόνο
+    # όταν αποκλίνει (όπως κάθε ημέρα κάρτας).
+    retro_declare_orphans: int = 1
     # ΣΤΡΟΓΓΥΛΟΠΟΙΗΣΗ της ημερήσιας διάρκειας (λεπτά· κοντινότερο πολλαπλάσιο,
     # 30: 8,2ω -> 8) ΜΟΝΟ στις ΠΡΟΤΕΙΝΟΜΕΝΕΣ ώρες του φύλλου. 0/1 = καμία —
     # προεπιλογή, αφού ο νόμος δεν προβλέπει ανοχή (Εγκ. 37271/2024).
     # Παρουσίες και ΕΡΓΑΝΗ κρατούν ΠΑΝΤΑ τις ακριβείς ώρες.
     card_rounding_minutes: int = 0
+    # ΑΝΟΧΗ ΣΥΜΦΩΝΙΑΣ ΚΑΡΤΑΣ ↔ ΠΡΟΓΡΑΜΜΑΤΟΣ (λεπτά, ανά άκρο βάρδιας):
+    # ημέρα εντός ανοχής (μαζί με την ευέλικτη προσέλευση) ΠΛΗΡΩΝΕΤΑΙ ΜΕ ΤΟ
+    # ΠΡΟΓΡΑΜΜΑ και δεν δηλώνεται απολογιστικά· εκτός ανοχής με την κάρτα
+    # (`card_punches.day_matches`, `EmploymentState.pay_source`). Πολιτική
+    # ΕΤΑΙΡΕΙΑΣ — ο νόμος δεν προβλέπει ανοχή· 0 = καμία (προεπιλογή).
+    card_tolerance_minutes: int = 0
     # ΚΑΤΑΡΓΗΣΗ κανόνα από αυτή την ημερομηνία (βλ. events.py). Το `_pick`
     # σκάει αντί να υποχωρήσει σιωπηλά στην προηγούμενη γραμμή.
     repealed: bool = False
@@ -1074,6 +1120,7 @@ FIELD_KINDS: dict[str, dict] = {
     "int": {"ui": "int", "lo": 0, "hi": None, "err": "Η τιμή «{}» δεν μπορεί να είναι αρνητική"},
     "days": {"ui": "int", "lo": 1, "hi": 366, "err": "Οι ημέρες «{}» είναι εκτός ορίων (1–366)"},
     "hour": {"ui": "int", "lo": 0, "hi": 24, "err": "Η ώρα «{}» είναι εκτός ορίων (0–24)"},
+    "flag": {"ui": "int", "lo": 0, "hi": 1, "err": "Το «{}» δέχεται 1 (ναι) ή 0 (όχι)"},
 }
 
 
@@ -1196,6 +1243,24 @@ FAMILIES: dict[str, ParamFamily] = {f.key: f for f in [
         ),
     ),
     ParamFamily(
+        "mother_subsidy", "Μείωση εισφοράς μητέρας", MotherSubsidy,
+        "MotherSubsidyDefined", MOTHER_SUBSIDY_HISTORY,
+        note="αρ. 141§2 ν. 3655/2008: 12 μήνες απασχόλησης μετά τον μήνα "
+             "τοκετού, ½ σύνταξης εργαζομένου, ΑΠΔ κωδ. 103",
+        fields=(
+            _pf("pct", "Ποσοστό επιδότησης εργαζομένης (%)", "pct"),
+        ),
+    ),
+    ParamFamily(
+        "youth_subsidy", "Επιδότηση εισφοράς νέων έως 25", YouthSubsidy,
+        "YouthSubsidyDefined", YOUTH_SUBSIDY_HISTORY,
+        note="αρ. 86 ν. 4583/2018: έως την ημέρα των 25ων γενεθλίων, "
+             "εργοδοτική σύνταξης επί ασφαλιστέων, ΑΠΔ κωδ. 107",
+        fields=(
+            _pf("pct", "Ποσοστό επιδότησης εργοδότη (%)", "pct"),
+        ),
+    ),
+    ParamFamily(
         "premium_exemption", "Απαλλαγή εισφορών προσαυξήσεων", PremiumExemption,
         "PremiumExemptionDefined", PREMIUM_EXEMPTION_HISTORY,
         note="αρ. 41 ν. 5184/2025, Εγκ. e-ΕΦΚΑ 21/2025: πλήρης απασχόληση — "
@@ -1241,7 +1306,9 @@ FAMILIES: dict[str, ParamFamily] = {f.key: f for f in [
             _pf("overtime_day_cap", "Όριο υπερωρίας/ημέρα (ώρες)", "int"),
             _pf("overtime_year_cap", "Όριο υπερωρίας/έτος (ώρες)", "int"),
             _pf("orphan_month_cap", "Ορφανά χτυπήματα κάρτας/μήνα", "int"),
+            _pf("retro_declare_orphans", "Δήλωση ορφανών στο απολογιστικό (1/0)", "flag"),
             _pf("card_rounding_minutes", "Στρογγυλοποίηση κάρτας (λεπτά)", "int"),
+            _pf("card_tolerance_minutes", "Ανοχή κάρτας ↔ προγράμματος (λεπτά)", "int"),
         ),
         check=lambda v: (
             None

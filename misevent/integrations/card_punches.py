@@ -98,6 +98,22 @@ def pair_punches(punches, max_shift: int = MAX_SHIFT_MIN) -> list[dict]:
     return shifts
 
 
+def completion_minute(shift: dict, segs) -> int | None:
+    """Το ΤΑΙΡΙ ορφανού χτυπήματος από το ΠΡΟΓΡΑΜΜΑ (`segs` = τμήματα φυσικής
+    παρουσίας της ημέρας, `constraints.parse_day_schedule`): η ανοιχτή
+    είσοδος παίρνει τη ΛΗΞΗ του πλησιέστερου τμήματος, η ορφανή έξοδος την
+    ΑΡΧΗ του. None αν δεν υπάρχει πρόγραμμα ή το ταίρι πέφτει ανάποδα."""
+    if not segs:
+        return None
+    if shift["open"]:
+        at = shift["s"]
+        minute = min(segs, key=lambda s: abs(s["start"] - at))["end"]
+        return minute if minute > at else None
+    at = shift["e"]
+    minute = min(segs, key=lambda s: abs(s["end"] - at))["start"]
+    return minute if minute < at else None
+
+
 def rounded(shifts, step: int) -> list[dict]:
     """Οι βάρδιες της ΗΜΕΡΑΣ με ΣΤΡΟΓΓΥΛΕΜΕΝΗ ΣΥΝΟΛΙΚΗ ΔΙΑΡΚΕΙΑ — ΜΟΝΟ για
     τις ΠΡΟΤΕΙΝΟΜΕΝΕΣ ώρες του φύλλου· παρουσίες, ΕΡΓΑΝΗ και προβολή κρατούν
@@ -113,7 +129,7 @@ def rounded(shifts, step: int) -> list[dict]:
         return out
     closed = [s for s in out if s["s"] is not None and s["e"] is not None]
     total = sum(s["e"] - s["s"] for s in closed)
-    delta = (total + step // 2) // step * step - total
+    delta = round_total(total, step) - total
     for s in reversed(closed):  # αρνητική διαφορά μεγαλύτερη από βάρδια -> προηγούμενη
         new_e = max(s["e"] + delta, s["s"])
         delta -= new_e - s["e"]
@@ -169,3 +185,138 @@ def worked_minutes(shifts) -> int:
         s["e"] - s["s"] for s in shifts
         if s["s"] is not None and s["e"] is not None
     )
+
+
+# ------------------------------------- Συμφωνία προγράμματος ↔ κάρτας (ημέρα)
+def schedule_text(actual) -> str:
+    """Οι πραγματικές βάρδιες («ΩΩ:ΛΛ-ΩΩ:ΛΛ») ως ωράριο ημέρας. Αν δεν χωρούν
+    στη μορφή του προγράμματος (> 2 τμήματα ή σπαστό με κενό < 3ω, π.χ.
+    διάλειμμα), δίνεται το ενιαίο διάστημα πρώτη είσοδος–τελευταία έξοδος."""
+    from misevent.rules import constraints
+
+    if not actual:
+        return ""
+    text = "+".join(actual)
+    try:
+        constraints.parse_day_schedule(text)
+        return text
+    except ValueError:
+        return f"{actual[0].split('-')[0]}-{actual[-1].split('-')[1]}"
+
+
+def round_total(minutes: int, step: int) -> int:
+    """Σύνολο λεπτών στο κοντινότερο πολλαπλάσιο του `step` (μισό βήμα προς
+    τα πάνω· 30΄: 7,9ω -> 8, 8,2ω -> 8, 8,25ω -> 8,5). `step` <= 1 = καμία."""
+    return (minutes + step // 2) // step * step if step > 1 else minutes
+
+
+def day_matches(declared: str, actual: str, flex: int, tol: int = 0,
+                step: int = 0) -> bool:
+    """Συμφωνεί η κάρτα (`actual`, ωράριο ημέρας) με το δηλωμένο; ΜΙΑ πηγή
+    για τη μισθοδοσία (ποια ημέρα πληρώνεται με το πρόγραμμα) ΚΑΙ για την
+    απολογιστική πρόταση (ποια ημέρα δηλώνεται) — ARCH_REF §5.11.
+
+    - ΑΝΟΧΗ `tol` (`card_tolerance_minutes`, πολιτική ΕΤΑΙΡΕΙΑΣ — ο νόμος δεν
+      την προβλέπει): ΚΑΘΕ άκρο ±tol, ανεξάρτητα. 09:00-17:00 με 10΄ ->
+      08:50-17:10, 09:10-16:50 εντάξει. 0 = καμία.
+    - ΕΥΕΛΙΚΤΗ ΠΡΟΣΕΛΕΥΣΗ `flex` (Εγκ. 37271/2024 §Δ): μετρά ΜΕΤΑ την ανοχή.
+      Καθυστέρηση > tol -> ΟΛΟ το πρόγραμμα μετατίθεται κατά την καθυστέρηση
+      (έως flex) και τα υπόλοιπα άκρα κρίνονται ±tol από τα μετατεθειμένα:
+      09:00-17:00, flex 30, tol 10 -> 09:15-17:18 εντάξει (17:15 + 3΄),
+      09:15-17:00 όχι. Προσέλευση έως έναρξη + flex + tol.
+    - ΣΤΡΟΓΓΥΛΟΠΟΙΗΣΗ `step` (`card_rounding_minutes`, πολιτική ΕΤΑΙΡΕΙΑΣ):
+      με προσέλευση εντός του ευέλικτου παραθύρου συμφωνεί ΚΑΙ όταν η
+      συνολική διάρκεια, στρογγυλεμένη στο `step`, ισούται με την
+      προγραμματισμένη: 09:00-17:00, κάρτα 09:10-17:05 (7ω55΄) με 30΄ -> 8ω."""
+    from misevent.rules import constraints
+
+    try:
+        a = constraints.parse_day_schedule(declared)
+        b = constraints.parse_day_schedule(actual)
+    except ValueError:
+        return False
+    if len(a) != len(b):
+        return False
+    if not a:
+        return True
+    delay = b[0]["start"] - a[0]["start"]
+    if not -tol <= delay <= flex + tol:
+        return False
+    # εντός ανοχής = καμία μετάθεση· πέρα από αυτήν = ευέλικτη (έως flex)
+    shift = 0 if delay <= tol else min(delay, flex)
+    if step > 1:
+        def total(segs):
+            return sum(s["end"] - s["start"] for s in segs)
+        if round_total(total(b), step) == round_total(total(a), step):
+            return True
+    rest = [(x["end"], y["end"]) for x, y in zip(a, b)]
+    rest += [(x["start"], y["start"]) for x, y in zip(a[1:], b[1:])]
+    return all(abs(y - x - shift) <= tol for x, y in rest)
+
+
+def absence_gaps(declared: str, actual) -> list[tuple[int, int]]:
+    """ΑΠΟΥΣΙΑ μέσα στο ωράριο: τα διαστήματα της ΦΥΣΙΚΗΣ παρουσίας του
+    δηλωμένου (`declared`) που ΔΕΝ καλύπτει η κάρτα (`actual`, «ΩΩ:ΛΛ-ΩΩ:ΛΛ»)
+    — μόνο όταν η κάρτα έχει ΛΙΓΟΤΕΡΕΣ ώρες από το πρόγραμμα (αλλιώς είναι
+    μετάθεση ωραρίου, όχι απουσία). 09:00-17:00, κάρτα 09:00-15:00 ->
+    [(15:00, 17:00)]."""
+    from misevent.rules import constraints
+
+    try:
+        plan = [(s["start"], s["end"])
+                for s in constraints.parse_day_schedule(declared) if not s["telework"]]
+    except ValueError:
+        return []
+    work = []
+    for t in actual:
+        a, _, b = t.partition("-")
+        s, e = parse_time(a), parse_time(b)
+        work.append((s, e + 24 * 60 if e <= s else e))
+    if sum(e - s for s, e in work) >= sum(e - s for s, e in plan):
+        return []
+    gaps = []
+    for s, e in plan:
+        cur = s
+        for ws, we in sorted(work):
+            if we <= cur or ws >= e:
+                continue
+            if ws > cur:
+                gaps.append((cur, ws))
+            cur = max(cur, we)
+        if cur < e:
+            gaps.append((cur, e))
+    return gaps
+
+
+def split_telework(day_text: str) -> tuple[str, list[str]]:
+    """Ωράριο ημέρας -> (τμήματα ΦΥΣΙΚΗΣ παρουσίας ως ωράριο, τμήματα
+    ΤΗΛΕΕΡΓΑΣΙΑΣ). Η τηλεεργασία ΔΕΝ χτυπά κάρτα — ισχύει ό,τι λέει το
+    πρόγραμμα· με την κάρτα συγκρίνεται ΜΟΝΟ η φυσική παρουσία."""
+    from misevent.rules import constraints
+
+    try:
+        segs = constraints.parse_day_schedule(day_text)
+    except ValueError:
+        return day_text, []
+    return ("+".join(s["text"] for s in segs if not s["telework"]),
+            [s["text"] for s in segs if s["telework"]])
+
+
+def with_telework(actual_text: str, declared: str) -> str:
+    """Το ωράριο της απολογιστικής δήλωσης: η ΚΑΡΤΑ για τη φυσική παρουσία +
+    η ΤΗΛΕΕΡΓΑΣΙΑ του δηλωμένου αυτούσια. Αν ο συνδυασμός δεν χωρά στη μορφή
+    ωραρίου (> 2 τμήματα, κενό < 3ω), μένει μόνο η κάρτα."""
+    from misevent.rules import constraints
+
+    tele = split_telework(declared)[1]
+    if not tele:
+        return actual_text
+    parts = [actual_text] if actual_text else []
+    text = "+".join(parts + ["Τ" + t for t in tele])
+    try:
+        segs = constraints.parse_day_schedule(text)
+    except ValueError:
+        return actual_text
+    if [s["start"] for s in segs] != sorted(s["start"] for s in segs):
+        return actual_text
+    return text

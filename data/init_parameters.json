@@ -201,6 +201,30 @@
         }
       ]
     },
+    "mother_subsidy": {
+      "source": "events",
+      "entries": [
+        {
+          "valid_from": "2020-01-01",
+          "repealed": false,
+          "values": {
+            "pct": 0.03335
+          }
+        }
+      ]
+    },
+    "youth_subsidy": {
+      "source": "events",
+      "entries": [
+        {
+          "valid_from": "2019-01-01",
+          "repealed": false,
+          "values": {
+            "pct": 0.0666
+          }
+        }
+      ]
+    },
     "premium_exemption": {
       "source": "events",
       "entries": [
@@ -310,7 +334,9 @@
             "overtime_day_cap": 3,
             "overtime_year_cap": 150,
             "orphan_month_cap": 3,
-            "card_rounding_minutes": 0
+            "retro_declare_orphans": 1,
+            "card_rounding_minutes": 30,
+            "card_tolerance_minutes": 0
           }
         }
       ]

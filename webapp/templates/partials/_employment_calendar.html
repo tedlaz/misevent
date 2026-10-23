@@ -23,20 +23,53 @@
               hx-get="{{ url }}?m={{ now }}" hx-target="#ecal-{{ mid }}" hx-swap="outerHTML">Σήμερα</button>
     </span>
     <b>{{ label }}</b>
-    <span></span>
+    <span style="justify-self:end;display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end">
+      {% if has_card %}
+        <button type="button" class="ghost sm" title="Σύγκριση προγράμματος με τα χτυπήματα κάρτας του μήνα"
+                hx-get="{{ url_for('employments.calendar_compare', employment_id=mid, m=first.strftime('%Y-%m')) }}"
+                hx-target="#modal-host" hx-swap="innerHTML">⚖️ Σύγκριση με κάρτα</button>
+      {% endif %}
+      <a class="ghost sm" download title="Κάρτα Εργασίας (xlsx) με χτυπήματα ακριβώς όπως το πρόγραμμα"
+         href="{{ url_for('employments.calendar_karta', employment_id=mid, m=first.strftime('%Y-%m')) }}">⬇ Ιδανική κάρτα xlsx</a>
+    </span>
   </div>
+  {% if card %}
+    {# Έλεγχος αρτιότητας κάρτας — προαπαιτούμενο της έγκρισης παρουσιών #}
+    <div class="{{ 'warnbox' if card.issues and not card.checked else 'ecal-ok' }} ecal-check">
+      {% if card.checked %}
+        ✔ Ο έλεγχος κάρτας του μήνα ολοκληρώθηκε.
+      {% elif not card.issues %}
+        ✔ Η κάρτα του μήνα είναι πλήρης.
+      {% else %}
+        <b>Έλεγχος κάρτας:</b>
+        <ul>
+          {% for i in card.issues %}
+            <li>{% if i.blocking %}⛔{% else %}•{% endif %}
+              {% if i.day %}{{ i.day|date_gr }} — {% endif %}{{ i.text }}</li>
+          {% endfor %}
+        </ul>
+        <button type="button" class="sm" {{ 'disabled' if card.blocking }}
+                hx-post="{{ url_for('employments.calendar_check', employment_id=mid, m=first.strftime('%Y-%m')) }}"
+                hx-target="#ecal-{{ mid }}" hx-swap="outerHTML">✔ Ολοκλήρωση ελέγχου κάρτας</button>
+        {% if card.blocking %}<span class="muted">πρώτα τα ⛔ (κλικ στην ημέρα)</span>{% endif %}
+      {% endif %}
+    </div>
+  {% endif %}
   <div class="ecal-grid">
     {% for n in ['Δευ', 'Τρι', 'Τετ', 'Πεμ', 'Παρ', 'Σαβ', 'Κυρ'] %}
       <div class="ecal-h">{{ n }}</div>
     {% endfor %}
-    {% for week in weeks %}{% for d, items in week %}
-      <div class="ecal-d{{ ' out' if d.month != first.month }}{{ ' today' if d == today }}{{ ' off' if not e.active_on(d) }}"
-           role="button" tabindex="0" title="Ιστορικό ημέρας"
-           aria-label="Ιστορικό {{ d|date_gr }}"
+    {% for week in weeks %}{% set wi = loop.index0 %}{% for d, items in week %}
+      {% set hol = hols.get(d) %}
+      {% set iss = card.days.get(d) if card and not card.checked %}
+      <div class="ecal-d{{ ' out' if d.month != first.month }}{{ ' hol' if hol }}{{ (' issue' ~ (' bad' if iss.blocking)) if iss }}{{ ' today' if d == today }}{{ ' off' if not e.active_on(d) }}"
+           style="--i:{{ wi * 7 + loop.index0 }}"
+           role="button" tabindex="0" title="{{ hol ~ ' · ' if hol }}Ιστορικό ημέρας"
+           aria-label="Ιστορικό {{ d|date_gr }}{{ ' (' ~ hol ~ ')' if hol }}"
            hx-get="{{ url_for('employments.calendar_day', employment_id=mid, d=d.isoformat()) }}"
            hx-trigger="click, keyup[key=='Enter']"
            hx-target="#modal-host" hx-swap="innerHTML">
-        <span class="ecal-n">{{ d.day }}</span>
+        <span class="ecal-n">{% if hol %}<i>{{ hol }}</i>{% endif %}<b>{{ d.day }}</b></span>
         {% for k, hours, lbl in items %}
           <div class="ecal-ev {{ k }}">{% if hours %}<b>{{ hours }}</b>{% endif %}<span>{{ lbl }}</span></div>
         {% endfor %}

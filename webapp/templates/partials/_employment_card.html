@@ -246,6 +246,21 @@
                   title="αρ. 14 ν. 2837/2000 — ΑΠΔ κωδ. 102">{{ labor_subsidy.label }}</span>
             {% if labor_subsidy.amount %}<small>{{ labor_subsidy.amount|money }} €/πλήρη μήνα</small>
             {% else %}<small>{{ labor_subsidy.why }}</small>{% endif %}</div>
+          <div class="f"><span>Επιδότηση εισφοράς νέων ≤25</span>
+            <span class="ins-badge ins-{{ subsidies.youth.tone }}"
+                  title="αρ. 86 ν. 4583/2018 — ΑΠΔ κωδ. 107">{{ subsidies.youth.label }}</span>
+            <small>{{ subsidies.youth.why }}</small></div>
+          {% if e.sex|string == '1' %}
+          <div class="f"><span>Μείωση εισφοράς μητέρας</span>
+            <span class="ins-badge ins-{{ subsidies.mother.tone }}"
+                  title="αρ. 141§2 ν. 3655/2008 — ΑΠΔ κωδ. 103">{{ subsidies.mother.label }}</span>
+            <small>{{ subsidies.mother.why }}</small>
+            {% if e.hire_submitted %}
+            <button class="ghost sm"
+                    hx-get="{{ url_for('employments.modal', employment_id=mid, name='childbirth') }}"
+                    hx-target="#modal-host" hx-swap="innerHTML">🍼 Τοκετός</button>
+            {% endif %}</div>
+          {% endif %}
           <div class="f wide"><span>Ασφαλιστικές καλύψεις (ΚΑΔ · Ειδ. · ΚΠΚ)</span>
             <div class="covs" style="margin-top:3px">
               {% for c in coverages %}

@@ -400,6 +400,57 @@ class CardPunchCancelled(DomainEvent):
 
 
 @dataclass(frozen=True)
+class CardPeriodChecked(DomainEvent):
+    """Η ΚΑΡΤΑ ΤΗΣ ΠΕΡΙΟΔΟΥ εισήχθη και πέρασε τον έλεγχο αρτιότητας για
+    ΟΛΟΥΣ τους εργαζόμενους (κλείνει την υποχρέωση CARD_IMPORT —
+    προαπαιτούμενο της έγκρισης παρουσιών με «Διάφορα → digital_card»)."""
+
+    year: int
+    month: int
+
+
+@dataclass(frozen=True)
+class CardMonthChecked(DomainEvent):
+    """Ο ΕΛΕΓΧΟΣ ΑΡΤΙΟΤΗΤΑΣ ΚΑΡΤΑΣ του μήνα ολοκληρώθηκε (ARCH_REF §5.11):
+    ο χρήστης τακτοποίησε στο ΗΜΕΡΟΛΟΓΙΟ ό,τι έλειπε και αποδέχεται τις
+    ημέρες χωρίς χτύπημα (μετρούν με το πρόγραμμα). Με «Διάφορα →
+    card_required» είναι προαπαιτούμενο της έγκρισης παρουσιών. Κάθε νέα
+    διέλευση/ακύρωση στον μήνα το ΑΝΑΙΡΕΙ (projection): ξαναελέγχεται."""
+
+    employee_id: str
+    year: int
+    month: int
+
+
+@dataclass(frozen=True)
+class MonthPayBasisChosen(DomainEvent):
+    """ΤΡΟΠΟΣ ΥΠΟΛΟΓΙΣΜΟΥ ενός μήνα του εργαζομένου, μετά τη σύγκριση
+    προγράμματος ↔ κάρτας στο ΗΜΕΡΟΛΟΓΙΟ (ARCH_REF §5.11): οι ημέρες
+    απόκλισης πληρώνονται με το πρόγραμμα ή με την κάρτα (`auto` = ο κανόνας
+    του συστήματος, `_major_by_card`). `retro`: μπαίνει ο μήνας στην
+    απολογιστική πρόταση (§5.7β). Latest-wins ανά (απασχόληση, μήνας)."""
+
+    employee_id: str
+    year: int
+    month: int
+    basis: str  # auto | schedule | card
+    retro: bool = True
+
+
+@dataclass(frozen=True)
+class RetroAbsenceReasonSet(DomainEvent):
+    """ΛΟΓΟΣ ΑΠΟΥΣΙΑΣ μιας ημέρας για την ΑΠΟΛΟΓΙΣΤΙΚΗ δήλωση: η κάρτα έχει
+    λιγότερες ώρες από το πρόγραμμα, άρα ο εργαζόμενος απουσίασε — τα κενά
+    (`cp.absence_gaps`) δηλώνονται με αυτόν τον κωδικό WorkTimeType («ΜΕ» ή
+    ωροάδεια ΩΑ…, `ergani_parameters.absence_reasons`). Latest-wins ανά
+    (απασχόληση, ημέρα)· `code` κενό = αφαίρεση."""
+
+    employee_id: str
+    day: date
+    code: str = ""
+
+
+@dataclass(frozen=True)
 class AttendanceSheetApproved(DomainEvent):
     """Μηνιαίο συγκεντρωτικό παρουσιών/απουσιών — ΕΓΚΡΙΝΕΤΑΙ πριν τη μισθοδοσία.
 
@@ -477,6 +528,16 @@ class ChildcareReductionSet(DomainEvent):
     option: str  # κλειδί του `config.CHILDCARE_REDUCTION_OPTIONS` ή ""
 
 
+@dataclass(frozen=True)
+class ChildBirthRecorded(DomainEvent):
+    """Τοκετός εργαζόμενης → μείωση 50% εισφοράς σύνταξης (ΑΠΔ κωδ. 103)
+    για 12 μήνες απασχόλησης μετά τον μήνα τοκετού. Νέα δήλωση ΑΝΤΙΚΑΘΙΣΤΑ
+    την προηγούμενη· None = κατάργηση (καταχώρηση εκ παραδρομής)."""
+
+    employee_id: str
+    birth_date: date | None
+
+
 # ---------------------------------------------------------------- Μισθοδοσία
 @dataclass(frozen=True)
 class MonthlyPayrollCalculated(DomainEvent):
@@ -530,6 +591,11 @@ class GiftCalculated(DomainEvent):
     # Επιδότηση εργατικής εισφοράς (ΑΠΔ κωδ. 102): το `efka_employee` είναι
     # ήδη ΜΕΙΩΜΕΝΟ κατά αυτήν (= ό,τι κρατήθηκε)· η ΑΠΔ την ξαναπροσθέτει.
     subsidy_employee: float = 0.0
+    # Κωδ. ΑΠΔ της `subsidy_employee`: 102 ή 103 (μητέρα)· κενό = 102
+    subsidy_code: str = ""
+    # Επιδότηση εργοδοτικής εισφοράς νέων ≤25 (ΑΠΔ 107): το `efka_employer`
+    # είναι ήδη ΜΕΙΩΜΕΝΟ κατά αυτήν (= ό,τι καταβάλλεται).
+    subsidy_employer: float = 0.0
 
 
 @dataclass(frozen=True)
@@ -546,8 +612,10 @@ class LeaveAllowanceCalculated(DomainEvent):
     exit_settlement: bool = False
     # Εισφορές ΕΡΓΟΔΟΤΗ — βλ. GiftCalculated.efka_employer
     efka_employer: float = 0.0
-    # Επιδότηση εργατικής εισφοράς — βλ. GiftCalculated.subsidy_employee
+    # Επιδοτήσεις — βλ. GiftCalculated.subsidy_employee
     subsidy_employee: float = 0.0
+    subsidy_code: str = ""
+    subsidy_employer: float = 0.0
 
 
 # ------------------------------------------------------------- Εταιρεία
@@ -963,6 +1031,24 @@ class LaborSubsidyDefined(DomainEvent):
 
 
 @dataclass(frozen=True)
+class MotherSubsidyDefined(DomainEvent):
+    """Μείωση εισφοράς μητέρας (αρ. 141§2 ν. 3655/2008) — ποσοστό."""
+
+    valid_from: date
+    pct: float = 0.03335
+    repealed: bool = False
+
+
+@dataclass(frozen=True)
+class YouthSubsidyDefined(DomainEvent):
+    """Επιδότηση εργοδοτικής εισφοράς νέων έως 25 (αρ. 86 ν. 4583/2018)."""
+
+    valid_from: date
+    pct: float = 0.0666
+    repealed: bool = False
+
+
+@dataclass(frozen=True)
 class PremiumExemptionDefined(DomainEvent):
     """Απαλλαγή εισφορών προσαυξήσεων (αρ. 41 ν. 5184/2025) — μερίδιο."""
 
@@ -1008,7 +1094,9 @@ class WorkHourRulesDefined(DomainEvent):
     overtime_day_cap: int = 3
     overtime_year_cap: int = 150
     orphan_month_cap: int = 3
+    retro_declare_orphans: int = 1
     card_rounding_minutes: int = 0
+    card_tolerance_minutes: int = 0
     # ΚΑΤΑΡΓΗΣΗ: εγγραφή που σημαίνει «από αυτή την ημερομηνία ΔΕΝ υπάρχει
     # κανόνας». Δεν είναι διαγραφή (κανόνας #2) — είναι κανονική εγγραφή με
     # valid_from. Το config._pick σκάει αντί να υποχωρήσει σιωπηλά στην
@@ -1155,6 +1243,7 @@ EVENT_TYPES = {
         LeaveRescheduled,
         SicknessBenefitRecorded,
         ChildcareReductionSet,
+        ChildBirthRecorded,
         ErganiSubmissionRecorded,
         CompanyRegistered,
         CompanyBranchDefined,
@@ -1174,6 +1263,10 @@ EVENT_TYPES = {
         AttendanceRecorded,
         CardPunchRecorded,
         CardPunchCancelled,
+        CardMonthChecked,
+        CardPeriodChecked,
+        MonthPayBasisChosen,
+        RetroAbsenceReasonSet,
         AttendanceSheetApproved,
         LeaveRecorded,
         MonthlyPayrollCalculated,
@@ -1190,6 +1283,8 @@ EVENT_TYPES = {
         SickLeaveRulesDefined,
         AllowanceRulesDefined,
         LaborSubsidyDefined,
+        MotherSubsidyDefined,
+        YouthSubsidyDefined,
         PremiumExemptionDefined,
         SeveranceRulesDefined,
         WorkHourRulesDefined,
@@ -1225,6 +1320,8 @@ SHARED_EVENT_TYPES = frozenset(
         "SickLeaveRulesDefined",
         "AllowanceRulesDefined",
         "LaborSubsidyDefined",
+        "MotherSubsidyDefined",
+        "YouthSubsidyDefined",
         "PremiumExemptionDefined",
         "SeveranceRulesDefined",
         "WorkHourRulesDefined",

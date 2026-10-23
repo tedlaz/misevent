@@ -16,6 +16,7 @@ import misevent.domain.work_hours as work_hours
 import misevent.rules.config as config
 import misevent.rules.obligation_types as ot
 from misevent.domain.events import (
+    ChildBirthRecorded,
     MonthlyPayrollCalculated,
     PayrollPeriodReopened,
     WageAdjustmentApplied,
@@ -456,7 +457,8 @@ class PayrollMixin:
         out[0] = pe.r2(out[0] + (total - sum(out)))
         return out
 
-    def contribution_lines(self, prof, on, total_employee, total_employer, subsidy=0.0):
+    def contribution_lines(self, prof, on, total_employee, total_employer, subsidy=0.0,
+                           subsidy_employer=0.0, subsidy_code=""):
         """Οι ΥΠΟΛΟΓΙΣΜΕΝΕΣ εισφορές, σπασμένες ΑΝΑ ΚΑΛΥΨΗ (ταμείο/ΚΠΚ).
 
         Ο επιμερισμός γίνεται με τα ποσοστά της κάθε κάλυψης, αλλά τα ποσά
@@ -465,11 +467,13 @@ class PayrollMixin:
 
         `subsidy` (επιδότηση εργατικής εισφοράς): αφορά ΜΟΝΟ την κύρια κάλυψη
         (πρώτη γραμμή). Επιμερίζεται η ΠΛΗΡΗΣ εισφορά και η επιδότηση
-        αφαιρείται από την κύρια — αλλιώς θα «μίκραινε» και η επικουρική."""
+        αφαιρείται από την κύρια — αλλιώς θα «μίκραινε» και η επικουρική.
+        Ίδια λογική για την εργοδοτική `subsidy_employer` (νέοι ≤25, 107)."""
         rows = self.contribution_breakdown(prof, on)
         emp_parts = self.split_amount(
             pe.r2(total_employee + subsidy), [r["employee"] for r in rows])
-        er_parts = self.split_amount(total_employer, [r["employer"] for r in rows])
+        er_parts = self.split_amount(
+            pe.r2(total_employer + subsidy_employer), [r["employer"] for r in rows])
         out = [
             {
                 "fund": r["fund"], "kpk": r["kpk"],
@@ -481,6 +485,10 @@ class PayrollMixin:
         if subsidy and out:
             out[0]["employee"] = pe.r2(out[0]["employee"] - subsidy)
             out[0]["subsidy"] = subsidy
+            out[0]["subsidy_code"] = subsidy_code or "102"
+        if subsidy_employer and out:
+            out[0]["employer"] = pe.r2(out[0]["employer"] - subsidy_employer)
+            out[0]["subsidy_employer"] = subsidy_employer
         return out
 
     @staticmethod
@@ -520,6 +528,73 @@ class PayrollMixin:
             emp.extra_allowances_pct,
         )
         return pe.labor_subsidy_full(wage, floor, weekly_hours, on)
+
+    def subsidy_pcts(self, emp, on, month=False) -> dict:
+        """Ποσοστά επιδοτήσεων επί ασφαλιστέων αποδοχών την `on` — ΜΙΑ πηγή
+        για μισθοδοσία, Δώρα και Επίδομα (kwargs του `pe.calc_*`):
+        `mother_pct` (ΑΠΔ 103) και `youth_pct` (ΑΠΔ 107). Κατάργηση ή
+        έλλειψη κανόνα = καμία επιδότηση.
+
+        107: ΜΟΝΗ προϋπόθεση η ηλικία· λήγει ΤΗΝ ΗΜΕΡΑ των 25ων γενεθλίων.
+        `month=True` (μισθοδοσία του μήνα της `on`): στον μήνα των γενεθλίων
+        αναλογία ημερολογιακών ημερών ΠΡΙΝ από αυτά."""
+        if emp.pay_type != "monthly":
+            return {}  # ponytail: ημερομίσθιοι εκτός — ίδιος λόγος με το 102
+        out = {}
+        if (share := self.youth_share(emp, on, month)) > 0:
+            try:
+                out["youth_pct"] = config.youth_subsidy_for(on).pct * share
+            except ValueError:
+                pass
+        if self.mother_subsidy_on(emp, on):
+            try:
+                out["mother_pct"] = config.mother_subsidy_for(on).pct
+            except ValueError:
+                pass
+        return out
+
+    @staticmethod
+    def youth_share(emp, on, month=False) -> float:
+        """Μερίδιο επιδότησης νέων (107): 1 πριν τα 25α γενέθλια, 0 από
+        αυτά· με `month` ο μήνας των γενεθλίων παίρνει (ημέρες πριν) ÷ (ημέρες
+        μήνα). Γεννημένος 29/2 → γενέθλια 1/3 σε μη δίσεκτο."""
+        b = emp.birth_date
+        if b is None:
+            return 0.0
+        try:
+            end = b.replace(year=b.year + 25)
+        except ValueError:
+            end = date(b.year + 25, 3, 1)
+        if on < end:
+            return 1.0
+        start = on.replace(day=1)
+        if not month or end <= start:
+            return 0.0
+        return (end - start).days / monthrange(on.year, on.month)[1]
+
+    def mother_subsidy_on(self, emp, on) -> bool:
+        """Μητέρα στο ΔΩΔΕΚΑΜΗΝΟ ΑΠΑΣΧΟΛΗΣΗΣ μετά τον μήνα τοκετού: μετρούν
+        οι μήνες με μισθοδοσία (η λοχεία/άδεια χωρίς αποδοχές δεν τρώει
+        μήνες), ΑΥΣΤΗΡΑ μετά τον τοκετό και πριν τον μήνα της `on`."""
+        b = emp.child_birth_date
+        if b is None or (on.year, on.month) <= (b.year, b.month):
+            return False
+        used = {
+            (p.period_year, p.period_month) for p in self.proj.payrolls
+            if p.employee_id == emp.employee_id
+            and (b.year, b.month) < (p.period_year, p.period_month) < (on.year, on.month)
+        }
+        return len(used) < 12
+
+    def record_child_birth(self, employee_id, birth_date):
+        """Τοκετός εργαζόμενης → μείωση εισφοράς μητέρας (ΑΠΔ 103). Νέα
+        δήλωση αντικαθιστά την προηγούμενη· None = κατάργηση."""
+        emp = self.proj.employments.get(employee_id)
+        if emp is None:
+            raise ValueError(f"Άγνωστος εργαζόμενος {employee_id}")
+        if birth_date is not None and emp.sex != "1":
+            raise ValueError("Η μείωση εισφοράς μητέρας αφορά μόνο εργαζόμενες")
+        self.store.append(employee_id, ChildBirthRecorded(employee_id, birth_date))
 
     def labor_subsidy(self, emp, year: int, month: int, ins_days: int, line: dict) -> float:
         """Επιδότηση της ΜΙΣΘΟΔΟΣΙΑΣ: πλήρης × (ημέρες ασφάλισης − ½ × ημέρες
@@ -596,6 +671,7 @@ class PayrollMixin:
                 birth_date=emp.birth_date,
                 subsidy=self.labor_subsidy(emp, year, month, ins_days, line),
                 exempt=exempt,
+                **self.subsidy_pcts(emp, period_end, month=True),
             )
 
         # ΠΛΗΡΗΣ ΑΝΑΛΥΣΗ του υπολογισμού — η απόδειξη αποδοχών
@@ -619,6 +695,8 @@ class PayrollMixin:
             "efka_employee": res.efka_employee,
             "efka_employer": res.efka_employer,
             "subsidy_employee": res.subsidy_employee,
+            "subsidy_code": res.subsidy_code,
+            "subsidy_employer": res.subsidy_employer,
             "taxable": res.taxable,
             "fmy": res.fmy,
             "net": res.net,
@@ -632,6 +710,8 @@ class PayrollMixin:
                 emp.insurance_profile, period_end,
                 res.efka_employee, res.efka_employer,
                 subsidy=res.subsidy_employee,
+                subsidy_employer=res.subsidy_employer,
+                subsidy_code=res.subsidy_code,
             ),
         }
         return {

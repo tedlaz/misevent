@@ -347,7 +347,7 @@ def test_import_corrects_blind_punches_and_keeps_the_fact():
         ("100011110", "Λ", "Τ", "2026-08-05", "09:02", ""),       # χωρίς έξοδο
         ("100011110", "Λ", "Τ", "2026-08-06", "", "17:04"),       # χωρίς είσοδο
         ("100011110", "Λ", "Τ", "2026-08-07", "09:00", "17:00"),
-    ]))
+    ]), 2026, 8)
     assert [b["fixed"] for b in res["blind"]] == [True, True]
     assert emp.attendance_shifts[date(2026, 8, 5)] == ["09:02-17:00"]  # ακριβείς ώρες
     assert emp.attendance_shifts[date(2026, 8, 6)] == ["09:00-17:04"]

@@ -446,12 +446,27 @@ def build_wto(
     ])
 
 
-def build_wto_variable(company, emp, days: dict, week_start: date) -> dict:
+def build_wto_variable(company, emp, days: dict, week_start: date,
+                       absences: dict | None = None) -> dict:
     """WTODaily — Μεταβλητό (ημερήσιο): `days` = {"2026-07-14": "09:00-17:00", ...}
-    (κενό ωράριο = ρεπό). Περίοδος = από την πρώτη έως την τελευταία ημέρα."""
+    (κενό ωράριο = ρεπό). Περίοδος = από την πρώτη έως την τελευταία ημέρα.
+    `absences` = {"2026-07-14": [(κωδικός, από, έως)]} — ΑΠΟΥΣΙΑ μέσα στο
+    ωράριο (απολογιστικό): επιπλέον αναλυτικές εγγραφές με τον λόγο ως
+    `f_type` (ΜΕ / ωροάδεια ΩΑ…), με χρονική σειρά μαζί με τις ΕΡΓ."""
+    absences = absences or {}
+
+    def analytics(iso):
+        rows = _wto_analytics(days[iso])["ErgazomenosWTOAnalytics"]
+        extra = [{"f_type": code, "f_from": _hm(s), "f_to": _hm(e)}
+                 for code, s, e in absences.get(iso, ())]
+        if extra:
+            rows = sorted([r for r in rows if r["f_type"] != "ΑΝ"] + extra,
+                          key=lambda r: r["f_from"])
+        return {"ErgazomenosWTOAnalytics": rows}
+
     dates = sorted(date.fromisoformat(d) for d in days)
     return _wto(emp, dates[0] if dates else week_start, dates[-1] if dates else week_start, [
-        {"f_date": _d_gr(d), "ErgazomenosAnalytics": _wto_analytics(days[d.isoformat()])}
+        {"f_date": _d_gr(d), "ErgazomenosAnalytics": analytics(d.isoformat())}
         for d in dates
     ])
 

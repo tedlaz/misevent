@@ -21,10 +21,13 @@
           hx-post="{{ url_for('attendance.import_karta') }}"
           hx-target="#attendance-panel" hx-swap="outerHTML"
           hx-encoding="multipart/form-data">
-      <label class="ref">Κάρτα ΕΡΓΑΝΗ (xlsx)
+      <input type="hidden" name="y" value="{{ y }}">
+      <input type="hidden" name="m" value="{{ m }}">
+      <label class="ref">Κάρτα ΕΡΓΑΝΗ {{ m }}/{{ y }} (xlsx)
         <input type="file" name="karta" accept=".xlsx" required></label>
       <button class="ghost" type="submit">📇 Εισαγωγή παρουσιών</button>
       <span class="muted" style="font-size:12.5px">
+        Καταγράφονται ΜΟΝΟ εγγραφές του {{ m }}/{{ y }} — όσες αφορούν άλλον μήνα παραλείπονται.
         Αντιστοίχιση με ΑΦΜ· οι βάρδιες κάθε ημέρας αθροίζονται και
         κατατάσσονται (νύχτα/αργία/υπερωρίες).</span>
     </form>
@@ -54,6 +57,20 @@
         </div>
       {% endif %}
 
+      {% if card_pending %}
+        <div class="warnbox" style="margin-bottom:14px">
+          ⚠️ Εκκρεμεί ο <b>έλεγχος κάρτας</b> — τακτοποιήστε τις ημέρες στο
+          «ΗΜΕΡΟΛΟΓΙΟ» του εργαζομένου και πατήστε «Ολοκλήρωση ελέγχου κάρτας»:
+          <ul style="margin:6px 0 0 18px">
+            {% for p in card_pending %}
+              <li><a class="lnk"
+                href="{{ url_for('employments.detail', employment_id=p.eid) }}">
+                {{ p.name }}</a></li>
+            {% endfor %}
+          </ul>
+        </div>
+      {% endif %}
+
       <form id="sheet-form"
             hx-post="{{ url_for('attendance.approve', y=y, m=m) }}"
             hx-target="#attendance-panel" hx-swap="outerHTML">
@@ -75,7 +92,7 @@
 
         <div class="btnrow" style="margin-top:14px">
           <button class="run" type="submit"
-                  {{ 'disabled' if ergani_pending or period_closed }}>
+                  {{ 'disabled' if ergani_pending or card_pending or period_closed }}>
             {{ 'Επανέγκριση' if done else 'Έγκριση' }} παρουσιών {{ m }}/{{ y }}
           </button>
           {% if done %}<span class="tag ok">Εγκρίθηκε</span>{% endif %}

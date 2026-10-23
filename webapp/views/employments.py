@@ -12,6 +12,7 @@
 
 import base64
 import json
+import re
 from calendar import monthrange
 from copy import copy
 from datetime import date, datetime, timedelta
@@ -32,6 +33,7 @@ from misevent.integrations import ergani as ergani_mod
 from misevent.integrations import ergani_parameters as ergani_params
 from misevent.integrations import karta_import
 from misevent.rules import config, constraints
+from misevent.rules.calendar_gr import holiday_names
 
 from .. import amka_pdf, labels
 from .. import queries as q
@@ -474,6 +476,7 @@ EMP_MODALS = {
     "attendance",
     "leave",
     "childcare",
+    "childbirth",
 }
 
 
@@ -702,6 +705,21 @@ def _labor_subsidy_badge(e, on) -> dict:
     return {"label": "ΟΧΙ", "tone": "no", "amount": 0.0, "why": why}
 
 
+def _subsidy_badges(e, on) -> dict:
+    """Badges «Νέοι ≤25» (107) και «Μητέρα» (103): ΙΔΙΑ πηγή με τη
+    μισθοδοσία (`svc.subsidy_pcts`)."""
+    pcts = svc.subsidy_pcts(e, on)
+    yes, no = {"label": "ΝΑΙ", "tone": "team"}, {"label": "ΟΧΙ", "tone": "no"}
+    b = e.birth_date
+    youth = dict(yes if "youth_pct" in pcts else no,
+                 why=f"έως τα 25α γενέθλια ({b.day:02d}/{b.month:02d}/{b.year + 25})"
+                 if b else "")
+    mother = dict(yes if "mother_pct" in pcts else no,
+                  why=f"τοκετός {e.child_birth_date:%d/%m/%Y}"
+                  if e.child_birth_date else "")
+    return {"youth": youth, "mother": mother}
+
+
 def _service_time(e) -> dict:
     """Χρόνος εργασίας σε δεκαδικά έτη (τα αποδίδει το φίλτρο `service_gr`).
 
@@ -793,6 +811,7 @@ def _card(employment_id):
             extra_pct=e.extra_allowances_pct,
         ),
         "labor_subsidy": _labor_subsidy_badge(e, today()),
+        "subsidies": _subsidy_badges(e, today()),
         # Χρόνος εργασίας: δηλωθείσα προϋπηρεσία + χρόνος στον ίδιο εργοδότη
         "service": _service_time(e),
         "today": today(),  # προεπιλογή στα πεδία ημερομηνίας των modals
@@ -852,12 +871,11 @@ def _hire_form_values(e):
             key=lambda item: (item[1][0], item[0]),
         )[1]
         values["schedule_end_date"] = latest[2].isoformat() if latest[2] else ""
-    if e.schedule_mode == "variable" and e.daily_schedule and e.hire_date:
-        first_monday = e.hire_date - timedelta(days=e.hire_date.weekday())
+    if e.schedule_mode == "variable" and e.daily_schedule and e.payroll_start:
+        start = e.payroll_start
+        first_monday = start - timedelta(days=start.weekday())
         full_start = (
-            e.hire_date
-            if e.hire_date.weekday() == 0
-            else first_monday + timedelta(days=7)
+            start if start.weekday() == 0 else first_monday + timedelta(days=7)
         )
         last_day = max(e.daily_schedule)
         values["schedule_weeks"] = max(1, ((last_day - full_start).days + 1 + 6) // 7)
@@ -1047,19 +1065,111 @@ def _calendar_day(e, d: date) -> list:
         return [("leave", "", LEAVE_LABELS.get(leave.leave_type.value,
                                                leave.leave_type.value))]
     hours = e.day_schedule(d)
-    out = [("plan", hours.replace("-", " - "),
+    out = [("plan", re.sub(r"\s*-\s*", "-", hours),
             "ΕΡΓΑΣΙΑ" if hours else "ΑΝΑΠΑΥΣΗ/ΡΕΠΟ")]
+    # ταίρι από το ΠΡΟΓΡΑΜΜΑ (όχι πραγματικό χτύπημα): δείχνεται κενό
+    from_schedule = {p["id"] for x in (d - timedelta(days=1), d, d + timedelta(days=1))
+                     for p in e.punches_on(x) if p.get("source") == "schedule"}
     worked = 0
     for s in e.card_shifts(d):
         a = cp.hhmm(s["s"]) if s["s"] is not None else "?"
         b = cp.hhmm(s["e"]) if s["e"] is not None else "?"
-        out.append(("punch", f"{a} - {b}", "ΚΑΡΤΑ ΕΡΓΑΣΙΑΣ"))
+        if e.orphan_shift(d, s):
+            # ΜΟΝΟ ό,τι χτυπήθηκε: 09:00-__:__ / __:__-17:00
+            if s["s"] is None or s["in_id"] in from_schedule:
+                a = "__:__"
+            if s["e"] is None or s["out_id"] in from_schedule:
+                b = "__:__"
+            out.append(("punch orphan", f"{a}-{b}", "ΟΡΦΑΝΟ ΧΤΥΠΗΜΑ"))
+        else:
+            out.append(("punch", f"{a}-{b}", "ΚΑΡΤΑ ΕΡΓΑΣΙΑΣ"))
         if s["s"] is not None and s["e"] is not None:
             worked += s["e"] - s["s"]
     if worked > _OVERTIME_AFTER:
         extra = worked - _OVERTIME_AFTER
         out.append(("overtime", f"+{extra // 60}:{extra % 60:02d}", "ΥΠΕΡΩΡΙΑ"))
+    # ΑΠΟΥΣΙΑ (απολογιστικό): λιγότερες ώρες κάρτας από το πρόγραμμα -> λόγος
+    if proj.schedule_system_on(d) == "retro":
+        code = e.absence_reasons.get(d, "")
+        for s, x in svc.retro_absence_gaps(e, d):
+            out.append(("absence" if code else "absence missing",
+                        f"{cp.hhmm(s)}-{cp.hhmm(x)}",
+                        _absence_label(code) if code else "ΑΠΟΥΣΙΑ — ΛΕΙΠΕΙ Ο ΛΟΓΟΣ"))
     return out
+
+
+def _absence_label(code: str) -> str:
+    """Κωδικός WorkTimeType -> «ΜΕ · ΜΗ ΕΡΓΑΣΙΑ» (λόγος απουσίας)."""
+    desc = next((r["description"] for r in ergani_params.absence_reasons()
+                 if r["code"] == code), "")
+    return f"{code} · {desc}" if desc else code
+
+
+@bp.get("/<employment_id>/calendar/compare")
+def calendar_compare(employment_id):
+    """Modal ΣΥΓΚΡΙΣΗΣ προγράμματος ↔ κάρτας του μήνα `m` + επιλογή τρόπου
+    υπολογισμού και απολογιστικής δήλωσης (`svc.card_comparison`)."""
+    e = proj.employments.get(employment_id) or abort(404)
+    try:
+        first = date.fromisoformat(request.args.get("m", "") + "-01")
+    except ValueError:
+        abort(400)
+    return render_template(
+        "partials/_emp_card_compare_modal.html", e=e, mid=employment_id, first=first,
+        label=f"{labels.MONTHS_NOM[first.month]} {first.year}",
+        c=svc.card_comparison(e, first.year, first.month), pay_bases=labels.PAY_BASIS,
+        prem=svc.month_premiums(e, first.year, first.month),
+    )
+
+
+@bp.post("/<employment_id>/calendar/compare")
+def calendar_basis(employment_id):
+    """Αποθήκευση τρόπου υπολογισμού του μήνα (`MonthPayBasisChosen`)."""
+    def cmd():
+        y, m = map(int, request.args.get("m", "").split("-"))
+        basis = request.form.get("basis", "auto")
+        svc.choose_month_pay_basis(employment_id, y, m, basis,
+                                   request.form.get("retro") == "1")
+        return f"Τρόπος υπολογισμού {m}/{y}: {labels.PAY_BASIS[basis]}"
+
+    ok, msg = run_command(cmd)
+    return flash_to(calendar_compare(employment_id), msg, err=not ok)
+
+
+@bp.get("/<employment_id>/calendar/karta.xlsx")
+def calendar_karta(employment_id):
+    """Αρχείο «Κάρτας Εργασίας» (ίδια μορφή με την εισαγωγή) με τα ΙΔΑΝΙΚΑ
+    χτυπήματα του μήνα: ακριβώς το πρόγραμμα — χωρίς ημέρες άδειας/εκτός
+    απασχόλησης και χωρίς τηλεεργασία (δεν χτυπά κάρτα)."""
+    e = proj.employments.get(employment_id)
+    if e is None:
+        abort(404)
+    try:
+        first = date.fromisoformat(request.args.get("m", "") + "-01")
+    except ValueError:
+        first = today().replace(day=1)
+    punches = []
+    for n in range(monthrange(first.year, first.month)[1]):
+        d = first.replace(day=n + 1)
+        if not e.active_on(d) or any(lv.date_from <= d <= lv.date_to
+                                     for lv in e.active_leaves()):
+            continue
+        try:
+            segs = constraints.parse_day_schedule(e.day_schedule(d))
+        except ValueError as exc:
+            return Response(f"{d:%d/%m/%Y}: {exc}", status=400,
+                            content_type="text/plain; charset=utf-8")
+        punches += [karta_import.KartaPunch(e.afm, e.last_name, e.first_name, d,
+                                            cp.hhmm(s["start"]), cp.hhmm(s["end"]))
+                    for s in segs if not s["telework"]]
+    return Response(
+        # παράρτημα πρόσληψης: ίδιο με τη WebE3N (ασφαλιστικό προφίλ)
+        karta_import.build_karta(
+            punches, getattr(e.insurance_profile, "branch_no", 0) or 0),
+        content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition":
+                 f'attachment; filename="karta_{e.afm}_{first:%Y-%m}.xlsx"'},
+    )
 
 
 @bp.get("/<employment_id>/calendar")
@@ -1081,14 +1191,45 @@ def calendar(employment_id):
         weeks.append([(d + timedelta(days=i), _calendar_day(e, d + timedelta(days=i)))
                       for i in range(7)])
         d += timedelta(days=7)
+    # ονόματα αργιών (το πλέγμα μπορεί να περνά σε γειτονικό έτος)
+    hols = {}
+    for y in {start.year, d.year}:
+        hols.update(holiday_names(y))
+    # έλεγχος αρτιότητας κάρτας του μήνα («Διάφορα → card_required»)
+    card = None
+    if proj.misc_settings.get("card_required"):
+        issues = svc.card_issues(e, first.year, first.month)
+        card = {
+            "issues": issues,
+            "days": {i["day"]: i for i in issues if i["day"]},
+            "blocking": any(i["blocking"] for i in issues),
+            "checked": (first.year, first.month) in e.card_checked,
+        }
     return render_template(
         "partials/_employment_calendar.html",
         e=e, mid=employment_id, first=first, weeks=weeks, today=today(),
+        hols=hols, card=card,
+        # σύγκριση πρόγραμμα ↔ κάρτα: μόνο όταν ο μήνας έχει βάρδιες κάρτας
+        has_card=any((d.year, d.month) == (first.year, first.month)
+                     for d in e.attendance_shifts),
         label=f"{labels.MONTHS_NOM[first.month]} {first.year}",
         prev=(first - timedelta(days=1)).strftime("%Y-%m"),
         next=(last + timedelta(days=1)).strftime("%Y-%m"),
         now=today().strftime("%Y-%m"),
     )
+
+
+@bp.post("/<employment_id>/calendar/check")
+def calendar_check(employment_id):
+    """«Ολοκλήρωση ελέγχου κάρτας» του μήνα `m` (ΕΕΕΕ-ΜΜ, στο URL — το
+    ξαναδιαβάζει το `calendar()`)."""
+    def cmd():
+        y, m = map(int, request.args.get("m", "").split("-"))
+        svc.confirm_card_month(employment_id, y, m)
+        return f"Ολοκληρώθηκε ο έλεγχος κάρτας {m}/{y}"
+
+    ok, msg = run_command(cmd)
+    return flash_to(calendar(employment_id), msg, err=not ok)
 
 
 def _covers(d: date, start, end) -> bool:
@@ -1138,6 +1279,9 @@ def _day_history(employment_id: str, d: date) -> list:
                    ev.note or ev.source)
         elif t == "CardPunchCancelled" and ev.punch_id in punches:
             row = ("✖️", "Ακύρωση χτυπήματος κάρτας", ev.reason)
+        elif t == "RetroAbsenceReasonSet" and ev.day == d:
+            row = ("🚫", "Λόγος απουσίας (απολογιστικό)",
+                   _absence_label(ev.code) if ev.code else "αφαιρέθηκε")
         elif t == "AttendanceRecorded" and ev.work_date == d:
             row = ("⏱️", "Καταγραφή παρουσίας",
                    ", ".join(ev.shifts) or f"{ev.hours_worked:g} ώρες")
@@ -1172,6 +1316,11 @@ def _day_modal(employment_id: str, d: date, form=None) -> str:
         can_punch=e.active_on(d) and d <= ref,
         # διελεύσεις & βάρδιες της ημέρας (✕ ακύρωση, ⤓ ορφανό από πρόγραμμα)
         card=q.card_day(d, employment_id),
+        # ΑΠΟΥΣΙΑ στο απολογιστικό: κενά που θέλουν λόγο (ΜΕ / ωροάδεια)
+        absence_gaps=[f"{cp.hhmm(s)}-{cp.hhmm(x)}" for s, x in
+                      (svc.retro_absence_gaps(e, d)
+                       if proj.schedule_system_on(d) == "retro" else [])],
+        absence_reasons=ergani_params.absence_reasons(),
         **_punch_suggestion(e, d),
     )
 
@@ -1201,12 +1350,16 @@ def calendar_day_punch(employment_id):
 
     `op`: κενό = νέα διέλευση · "cancel" = ακύρωση διέλευσης (αντισταθμιστικό
     event) · "complete" = ΟΡΦΑΝΟ χτύπημα -> ταίρι από το πρόγραμμα (μηνιαίο
-    όριο ΕΡΓΑΝΗ). Η ΜΟΝΗ οθόνη χειρισμού της κάρτας (τα Ζωντανά μόνο δείχνουν)."""
+    όριο ΕΡΓΑΝΗ) · "absence" = λόγος απουσίας της ημέρας (απολογιστικό).
+    Η ΜΟΝΗ οθόνη χειρισμού της κάρτας (τα Ζωντανά μόνο δείχνουν)."""
     f = request.form
     d = form_date(f, "d")
 
     def cmd():
         op, pid = f.get("op", ""), f.get("punch_id", "")
+        if op == "absence":
+            svc.set_absence_reason(employment_id, d, f.get("code", ""))
+            return "Αποθηκεύτηκε ο λόγος απουσίας"
         if op == "cancel":
             svc.cancel_card_punch(pid)
             return "Η διέλευση ακυρώθηκε"
@@ -1575,6 +1728,22 @@ def childcare(employment_id):
     if ok:
         return flash_to(_fragment(employment_id), msg, err=False)
     return _modal_error(employment_id, "childcare", msg)
+
+
+@bp.post("/<employment_id>/childbirth")
+def childbirth(employment_id):
+    def cmd():
+        f = request.form
+        d = form_date(f, "birth_date") if f.get("birth_date") else None
+        svc.record_child_birth(employment_id, d)
+        if d is None:
+            return "Καταργήθηκε η μείωση εισφοράς μητέρας"
+        return "Καταχωρήθηκε ο τοκετός — μείωση εισφοράς μητέρας για 12 μήνες απασχόλησης"
+
+    ok, msg = run_command(cmd)
+    if ok:
+        return flash_to(_fragment(employment_id), msg, err=False)
+    return _modal_error(employment_id, "childbirth", msg)
 
 
 @bp.post("/<employment_id>/schedule/daily")

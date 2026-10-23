@@ -119,6 +119,12 @@ class PayrollResult:
     # Επιδότηση εργατικής εισφοράς (ΑΠΔ κωδ. 102): ΔΕΝ παρακρατήθηκε — το
     # `efka_employee` είναι ήδη ΜΕΙΩΜΕΝΟ κατά αυτήν (= ό,τι κρατήθηκε).
     subsidy_employee: float = 0.0
+    # Κωδ. ΑΠΔ της επιδότησης εργαζομένου: 102 ή 103 (μητέρα) — ΔΕΝ
+    # σωρεύονται, ισχύει η μεγαλύτερη (`_employee_subsidy`).
+    subsidy_code: str = ""
+    # Επιδότηση εργοδοτικής εισφοράς νέων ≤25 (ΑΠΔ κωδ. 107): το
+    # `efka_employer` είναι ήδη ΜΕΙΩΜΕΝΟ κατά αυτήν (= ό,τι καταβάλλεται).
+    subsidy_employer: float = 0.0
     # Προσαυξήσεις ΧΩΡΙΣ εισφορές (Εγκ. e-ΕΦΚΑ 21/2025): μέσα στα μικτά και
     # στο φορολογητέο, ΕΚΤΟΣ της βάσης εισφορών και της ΑΠΔ.
     premium_exempt: float = 0.0
@@ -143,6 +149,18 @@ def labor_subsidy_full(
     except ValueError:
         return 0.0
     return pct * minimum_wage_for(on).monthly
+
+
+def _employee_subsidy(
+    labor: float, base: float, mother_pct: float, full_emp: float,
+) -> tuple[float, str]:
+    """Επιδότηση εργαζομένου και κωδ. ΑΠΔ: 102 (κατώτατος, σταθερό ποσό) ή
+    103 (μητέρα, ποσοστό επί `base`). Αφορούν και οι δύο τη σύνταξη
+    εργαζομένου, άρα ΔΕΝ σωρεύονται — ισχύει η μεγαλύτερη."""
+    labor, mother = r2(labor), r2(base * mother_pct)
+    amount, code = (mother, "103") if mother > labor else (labor, "102")
+    amount = min(amount, full_emp)
+    return amount, code if amount else ""
 
 
 def sick_deduction(
@@ -172,6 +190,8 @@ def calc_monthly(
     birth_date: date | None = None,
     subsidy: float = 0.0,
     exempt: float = 0.0,
+    mother_pct: float = 0.0,
+    youth_pct: float = 0.0,
 ) -> PayrollResult:
     """Μηνιαίος υπολογισμός. Βάση `base_days` ημερομισθίων/μήνα για περικοπές
     (25 για πλήρη απασχόληση, οι ημέρες προγράμματος του μήνα για μερική —
@@ -188,9 +208,11 @@ def calc_monthly(
     exempt = min(r2(exempt), r2(premiums))
     insurable = min(max(gross - exempt, 0.0), rates.monthly_cap)
     full_emp = r2(insurable * rates.employee)
-    subsidy = min(r2(subsidy), full_emp)
+    subsidy, code = _employee_subsidy(subsidy, insurable, mother_pct, full_emp)
     efka_emp = r2(full_emp - subsidy)  # ό,τι ΠΑΡΑΚΡΑΤΕΙΤΑΙ
-    efka_er = r2(insurable * rates.employer)
+    full_er = r2(insurable * rates.employer)
+    sub_er = min(r2(insurable * youth_pct), full_er)
+    efka_er = r2(full_er - sub_er)  # ό,τι ΚΑΤΑΒΑΛΛΕΙ ο εργοδότης
     taxable = r2(gross - efka_emp)
     fmy = monthly_fmy(taxable, children, period_end, birth_date)
     return PayrollResult(
@@ -204,6 +226,8 @@ def calc_monthly(
         premiums=r2(premiums),
         sick_deduction=r2(sick),
         subsidy_employee=subsidy,
+        subsidy_code=code,
+        subsidy_employer=sub_er,
         premium_exempt=exempt,
     )
 
@@ -294,6 +318,7 @@ def calc_christmas_gift(
     monthly_gross: float, children: int, year: int, hire: date,
     term: date | None = None, rates=None, birth_date: date | None = None,
     subsidy_full: float = 0.0,
+    mother_pct: float = 0.0, youth_pct: float = 0.0,
 ) -> PayrollResult:
     """Δώρο Χριστουγέννων: 1 μισθός για απασχόληση 1/5–31/12,
     αλλιώς 2/25 μισθού ανά 19 ημερολογιακές ημέρες. Προσαύξηση 0,04166."""
@@ -306,13 +331,15 @@ def calc_christmas_gift(
         base = min(base, monthly_gross)
     return _gift_result(base, children, date(year, 12, 21), rates=rates,
                         birth_date=birth_date,
-                        subsidy=_gift_subsidy(subsidy_full, base, monthly_gross))
+                        subsidy=_gift_subsidy(subsidy_full, base, monthly_gross),
+                        mother_pct=mother_pct, youth_pct=youth_pct)
 
 
 def calc_easter_gift(
     monthly_gross: float, children: int, year: int, hire: date,
     term: date | None = None, rates=None, birth_date: date | None = None,
     subsidy_full: float = 0.0,
+    mother_pct: float = 0.0, youth_pct: float = 0.0,
 ) -> PayrollResult:
     """Δώρο Πάσχα: μισός μισθός για απασχόληση 1/1–30/4,
     αλλιώς 1/15 του μισού μισθού ανά 8 ημερολογιακές ημέρες.
@@ -330,7 +357,8 @@ def calc_easter_gift(
     return _gift_result(base, children, easter_gift_payment_date(year), rates=rates,
                         birth_date=birth_date,
                         fmy_periods=HALF_SALARY_PERIODS,
-                        subsidy=_gift_subsidy(subsidy_full, base, monthly_gross))
+                        subsidy=_gift_subsidy(subsidy_full, base, monthly_gross),
+                        mother_pct=mother_pct, youth_pct=youth_pct)
 
 
 def _allowance_months(year: int, hire: date, term: date | None) -> int:
@@ -359,6 +387,7 @@ def calc_leave_allowance(
     monthly_gross: float, children: int, year: int, hire: date,
     term: date | None = None, rates=None, birth_date: date | None = None,
     full_year: bool = False, subsidy_full: float = 0.0,
+    mother_pct: float = 0.0, youth_pct: float = 0.0,
 ) -> PayrollResult:
     """Επίδομα Αδείας: αποδοχές αδείας έως μισό μισθό.
     1ο/2ο έτος: 2 ημερομίσθια ανά μήνα υπηρεσίας στο έτος — έως Δεκέμβριο ή
@@ -370,7 +399,8 @@ def calc_leave_allowance(
     return _gift_result(base, children, date(year, 7, 31), leave_coeff=False,
                         rates=rates, birth_date=birth_date,
                         fmy_periods=HALF_SALARY_PERIODS,
-                        subsidy=_gift_subsidy(subsidy_full, base, monthly_gross))
+                        subsidy=_gift_subsidy(subsidy_full, base, monthly_gross),
+                        mother_pct=mother_pct, youth_pct=youth_pct)
 
 
 def calc_christmas_gift_daily(
@@ -429,18 +459,21 @@ def _gift_subsidy(subsidy_full: float, base: float, monthly_gross: float) -> flo
 def _gift_result(
     base: float, children: int, on: date, leave_coeff: bool = True, rates=None,
     birth_date: date | None = None, fmy_periods: float = ANNUAL_SALARIES,
-    subsidy: float = 0.0,
+    subsidy: float = 0.0, mother_pct: float = 0.0, youth_pct: float = 0.0,
 ) -> PayrollResult:
     gross = base * (1 + GIFT_LEAVE_COEFFICIENT) if leave_coeff else base
     rates = rates or efka_rates_for(on)
     full_emp = r2(gross * rates.employee)
-    subsidy = min(subsidy, full_emp)
+    subsidy, code = _employee_subsidy(subsidy, gross, mother_pct, full_emp)
     efka_emp = r2(full_emp - subsidy)  # ό,τι ΠΑΡΑΚΡΑΤΕΙΤΑΙ
-    efka_er = r2(gross * rates.employer)
+    full_er = r2(gross * rates.employer)
+    sub_er = min(r2(gross * youth_pct), full_er)
+    efka_er = r2(full_er - sub_er)  # ό,τι ΚΑΤΑΒΑΛΛΕΙ ο εργοδότης
     taxable = r2(gross - efka_emp)
     # Παρακράτηση με αναγωγή σε ετήσιο εισόδημα: ΟΛΟΚΛΗΡΟΣ μισθός (Δώρο
     # Χριστουγέννων) → x14 όπως η μισθοδοσία· ΜΙΣΟΣ μισθός (Δώρο Πάσχα,
     # Επίδομα Αδείας) → x28, και ο ετήσιος φόρος διαιρείται πάλι διά 28.
     fmy = periodic_fmy(taxable, children, on, birth_date, fmy_periods)
     return PayrollResult(r2(gross), efka_emp, efka_er, taxable, fmy, r2(taxable - fmy),
-                         subsidy_employee=subsidy)
+                         subsidy_employee=subsidy, subsidy_code=code,
+                         subsidy_employer=sub_er)

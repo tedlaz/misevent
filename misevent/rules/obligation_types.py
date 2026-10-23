@@ -36,6 +36,7 @@ from misevent.rules.calendar_gr import last_working_day_of_month, orthodox_easte
 # `spawn` — πότε γεννιέται ο τύπος:
 #   "period"      μαζί με κάθε μισθολογική περίοδο (κυλιόμενα)
 #   "period_teka" όπως το "period", αλλά ΜΟΝΟ αν υπάρχει ασφαλισμένος ΤΕΚΑ
+#   "period_card" όπως το "period", αλλά ΜΟΝΟ με «Διάφορα → digital_card»
 #   "annual"      μία φορά τον χρόνο, με το άνοιγμα περιόδου του έτους
 #   "reactive"    από domain event (π.χ. πρώτη κανονική άδεια)
 #   "on_source"   όταν ΚΛΕΙΣΕΙ ο τύπος `payout_source` (καταβολές Δώρων)
@@ -91,9 +92,17 @@ def _t(code, label, icon, spawn, due, command, **kw):
 
 TYPES: dict[str, ObligationType] = {t.code: t for t in [
     # --------------------------------------------------- Μηνιαία αλυσίδα
+    # Ψηφιακή κάρτα: εισαγωγή του αρχείου κάρτας της περιόδου + έλεγχος
+    # αρτιότητας ΟΛΩΝ (`svc.check_card_period`) — μη-strict προαπαιτούμενο
+    # της έγκρισης: χωρίς digital_card δεν γεννιέται, άρα δεν μπλοκάρει.
+    _t("CARD_IMPORT", "Εισαγωγή κάρτας περιόδου", "💳",
+       spawn="period_card", due=("eom", 0), command="check_card_period",
+       requires=(("MONTHLY_PAYROLL", "prev"),),
+       extension={"allowed": True, "max_days": 10}),
+
     _t("ATTENDANCE_APPROVAL", "Έγκριση παρουσιών", "⏱️",
        spawn="period", due=("eom", 0), command="approve_attendance",
-       requires=(("MONTHLY_PAYROLL", "prev"),),
+       requires=(("MONTHLY_PAYROLL", "prev"), ("CARD_IMPORT", "same")),
        extension={"allowed": True, "max_days": 10}),
 
     _t("MONTHLY_PAYROLL", "Υπολογισμός μισθοδοσίας", "🧮",
@@ -189,10 +198,10 @@ TYPES: dict[str, ObligationType] = {t.code: t for t in [
 
     # Απολογιστική δήλωση ωραρίου: αντιδραστικό — γεννιέται με την ΕΓΚΡΙΣΗ
     # ΠΑΡΟΥΣΙΩΝ ενός μήνα που ήταν σε απολογιστικό σύστημα (ScheduleSystem-
-    # Declared). Δηλώνει στο ΕΡΓΑΝΗ τις ημέρες όπου η κάρτα απέκλινε από το
-    # δηλωμένο πρόγραμμα, έως το τέλος του ΕΠΟΜΕΝΟΥ ημερολογιακού μήνα
-    # (ΥΑ 32689/2025, άρθρο 2Α Ε). Μετά την έγκριση: δηλώνεται ό,τι εγκρίθηκε.
-    _t("RETRO_SCHEDULE", "Απολογιστική δήλωση ωραρίου", "🕘", track="submission",
+    # Declared). Η έγκριση ΕΤΟΙΜΑΖΕΙ τις ημέρες (κλείνει αμέσως αν δεν
+    # υπάρχει απόκλιση)· η ενεργοποίηση τις ΥΠΟΒΑΛΛΕΙ στο ΕΡΓΑΝΗ, έως το
+    # τέλος του ΕΠΟΜΕΝΟΥ ημερολογιακού μήνα (ΥΑ 32689/2025, άρθρο 2Α Ε).
+    _t("RETRO_SCHEDULE", "Υποβολή απολογιστικού ΕΡΓΑΝΗ", "🕘", track="submission",
        spawn="reactive", due=("eom_cal", 1), command="submit_retro_schedule",
        requires=(("ATTENDANCE_APPROVAL", "same"),)),
 

@@ -354,7 +354,9 @@ class EmploymentMixin:
             daily_schedule = {
                 d.isoformat(): hours
                 for d, hours in self._daily_from_template(
-                    hire_date, weekly_pattern or {}, schedule_weeks
+                    # μεταφορά: από την ανάληψη, όπως στην αρχική πρόσληψη
+                    max(emp.payroll_from or hire_date, hire_date),
+                    weekly_pattern or {}, schedule_weeks,
                 ).items()
             }
         person = emp.person

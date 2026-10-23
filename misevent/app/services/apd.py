@@ -101,16 +101,28 @@ class ApdMixin:
         grosses = [r.gross for r in rows]
         per_row = [{} for _ in rows]
         for ln in lines:
-            emp_parts = self.split_amount(ln["employee"], grosses)
-            er_parts = self.split_amount(ln["employer"], grosses)
+            sub, sub_er = ln.get("subsidy", 0.0), ln.get("subsidy_employer", 0.0)
+            code = ln.get("subsidy_code", "102")
+            if code == "102":
+                # Σταθερό ποσό → ΟΛΟ στις τακτικές (1η γραμμή)
+                emp_parts = self.split_amount(ln["employee"], grosses)
+                sub_parts = [sub] + [0.0] * (len(rows) - 1)
+            else:
+                # Ποσοστό (103) → κατ' αναλογία, όπως η ΠΛΗΡΗΣ εισφορά
+                sub_parts = self.split_amount(sub, grosses)
+                emp_parts = [pe.r2(f - x) for f, x in zip(self.split_amount(
+                    pe.r2(ln["employee"] + sub), grosses), sub_parts, strict=True)]
+            # Εργοδοτική (107, ποσοστό): ΠΑΝΤΑ κατ' αναλογία
+            sub_er_parts = self.split_amount(sub_er, grosses)
+            er_parts = [pe.r2(f - x) for f, x in zip(self.split_amount(
+                pe.r2(ln["employer"] + sub_er), grosses), sub_er_parts, strict=True)]
             for i, cell in enumerate(per_row):
-                # Η επιδότηση (σταθερό ποσό) πάει ΟΛΗ στις τακτικές (1η γραμμή)
-                sub = ln.get("subsidy", 0.0) if i == 0 else 0.0
-                cell[(ln["fund"], ln["kpk"])] = (emp_parts[i], er_parts[i], sub)
+                cell[(ln["fund"], ln["kpk"])] = (
+                    emp_parts[i], er_parts[i], sub_parts[i], sub_er_parts[i], code)
         return [r._replace(contrib=c) for r, c in zip(rows, per_row, strict=True)]
 
     def _extra_contributions(self, emp, gross, efka_employee, efka_employer, on,
-                             subsidy=0.0):
+                             subsidy=0.0, subsidy_employer=0.0, subsidy_code=""):
         """Εισφορές μιας ΕΚΤΑΚΤΗΣ αμοιβής (Δώρο/Επίδομα Αδείας) ανά κάλυψη.
 
         Το εργοδοτικό σκέλος λείπει από τα ΠΑΛΙΑ events (γράφτηκε αργότερα):
@@ -122,9 +134,12 @@ class ApdMixin:
             rates = self.contribution_rates(emp.insurance_profile, on)
             efka_employer = pe.r2(gross * rates.employer)
         return {
-            (ln["fund"], ln["kpk"]): (ln["employee"], ln["employer"], ln.get("subsidy", 0.0))
+            (ln["fund"], ln["kpk"]): (
+                ln["employee"], ln["employer"], ln.get("subsidy", 0.0),
+                ln.get("subsidy_employer", 0.0), ln.get("subsidy_code", "102"))
             for ln in self.contribution_lines(
-                emp.insurance_profile, on, efka_employee, efka_employer, subsidy)
+                emp.insurance_profile, on, efka_employee, efka_employer, subsidy,
+                subsidy_employer, subsidy_code)
         }
 
     # ------------------------------------------- Παραγωγή αρχείων ΑΠΔ
@@ -150,7 +165,7 @@ class ApdMixin:
                     ApdEarnings(et, g.gross, 0, contrib=self._extra_contributions(
                         emp, g.gross, g.efka_employee, g.efka_employer,
                         pe.gift_payment_date(g.gift_type, g.year),
-                        g.subsidy_employee))
+                        g.subsidy_employee, g.subsidy_employer, g.subsidy_code))
                 )
         for a in self.proj.allowances:
             # Το Επίδομα Αδείας δεν έχει σταθερό μήνα: μπαίνει στο αρχείο του
@@ -160,7 +175,8 @@ class ApdMixin:
                 rows.setdefault(a.employee_id, []).append(
                     ApdEarnings("005", a.gross, 0, contrib=self._extra_contributions(
                         emp, a.gross, a.efka_employee, a.efka_employer,
-                        _date(a.year, 7, 31), a.subsidy_employee))
+                        _date(a.year, 7, 31), a.subsidy_employee,
+                        a.subsidy_employer, a.subsidy_code))
                 )
         return rows
 
@@ -302,8 +318,10 @@ class ApdMixin:
                     # Η ΑΠΔ δηλώνει την ΠΛΗΡΗ εισφορά εργαζομένου και χωριστά
                     # την επιδότηση (No 49)· καταβλητέο = πλήρεις − επιδότηση.
                     contrib_employee=pe.r2(contrib[0] + sub(contrib)),
-                    contrib_employer=contrib[1],
+                    contrib_employer=pe.r2(contrib[1] + sub_er(contrib)),
                     subsidy_employee=sub(contrib),
+                    subsidy_employer=sub_er(contrib),
+                    subsidy_code=contrib[4] if len(contrib) > 4 else "102",
                     aux_fund_code=aux_code,
                     weekly_system=empl.weekly_system,
                     repeats_earnings=repeats,
@@ -311,6 +329,9 @@ class ApdMixin:
 
             def sub(contrib):
                 return contrib[2] if len(contrib) > 2 else 0.0
+
+            def sub_er(contrib):
+                return contrib[3] if len(contrib) > 3 else 0.0
 
             def amounts(earning, cov, gross):
                 """Οι εισφορές της αμοιβής για ΑΥΤΗ την κάλυψη — από τα events.
@@ -491,14 +512,19 @@ class ApdMixin:
         )
         # Μία γραμμή τη φορά· ο builder τις ΟΜΑΔΟΠΟΙΕΙ ανά ασφαλισμένο
         # (ΜΙΑ εγγραφή τύπου 2 και από κάτω όλες οι τύπου 3 του).
+        on = last_working_day_of_month(year, month)
         for info, row in pairs:
-            subs = None
+            recs = []
             if row.subsidy_employee:
-                pct = config.labor_subsidy_for(
-                    last_working_day_of_month(year, month)).pct
-                subs = {0: [SubsidyRow(
-                    "102", pe.r2(pct * 100), row.subsidy_employee, 0.0, 0.0)]}
-            b.add_insured(info, [row], subs)
+                pct = (config.mother_subsidy_for(on) if row.subsidy_code == "103"
+                       else config.labor_subsidy_for(on)).pct
+                recs.append(SubsidyRow(row.subsidy_code, round(pct * 100, 3),
+                                       row.subsidy_employee, 0.0, 0.0))
+            if row.subsidy_employer:
+                recs.append(SubsidyRow("107", 0.0, 0.0,
+                                       round(config.youth_subsidy_for(on).pct * 100, 3),
+                                       row.subsidy_employer))
+            b.add_insured(info, [row], {0: recs} if recs else None)
         return b
 
     def apd_file_bytes(

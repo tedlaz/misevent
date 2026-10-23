@@ -136,6 +136,11 @@ def classify_shifts(
                     night = clock >= night_from or clock < night_to
                     holiday = _is_holiday(clock_day, holidays)
 
+                    # Ώρα που κατατάσσεται από τον ΗΜΕΡΗΣΙΟ κανόνα (πάνω από 8ω/
+                    # ημέρα) έχει ήδη πληρωθεί ως υπέρβαση: ΔΕΝ προωθεί τον
+                    # εβδομαδιαίο μετρητή, αλλιώς μετρά ΔΥΟ φορές (10ωρη ημέρα
+                    # σε εβδομάδα 42ω = 2 ώρες υπέρβασης, όχι 4 — parousies.md).
+                    by_day = daily_worked >= overwork_day
                     if daily_worked >= legal_day or (
                         counts_weekly and weekly_worked >= legal_wk
                     ):
@@ -166,7 +171,7 @@ def classify_shifts(
                         rate = "normal"
 
                     daily_worked += 1
-                    if counts_weekly:
+                    if counts_weekly and not by_day:
                         weekly_worked += 1
                     key = (d, rate, night, holiday)
                     out[key] = out.get(key, 0) + 1

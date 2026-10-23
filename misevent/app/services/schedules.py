@@ -16,11 +16,14 @@ import misevent.rules.constraints as constraints
 from misevent.domain.events import (
     ChildcareReductionSet,
     DailyScheduleAssigned,
+    RetroAbsenceReasonSet,
     RetroScheduleSubmitted,
     ScheduleDaysSubmitted,
     ScheduleSystemDeclared,
     WorkScheduleAssigned,
 )
+from misevent.integrations import card_punches as cp
+from misevent.integrations import ergani_parameters
 
 SCHEDULE_SYSTEMS = {"pre": "Προαναγγελτικό", "retro": "Απολογιστικό"}
 
@@ -135,9 +138,7 @@ class SchedulesMixin:
                 constraints.parse_day_schedule(h)
 
         def effective_schedule(day):
-            if emp.hire_date and day < emp.hire_date:
-                return ""
-            if emp.termination_date and day > emp.termination_date:
+            if not emp.active_on(day):
                 return ""
             return normalized.get(day, emp.day_schedule(day))
 
@@ -185,9 +186,12 @@ class SchedulesMixin:
             if emp.day_status(d) in ("pending", "modified")
         ]
 
-    def submit_schedule_days(self, selection: dict):
+    def submit_schedule_days(self, selection: dict, absences: dict | None = None):
         """Υποβάλλει ΗΜΕΡΗΣΙΑ προγράμματα στο ΕΡΓΑΝΗ σε ΕΝΑ αριθμημένο batch
         (καθολική αρίθμηση εταιρείας). `selection` = {employment_id: [date, …]}.
+        `absences` = {employment_id: {date: [(κωδικός, από, έως)]}} — ΑΠΟΥΣΙΕΣ
+        μέσα στο ωράριο (απολογιστικό, `retro_absences`): στέλνονται ως
+        αναλυτικές εγγραφές της ημέρας και μετρούν στο εβδομαδιαίο σύνολο.
 
         Έλεγχοι πριν γραφτεί event:
           - στοιχεία εταιρείας,
@@ -200,11 +204,13 @@ class SchedulesMixin:
         Επιστρέφει {"batch_no", "count" (σύνολο ημερήσιων), "employees"}."""
         if self.proj.company is None:
             raise ValueError("Δεν έχουν καταχωρηθεί στοιχεία εταιρείας")
+        absences = absences or {}
         grouped = {}
         for eid, dates in selection.items():
             emp = self.proj.employments.get(eid)
             if emp is None:
                 raise ValueError(f"Άγνωστη απασχόληση {eid}")
+            absent = absences.get(eid, {})
             self._require_hire_announced(eid)  # ΟΧΕ μόνο για ενεργή σχέση εργασίας
             days = sorted(
                 {
@@ -236,9 +242,11 @@ class SchedulesMixin:
                 week_days = [monday + timedelta(days=i) for i in range(7)]
                 if not all(emp.active_on(d) for d in week_days):
                     continue
+                # η δηλωμένη ΑΠΟΥΣΙΑ (λόγος) καλύπτει τις ώρες που λείπουν
                 total_hours = round(
                     sum(
                         constraints.day_schedule_minutes(emp.day_schedule(d))
+                        + sum(e - s for _c, s, e in absent.get(d, ()))
                         for d in week_days
                     )
                     / 60,
@@ -269,7 +277,8 @@ class SchedulesMixin:
                 "WTO",
                 eid,
                 ergani_mod.build_wto_variable(
-                    self.proj.company, emp, payload, self._week_monday(days[0])
+                    self.proj.company, emp, payload, self._week_monday(days[0]),
+                    {d.isoformat(): rows for d, rows in absences.get(eid, {}).items()},
                 ),
                 endpoint="WTODaily",
             )
@@ -287,9 +296,9 @@ class SchedulesMixin:
 
     def _earliest_pending_before(self, emp, limit: date):
         """Η πρώτη ΑΔΗΛΩΤΗ (pending) ενεργή ημέρα πριν την `limit`, ή None."""
-        if emp.hire_date is None:
+        if emp.payroll_start is None:
             return None
-        d = emp.hire_date
+        d = emp.payroll_start
         while d < limit:
             if emp.active_on(d) and emp.day_status(d) == "pending":
                 return d
@@ -341,59 +350,24 @@ class SchedulesMixin:
             )
         self.store.append("COMPANY", ScheduleSystemDeclared(month_start, system))
 
-    @staticmethod
-    def _retro_text(actual: list) -> str:
-        """Οι πραγματικές βάρδιες ως ωράριο ημέρας. Αν δεν χωρούν στη μορφή
-        του προγράμματος (> 2 τμήματα ή σπαστό με κενό < 3ω, π.χ. διάλειμμα),
-        δηλώνεται το ενιαίο διάστημα πρώτη είσοδος–τελευταία έξοδος."""
-        if not actual:
-            return ""
-        text = "+".join(actual)
-        try:
-            constraints.parse_day_schedule(text)
-            return text
-        except ValueError:
-            return f"{actual[0].split('-')[0]}-{actual[-1].split('-')[1]}"
-
-    @staticmethod
-    def _within_tolerance(declared: str, actual: str, flex: int) -> bool:
-        """Συμφωνεί η κάρτα με το δηλωμένο, με ΕΥΕΛΙΚΤΗ ΠΡΟΣΕΛΕΥΣΗ `flex` λεπτών
-        (Εγκ. 37271/2024 §Δ); Η προσέλευση επιτρέπεται ΜΟΝΟ μέσα στο
-        [έναρξη, έναρξη + flex] — ΠΟΤΕ νωρίτερα — και κάθε επόμενο άκρο
-        μετατίθεται έως όσο καθυστέρησε η προσέλευση: 09:00-17:00 με 30΄ ->
-        09:20-17:20 εντάξει, 08:50-17:00 ή 09:00-17:05 όχι (απόκλιση)."""
-        try:
-            a = constraints.parse_day_schedule(declared)
-            b = constraints.parse_day_schedule(actual)
-        except ValueError:
-            return False
-        if len(a) != len(b):
-            return False
-        if not a:
-            return True
-        delay = b[0]["start"] - a[0]["start"]
-        if not 0 <= delay <= flex:
-            return False
-        rest = [(x["end"], y["end"]) for x, y in zip(a, b)]
-        rest += [(x["start"], y["start"]) for x, y in zip(a[1:], b[1:])]
-        return all(0 <= y - x <= delay for x, y in rest)
-
     def retro_schedule_proposal(self, year: int, month: int) -> dict:
         """ΠΡΟΤΑΣΗ απολογιστικής δήλωσης: {eid: {date: (δηλωμένο, πραγματικό)}}
-        για τις ημέρες του μήνα όπου η ΚΑΡΤΑ αποκλίνει από το δηλωμένο πέρα
-        από την ευέλικτη προσέλευση του εργαζομένου (`flexible_arrival_minutes`).
+        για τις ημέρες του μήνα που ΠΛΗΡΩΝΟΝΤΑΙ ΜΕ ΤΗΝ ΚΑΡΤΑ
+        (`emp.pay_source` == "card": απόκλιση πέρα από την ευέλικτη προσέλευση
+        και την ανοχή `card_tolerance_minutes`) — ό,τι πληρώνεται με την κάρτα
+        δηλώνεται, ό,τι πληρώνεται με το πρόγραμμα όχι.
 
-        - εργασία χωρίς χτύπημα (εκτός άδειας/αργίας/τηλεεργασίας) -> ρεπό·
-        - χτυπήματα σε ημέρα ρεπό ή εκτός ανοχής -> οι πραγματικές βάρδιες.
+        Ημέρα ΧΩΡΙΣ χτύπημα μετρά με το πρόγραμμα, άρα δεν προτείνεται (μια
+        πραγματική απουσία δηλώνεται ρητά). Άδεια/τηλεεργασία εξαιρούνται.
+        Ημέρα με ΟΡΦΑΝΟ χτύπημα προτείνεται ΠΑΝΤΑ (συμπληρωμένη από το
+        πρόγραμμα) όταν ισχύει η παράμετρος `retro_declare_orphans`.
         Read-only — η δήλωση γίνεται με `submit_retro_schedule`."""
         out = {}
         for emp in self.proj.employments.values():
-            if not emp.hire_submitted:
+            # ρητή εξαίρεση του μήνα (σύγκριση στο ΗΜΕΡΟΛΟΓΙΟ)
+            if not emp.hire_submitted or not emp.pay_basis.get(
+                    (year, month), ("auto", True))[1]:
                 continue
-            try:
-                tol = int(emp.flexible_arrival_minutes or 0)
-            except ValueError:
-                tol = 0
             leave_days = {
                 d for lv in emp.active_leaves()
                 for d in (lv.date_from + timedelta(days=i)
@@ -404,23 +378,66 @@ class SchedulesMixin:
                 d = date(year, month, day)
                 if not emp.active_on(d) or d in leave_days or emp.is_telework_only(d):
                     continue
-                base = emp.day_baseline(d)
-                declared = emp.day_schedule(d) if base is None else base
-                actual = emp.actual_shifts(d)
-                if not actual and emp.holiday_off(d):
-                    continue  # αργία χωρίς παρουσία: κλειστά, όχι ρεπό
-                new = self._retro_text(actual)
-                if not self._within_tolerance(declared, new, tol):
-                    days[d] = (declared, new)
+                rules = config.work_hour_rules_for(d)
+                # κάρτα για τη φυσική παρουσία + η τηλεεργασία του
+                # δηλωμένου αυτούσια (δεν χτυπά κάρτα)
+                declared = emp.declared_on(d)
+                actual = cp.with_telework(
+                    cp.schedule_text(emp.actual_shifts(d)), declared)
+                if emp.pay_source(d, rules.card_tolerance_minutes,
+                                  rules.card_rounding_minutes) == "card":
+                    days[d] = (declared, actual)
+                # ΟΡΦΑΝΟ χτύπημα (`retro_declare_orphans`): δηλώνεται ΠΑΝΤΑ,
+                # συμπληρωμένο από το πρόγραμμα — εκτός αν έχει ήδη δηλωθεί
+                # ημερήσια με αυτή ακριβώς την τιμή
+                elif (rules.retro_declare_orphans and actual
+                      and emp.declared_days.get(d) != actual
+                      and any(emp.orphan_shift(d, s) for s in emp.card_shifts(d))):
+                    days[d] = (declared, actual)
             if days:
                 out[emp.employment_id] = days
         return out
 
-    def submit_retro_schedule(self, year: int, month: int) -> dict:
-        """ΑΠΟΛΟΓΙΣΤΙΚΗ δήλωση του μήνα: οι ημέρες της πρότασης ΚΑΤΑΓΡΑΦΟΝΤΑΙ
-        ως πρόγραμμα (DailyScheduleAssigned) και μένουν «τροποποιημένες» — η
-        υποβολή στο ΕΡΓΑΝΗ γίνεται ΜΟΝΟ από το «Πρόγραμμα → ΕΡΓΑΝΗ». Κλείνει
-        την υποχρέωση RETRO_SCHEDULE.
+    def retro_absence_gaps(self, emp, d: date) -> list:
+        """Τα κενά ΑΠΟΥΣΙΑΣ της `d` [(από, έως) σε λεπτά] που θέλουν ΛΟΓΟ στην
+        απολογιστική δήλωση: ημέρα που δηλώνεται με την κάρτα (`pay_source`
+        == "card") και η κάρτα έχει ΛΙΓΟΤΕΡΕΣ ώρες από το δηλωμένο
+        (`cp.absence_gaps`). Κενό = δεν χρειάζεται λόγος."""
+        rules = config.work_hour_rules_for(d)
+        if emp.pay_source(d, rules.card_tolerance_minutes,
+                          rules.card_rounding_minutes) != "card":
+            return []
+        return cp.absence_gaps(emp.declared_on(d), emp.actual_shifts(d))
+
+    def retro_absences(self, year: int, month: int) -> dict:
+        """Οι ΑΠΟΥΣΙΕΣ της απολογιστικής πρότασης του μήνα:
+        {eid: {date: {"gaps": [(από, έως)], "code": λόγος ή ""}}}."""
+        out = {}
+        for eid, days in self.retro_schedule_proposal(year, month).items():
+            emp = self.proj.employments[eid]
+            found = {d: {"gaps": gaps, "code": emp.absence_reasons.get(d, "")}
+                     for d in days if (gaps := self.retro_absence_gaps(emp, d))}
+            if found:
+                out[eid] = found
+        return out
+
+    def set_absence_reason(self, employee_id: str, day: date, code: str) -> None:
+        """ΛΟΓΟΣ ΑΠΟΥΣΙΑΣ της ημέρας για την απολογιστική δήλωση (κωδικός
+        WorkTimeType: «ΜΕ» ή ωροάδεια ΩΑ…). Κενό = αφαίρεση. Επιτρέπεται και
+        σε κλεισμένη περίοδο: η απολογιστική γίνεται τον επόμενο μήνα και ΔΕΝ
+        αλλάζει ποσά (βλ. `_prepare_retro_schedule`)."""
+        if self.proj.employments.get(employee_id) is None:
+            raise ValueError("Άγνωστη απασχόληση")
+        code = (code or "").strip()
+        if code and code not in {r["code"] for r in ergani_parameters.absence_reasons()}:
+            raise ValueError(f"Άγνωστος λόγος απουσίας «{code}»")
+        self.store.append(employee_id, RetroAbsenceReasonSet(employee_id, day, code))
+
+    def _prepare_retro_schedule(self, year: int, month: int) -> dict:
+        """ΠΡΟΕΤΟΙΜΑΣΙΑ απολογιστικής δήλωσης: οι ημέρες της πρότασης
+        ΚΑΤΑΓΡΑΦΟΝΤΑΙ ως πρόγραμμα (DailyScheduleAssigned) και μένουν
+        «τροποποιημένες» ώσπου να υποβληθούν. Idempotent (ώσπου να υποβληθούν
+        παραμένουν στην πρόταση). Καλείται με την έγκριση παρουσιών.
 
         ⚠️ ΣΚΟΠΙΜΗ εξαίρεση από το πάγωμα κλεισμένης περιόδου και τον έλεγχο
         11ωρης ανάπαυσης (`validate_daily_schedule`): γίνεται τον ΕΠΟΜΕΝΟ
@@ -434,8 +451,34 @@ class SchedulesMixin:
         for eid, days in proposal.items():
             self.store.append(eid, DailyScheduleAssigned(
                 eid, {d.isoformat(): new for d, (_old, new) in days.items()}))
+        return proposal
+
+    def submit_retro_schedule(self, year: int, month: int) -> dict:
+        """ΥΠΟΒΟΛΗ ΑΠΟΛΟΓΙΣΤΙΚΟΥ στο ΕΡΓΑΝΗ (υποχρέωση RETRO_SCHEDULE): οι
+        ημέρες της πρότασης καταγράφονται (`_prepare_retro_schedule`) και
+        υποβάλλονται σε ΕΝΑ batch (`submit_schedule_days`). Κλείνει την
+        υποχρέωση· χωρίς ημέρες (π.χ. υποβλήθηκαν ήδη από «Πρόγραμμα →
+        ΕΡΓΑΝΗ») απλώς την κλείνει.
+        ⚠️ Ημέρα με ΛΙΓΟΤΕΡΕΣ ώρες κάρτας από το πρόγραμμα = ΑΠΟΥΣΙΑ: θέλει
+        ΛΟΓΟ (`set_absence_reason`) — αλλιώς απορρίπτεται ΟΛΗ η υποβολή."""
+        absences = self.retro_absences(year, month)
+        missing = [
+            f"{self.proj.employments[eid].full_name} {config.gr_date(d)}"
+            for eid, days in absences.items() for d, a in days.items() if not a["code"]
+        ]
+        if missing:
+            raise ValueError("Λείπει ο λόγος απουσίας (λιγότερες ώρες από το "
+                             "πρόγραμμα) — ΗΜΕΡΟΛΟΓΙΟ → ημέρα: " + " · ".join(missing))
+        proposal = self._prepare_retro_schedule(year, month)
         res = {"count": sum(len(v) for v in proposal.values()),
-               "employees": len(proposal)}
+               "employees": len(proposal), "batch_no": 0}
+        if proposal:
+            res["batch_no"] = self.submit_schedule_days(
+                {eid: list(days) for eid, days in proposal.items()},
+                {eid: {d: [(a["code"], s, e) for s, e in a["gaps"]]
+                       for d, a in days.items()}
+                 for eid, days in absences.items()},
+            )["batch_no"]
         self.store.append("COMPANY", RetroScheduleSubmitted(
-            year, month, 0, res["count"]))
+            year, month, res["batch_no"], res["count"]))
         return res

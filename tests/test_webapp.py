@@ -71,7 +71,7 @@ def test_webapp(fresh_system):
     c.set_cookie(clock.COOKIE, "2026-08-26")
 
     print("=== Seed μέσω UI ===")
-    r = c.post("/seed")
+    r = _bootstrap.seed(c)
     print(
         f"  {'OK  ' if r.status_code == 200 else 'FAIL'} POST /seed -> "
         f"{len(proj.persons)} πρόσωπα, {len(proj.employments)} απασχολήσεις"
@@ -299,8 +299,41 @@ def test_webapp(fresh_system):
     svc.record_card_punch(eid, _date(2026, 8, 20), "19:00", "out")
     cal = c.get(f"/employments/{eid}/calendar?m=2026-08")
     check(f"/employments/{eid}/calendar", cal, "Αύγουστος 2026")
-    check(f"/employments/{eid}/calendar κάρτα", cal, "08:00 - 19:00")
+    check(f"/employments/{eid}/calendar κάρτα", cal, "08:00-19:00")
     check(f"/employments/{eid}/calendar υπερωρία", cal, "+2:00")
+    # σύγκριση πρόγραμμα ↔ κάρτα + τρόπος υπολογισμού του μήνα
+    check(f"/employments/{eid}/calendar κουμπί σύγκρισης", cal, "Σύγκριση με κάρτα")
+    check(f"/employments/{eid}/calendar/compare",
+          c.get(f"/employments/{eid}/calendar/compare?m=2026-08"), "Πρόγραμμα ↔ Κάρτα")
+    c.post(f"/employments/{eid}/calendar/compare?m=2026-08", data={"basis": "schedule"})
+    if proj.employments[eid].pay_basis.get((2026, 8)) != ("schedule", False):
+        fails.append("τρόπος υπολογισμού μήνα: δεν καταγράφηκε")
+    # ιδανική κάρτα: το xlsx ξαναδιαβάζεται από την εισαγωγή, ίδιο με το πρόγραμμα
+    from misevent.integrations import karta_import
+    emp = proj.employments[eid]
+    xlsx = c.get(f"/employments/{eid}/calendar/karta.xlsx?m=2026-08").data
+    kp = karta_import.parse_karta(xlsx)
+    import io
+    sheet = zipfile.ZipFile(io.BytesIO(xlsx)).read("xl/worksheets/sheet1.xml").decode()
+    if f'r="A2" t="inlineStr"><is><t>{emp.insurance_profile.branch_no}</t>' not in sheet:
+        fails.append("ιδανική κάρτα xlsx: λάθος ΑΑ παραρτήματος")
+    want = [d for d in (_date(2026, 8, n) for n in range(1, 32))
+            if emp.day_schedule(d) and emp.active_on(d)
+            and not any(lv.date_from <= d <= lv.date_to for lv in emp.active_leaves())]
+    if not kp or {p.day for p in kp} != set(want) or any(p.afm != emp.afm for p in kp) \
+            or f"{kp[0].time_in}-{kp[0].time_out}" not in emp.day_schedule(kp[0].day):
+        fails.append(f"ιδανική κάρτα xlsx: {kp[:2]}")
+    # αργία: χρωματισμός + όνομα δίπλα στην ημέρα (15/8 Δεκαπενταύγουστος)
+    check(f"/employments/{eid}/calendar αργία", cal, 'ecal-d hol')
+    check(f"/employments/{eid}/calendar όνομα αργίας", cal, "<i>Δεκαπενταύγουστος")
+    # έλεγχος αρτιότητας κάρτας (Διάφορα → card_required): εκκρεμότητες + ολοκλήρωση
+    svc.set_misc_settings(card_required=True)
+    cal = c.get(f"/employments/{eid}/calendar?m=2026-08")
+    check(f"/employments/{eid}/calendar έλεγχος κάρτας", cal, "Χωρίς χτύπημα")
+    check(f"/employments/{eid}/calendar ημέρα εκκρεμότητας", cal, " issue")
+    r = c.post(f"/employments/{eid}/calendar/check?m=2026-08")
+    check(f"/employments/{eid}/calendar/check", r, "ολοκληρώθηκε")
+    svc.set_misc_settings(card_required=False)
     # Καταγραφή παρουσιών όπως η Κάρτα ΕΡΓΑΝΗ: ημ/νία · είσοδος · έξοδος
     c.post(f"/employments/{eid}/attendance", data={
         "day": ["2026-08-21", "2026-08-21"], "time_in": ["08:00", "17:00"],
@@ -309,7 +342,7 @@ def test_webapp(fresh_system):
             "08:00-12:00", "17:00-22:00"]:
         fails.append("Καταγραφή παρουσιών: δεν γράφτηκαν οι βάρδιες εισόδου/εξόδου")
     check("calendar παρουσία", c.get(f"/employments/{eid}/calendar?m=2026-08"),
-          "17:00 - 22:00")
+          "17:00-22:00")
     check("modal παρουσιών", c.get(f"/employments/{eid}/modal/attendance"),
           'name="time_in"')
     # Άδειες: κατάσταση ως προς την ημ. αναφοράς (26/08/2026)
@@ -392,7 +425,9 @@ def test_webapp(fresh_system):
     if not _e.day_schedule(_date(2026, 8, 20)):
         fails.append("Ημερήσιο: άλλαξε ημέρα του παρελθόντος")
     check(f"/employments/{eid} επιδότηση", c.get(f"/employments/{eid}"),
-          "Επιδότηση εργατικής εισφοράς")
+          "Επιδότηση εισφοράς νέων")
+    check(f"/employments/{eid}/modal/childbirth",
+          c.get(f"/employments/{eid}/modal/childbirth"), "Ημερομηνία τοκετού")
     check(f"/employments/{eid}/modal/childcare",
           c.get(f"/employments/{eid}/modal/childcare"), "30 μήνες")
     check(f"/employments/{eid}/childcare",

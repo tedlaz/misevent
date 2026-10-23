@@ -91,13 +91,30 @@ def test_part_time_extra_work():
 
 
 def test_overwork_40_to_45():
-    """Πλήρης 5x9 = 45ω. Πέρα από τον εβδομαδιαίο κανόνα (40->45), η 9η ώρα
-    ΚΑΘΕ ημέρας είναι ημερήσια υπερεργασία (πάνω από 8ω/ημέρα κυριαρχεί ο
-    ημερήσιος κανόνας): 36 normal + 9 υπερεργασία, καμία υπερωρία."""
+    """Πλήρης 5x9 = 45ω: η 9η ώρα ΚΑΘΕ ημέρας είναι ημερήσια υπερεργασία
+    και ΔΕΝ ξαναμετρά στον εβδομαδιαίο μετρητή — 40 normal + 5 υπερεργασία
+    (= ακριβώς οι ώρες 40->45), καμία υπερωρία."""
     shifts = {d: ["08:00-17:00"] for d in (MON, TUE, WED, THU, FRI)}
     buckets = wh.classify_shifts(shifts, 40, 5)
-    assert by_rate(buckets) == {"normal": 36.0, "overwork": 9.0}
-    print("OK υπερεργασία: ημερήσια 9η ώρα + εβδομαδιαία 40->45")
+    assert by_rate(buckets) == {"normal": 40.0, "overwork": 5.0}
+    print("OK υπερεργασία 40->45 χωρίς διπλομέτρηση")
+
+
+def test_long_day_not_counted_twice():
+    """parousies.md: 10ωρη ημέρα σε εβδομάδα 42ω -> 9η υπερεργασία, 10η
+    υπερωρία· οι υπόλοιπες ημέρες normal (2 ώρες υπέρβασης, όχι 4)."""
+    shifts = {d: ["09:00-17:00"] for d in (MON, TUE, THU, FRI)}
+    shifts[WED] = ["09:00-19:00"]
+    buckets = wh.classify_shifts(shifts, 40, 5)
+    assert by_rate(buckets) == {"normal": 40.0, "overwork": 1.0, "overtime": 1.0}
+
+
+def test_weekly_overtime_after_daily_excess():
+    """5x10 = 50ω: 5 υπερεργασία (9η ώρα) + 5 υπερωρία (10η) = οι ώρες
+    40->45 και 45->50 της εβδομάδας."""
+    shifts = {d: ["08:00-18:00"] for d in (MON, TUE, WED, THU, FRI)}
+    buckets = wh.classify_shifts(shifts, 40, 5)
+    assert by_rate(buckets) == {"normal": 40.0, "overwork": 5.0, "overtime": 5.0}
 
 
 def test_daily_overwork_ninth_hour():
@@ -139,12 +156,13 @@ def test_yearly_overtime_cap():
 
 
 def test_weekly_overtime_45_plus():
-    """4x9 + Παρ 11ω. Οι 9ες ώρες Δευ-Πεμ = ημερήσια υπερεργασία· Παρ: h5-9
-    υπερεργασία (εβδ.>40 + 9η ημερήσια), h10-11 υπερωρία (>9ω ημερήσιο)."""
+    """4x9 + Παρ 11ω = 47ω. Οι 9ες ώρες = ημερήσια υπερεργασία (5), οι
+    10η-11η της Παρ = υπερωρία (>9ω ημερήσιο)· οι 8 πρώτες ώρες κάθε ημέρας
+    normal — υπέρβαση 7ω = ακριβώς 40->47."""
     shifts = {d: ["08:00-17:00"] for d in (MON, TUE, WED, THU)}
     shifts[FRI] = ["08:00-19:00"]
     buckets = wh.classify_shifts(shifts, 40, 5)
-    assert by_rate(buckets) == {"normal": 36.0, "overwork": 9.0, "overtime": 2.0}
+    assert by_rate(buckets) == {"normal": 40.0, "overwork": 5.0, "overtime": 2.0}
     print("OK εβδομαδιαία κλιμάκωση: normal -> υπερεργασία -> υπερωρία")
 
 
@@ -262,6 +280,9 @@ def test_daily_override_checks_adjacent_rest():
         hire_date = None
         termination_date = None
         daily_schedule = {}
+
+        def active_on(self, _day):
+            return True
 
         def day_schedule(self, day):
             return "22:00-02:00" if day == previous else ""

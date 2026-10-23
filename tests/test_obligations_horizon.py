@@ -20,7 +20,7 @@ def test_obligations_horizon(fresh_system):
 
     app = create_app()
     c = _bootstrap.ui_client(app)
-    assert c.post("/seed").status_code == 200
+    assert _bootstrap.seed(c).status_code == 200
     with app.test_request_context("/"):
         # αναφορά = η πρώτη προθεσμία του seed, ώστε να υπάρχουν μελλοντικές
         ref = min(o.due_date for o in proj.obligations.values())

@@ -76,7 +76,7 @@ def _svc_with_person(afm):
 def test_import_matches_by_afm():
     """Η εισαγωγή αντιστοιχίζει με ΑΦΜ και καταγράφει παρουσίες."""
     svc, proj, eid = _svc_with_person("100011110")
-    res = svc.import_karta_attendance(open(KARTA, "rb").read())
+    res = svc.import_karta_attendance(open(KARTA, "rb").read(), 2026, 2)
 
     assert res["periods"] == [(2026, 2)]
     assert res["employees"] == 1  # μόνο ο ΜΕΜΗ ταιριάζει
@@ -98,13 +98,14 @@ def test_import_feeds_attendance_draft():
     """Οι εισαγόμενες παρουσίες τροφοδοτούν το συγκεντρωτικό (source=recorded)."""
     svc, proj, eid = _svc_with_person("100011110")
     svc.submit_hire_wto(eid)
-    svc.import_karta_attendance(open(KARTA, "rb").read())
+    svc.import_karta_attendance(open(KARTA, "rb").read(), 2026, 2)
 
     draft = svc.attendance_draft(2026, 2)[eid]
     assert draft["source"] == "recorded"
     feb = ki.daily_hours(ki.parse_karta(KARTA))
     expected = len({d for (a, d) in feb if a == "100011110"})
-    assert draft["worked"] == expected
+    # + οι ημέρες προγράμματος ΧΩΡΙΣ χτύπημα: μετρούν με το πρόγραμμα
+    assert draft["worked"] == expected + len(draft["no_punch_days"])
     print(f"OK το συγκεντρωτικό δείχνει {draft['worked']} ημέρες (πηγή: recorded)")
 
 
@@ -137,3 +138,12 @@ def test_flexible_layout():
         (date(2026, 9, 16), "09:00", ""),
     ], got
     print("OK ελαστική ανάγνωση στηλών/ημερομηνιών/ωρών")
+
+
+def test_import_skips_records_of_other_months():
+    """Οι εγγραφές εκτός της περιόδου ΔΕΝ καταγράφονται — παραλείπονται."""
+    svc, proj, eid = _svc_with_person("100011110")
+    res = svc.import_karta_attendance(open(KARTA, "rb").read(), 2026, 3)
+    assert res["recorded"] == 0 and res["skipped"]
+    assert {(d.year, d.month) for d in res["skipped"]} == {(2026, 2)}
+    assert not proj.employments[eid].attendance

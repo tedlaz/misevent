@@ -38,6 +38,7 @@ _SCHEMA = (
         event_type   TEXT NOT NULL,
         occurred_at  TEXT NOT NULL,
         payload      TEXT NOT NULL,
+        tx           TEXT,
         PRIMARY KEY (store, seq)
     )""",
     "CREATE UNIQUE INDEX IF NOT EXISTS idx_events_id ON events(store, event_id)",
@@ -55,6 +56,15 @@ def _without_wal(data: bytes) -> bytes:
     return data
 
 
+def _add_tx_column(conn) -> bool:
+    """Migration: η στήλη `tx` (transaction της εντολής που έγραψε το event,
+    βλ. `event_store.transaction`) σε βάσεις πριν από αυτήν. True αν υπήρχε."""
+    if any(r[1] == "tx" for r in conn.execute("PRAGMA table_info(events)")):
+        return True
+    conn.execute("ALTER TABLE events ADD COLUMN tx TEXT")
+    return False
+
+
 class Database:
     """Μία σύνδεση, ένας πίνακας events, πολλά λογικά stores."""
 
@@ -69,6 +79,7 @@ class Database:
             self.conn.execute("PRAGMA journal_mode=WAL")
         for statement in _SCHEMA:
             self.conn.execute(statement)
+        _add_tx_column(self.conn)
         self.conn.commit()
 
     def store(self, name: str, registry: dict | None = None, shared=None):
@@ -98,9 +109,11 @@ class Database:
         src = sqlite3.connect(MEMORY)
         try:
             src.deserialize(_without_wal(data))
+            # backup πριν από τη στήλη `tx` -> NULL (μία γραμμή ανά event στο audit)
+            tx = "tx" if _add_tx_column(src) else "NULL"
             rows = src.execute(
                 "SELECT store, seq, event_id, aggregate_id, event_type, occurred_at, "
-                "payload FROM events"
+                f"payload, {tx} FROM events"
             ).fetchall()
         except sqlite3.Error:
             raise ValueError("Το αρχείο δεν είναι backup βάσης του misevent") from None
@@ -111,7 +124,9 @@ class Database:
         try:
             self.conn.execute("BEGIN IMMEDIATE")
             self.conn.execute("DELETE FROM events")
-            self.conn.executemany("INSERT INTO events VALUES (?, ?, ?, ?, ?, ?, ?)", rows)
+            self.conn.executemany(
+                "INSERT INTO events (store, seq, event_id, aggregate_id, event_type, "
+                "occurred_at, payload, tx) VALUES (?, ?, ?, ?, ?, ?, ?, ?)", rows)
             self.conn.commit()
         except Exception:
             self.conn.rollback()

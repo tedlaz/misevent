@@ -622,17 +622,35 @@ def _wage_composition(pdf: ReportPDF, wb: dict | None):
 
 
 def _efka_deduction_lines(pdf: ReportPDF, a: dict):
-    """Γραμμές ασφαλιστικών κρατήσεων εργαζομένου ανά ταμείο/ΚΠΚ."""
+    """Γραμμές ασφαλιστικών κρατήσεων εργαζομένου ανά ταμείο/ΚΠΚ. Η επιδότηση
+    (102/103) αφορά την ΚΥΡΙΑ κάλυψη (1η γραμμή): αυτή δείχνει την ΠΛΗΡΗ
+    εισφορά και η επιδότηση ακολουθεί ως ξεχωριστή γραμμή «+»."""
     sub = a.get("subsidy_employee") or 0.0
     for i, d in enumerate(a["efka_detail"]):
         kpk = f" · ΚΠΚ {d['kpk']}" if d.get("kpk") else ""
-        # Η επιδότηση αφαιρείται από την ΚΥΡΙΑ κάλυψη (1η γραμμή)
-        note = (f" — μείον επιδότηση εργατικής εισφοράς (ΔΥΠΑ) {eur(sub)}"
-                if sub and i == 0 else "")
         _line(pdf, f"Εισφορές — {d['label']}{kpk}",
               f"{num(round(d['employee'] * 100, 2))}% επί των ασφαλιστέων "
-              f"αποδοχών (μικτά έως το πλαφόν ΕΦΚΑ){note}",
-              d["amount"], color=ROSE, sign="− ")
+              "αποδοχών (μικτά έως το πλαφόν ΕΦΚΑ)",
+              round(d["amount"] + (sub if i == 0 else 0), 2),
+              color=ROSE, sign="− ")
+    if sub:
+        _line(pdf, labels.SUBSIDY_LABELS[a.get("subsidy_code") or "102"],
+              "μέρος της εισφοράς που ΔΕΝ παρακρατείται — καλύπτεται από "
+              "την επιδότηση", sub, color=GREEN, sign="+ ")
+
+
+def _employer_cost_lines(pdf: ReportPDF, a: dict, note: str):
+    """«Στοιχεία κόστους εργοδότη»: πλήρεις εισφορές, μείον την επιδότηση
+    εργοδοτικής εισφοράς (107), = κόστος."""
+    sub = a.get("subsidy_employer") or 0.0
+    _line(pdf, "Ασφαλιστικές εισφορές εργοδότη", note,
+          round(a["efka_employer"] + sub, 2), color=MUTED, sign="+ ")
+    if sub:
+        _line(pdf, labels.SUBSIDY_LABELS["107"],
+              "μέρος της εργοδοτικής εισφοράς που δεν καταβάλλεται",
+              sub, color=GREEN, sign="− ")
+    _subtotal(pdf, "Συνολικό κόστος εργοδότη (μικτά + εισφορές)",
+              round(a["gross"] + a["efka_employer"], 2), NAVY)
 
 
 def _slip_page(pdf: ReportPDF, r: dict, year: int, month: int,
@@ -799,11 +817,8 @@ def _slip_page(pdf: ReportPDF, r: dict, year: int, month: int,
     if proj.misc_settings.get("show_employer_cost", True):
         pdf.section("Στοιχεία κόστους εργοδότη", NAVY_SOFT, "bank",
                     note="πληροφοριακά — δεν αφορούν τον εργαζόμενο")
-        _line(pdf, "Ασφαλιστικές εισφορές εργοδότη",
-              "αποδίδονται στον ΕΦΚΑ μαζί με τις εισφορές εργαζομένου",
-              a["efka_employer"], color=MUTED, sign="+ ")
-        _subtotal(pdf, "Συνολικό κόστος εργοδότη (μικτά + εισφορές)",
-                  round(a["gross"] + a["efka_employer"], 2), NAVY)
+        _employer_cost_lines(
+            pdf, a, "αποδίδονται στον ΕΦΚΑ μαζί με τις εισφορές εργαζομένου")
 
     # -- υπογραφές ---------------------------------------------------------
     _signatures(pdf)
@@ -1131,11 +1146,8 @@ def _gift_slip_page(pdf: ReportPDF, r: dict, kind: str, year: int,
     if proj.misc_settings.get("show_employer_cost", True):
         pdf.section("Στοιχεία κόστους εργοδότη", NAVY_SOFT, "bank",
                     note="πληροφοριακά — δεν αφορούν τον εργαζόμενο")
-        _line(pdf, "Ασφαλιστικές εισφορές εργοδότη",
-              "αποδίδονται στον ΕΦΚΑ με την ΑΠΔ της επόμενης περιόδου",
-              a["efka_employer"], color=MUTED, sign="+ ")
-        _subtotal(pdf, "Συνολικό κόστος εργοδότη (μικτά + εισφορές)",
-                  round(a["gross"] + a["efka_employer"], 2), NAVY)
+        _employer_cost_lines(
+            pdf, a, "αποδίδονται στον ΕΦΚΑ με την ΑΠΔ της επόμενης περιόδου")
 
     _signatures(pdf)
 

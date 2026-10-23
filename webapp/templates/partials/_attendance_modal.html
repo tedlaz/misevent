@@ -32,6 +32,24 @@
           <label>Λοιπές άδειες
             <input type="number" name="leave" min="0" max="31" value="{{ r.leave }}"></label>
         </div>
+        {# Συμφωνία προγράμματος ↔ κάρτας (ARCH_REF §5.11) #}
+        {% if r.card_days or r.no_punch_days %}
+          <p class="muted" style="font-size:12.5px;margin:6px 0 0">
+            {% if r.card_days %}
+              Απόκλιση κάρτας (πληρώνεται με την κάρτα):
+              <b>{{ r.card_days|map('date_gr')|join(', ') }}</b><br>
+            {% endif %}
+            {% if r.no_punch_days %}
+              Χωρίς χτύπημα (μετρούν με το πρόγραμμα — δηλώστε άδεια αν ήταν απουσία):
+              <b>{{ r.no_punch_days|map('date_gr')|join(', ') }}</b>
+            {% endif %}
+          </p>
+          {% if r.card_unreported %}
+            <p style="font-size:12.5px;margin:6px 0 0;color:var(--warn)">
+              ⚠ Προαναγγελτικό σύστημα: οι αποκλίσεις κάρτας δεν δηλώθηκαν
+              εκ των προτέρων στο ΕΡΓΑΝΗ.</p>
+          {% endif %}
+        {% endif %}
 
         <b class="sec">Ασθένεια <span class="muted" style="text-transform:none">
           — περικόπτει τα μικτά</span></b>

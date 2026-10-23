@@ -148,3 +148,14 @@ def test_contract_history_modal_route_renders_table(monkeypatch):
     assert "Αρχική σύμβαση" in body
     assert "01/01/2026" in body
     assert "Τρέχουσα" in body
+
+
+def test_migrated_employment_has_no_schedule_weeks_before_payroll_start():
+    """Μεταφορά (πρόσληψη 15/5/2024, ανάληψη 1/1/2026): οι εβδομάδες πριν την
+    ανάληψη ανήκουν στο προηγούμενο πρόγραμμα — ούτε εκκρεμή προγράμματα."""
+    _store, projection = _adjust_system(None, migrated=True)
+    e = projection.employments["E1"]
+    assert e.week_status(date(2025, 12, 22)) == "off"
+    assert e.active_days_in_week(date(2025, 12, 29)) == [
+        date(2026, 1, 1), date(2026, 1, 2), date(2026, 1, 3), date(2026, 1, 4)]
+    assert e.active_on(date(2026, 1, 1))

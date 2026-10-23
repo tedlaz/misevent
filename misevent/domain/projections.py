@@ -23,8 +23,10 @@ from misevent.domain.events import (
     APDSubmitted,
     AttendanceRecorded,
     AttendanceSheetApproved,
+    CardMonthChecked,
     CardPunchCancelled,
     CardPunchRecorded,
+    ChildBirthRecorded,
     ChildcareReductionSet,
     CompanyBranchDefined,
     CompanyRegistered,
@@ -51,6 +53,7 @@ from misevent.domain.events import (
     LeaveType,
     MiscSettingsChanged,
     MonthlyPayrollCalculated,
+    MonthPayBasisChosen,
     ObligationExtended,
     ObligationFulfilled,
     ObligationScheduled,
@@ -60,6 +63,7 @@ from misevent.domain.events import (
     PersonDetailsChanged,
     PersonDetailsCorrected,
     PersonRegistered,
+    RetroAbsenceReasonSet,
     ScheduleDaysSubmitted,
     ScheduleDeclaredToErgani,
     ScheduleSystemDeclared,
@@ -146,6 +150,19 @@ MISC_DEFAULTS = {
     # False = συμψηφισμός (η διαφορά απορροφά την αύξηση), True = διατήρηση
     # (η αύξηση περνά στον μισθό, η διαφορά μένει πάνω από το όριο).
     "keep_wage_excess": False,
+    # ΠΡΟΑΝΑΓΓΕΛΤΙΚΟ σύστημα: ημέρα όπου η κάρτα αποκλίνει πέρα από την ανοχή
+    # (`EmploymentState.pay_source` == "card") — True = πληρώνεται με την
+    # ΚΑΡΤΑ (οι ώρες οφείλονται, η απόκλιση μένει αδήλωτη: προειδοποίηση),
+    # False = με το ΠΡΟΓΡΑΜΜΑ. Στο απολογιστικό πάντα με την κάρτα.
+    "pre_major_by_card": True,
+    # Η ΚΑΡΤΑ ΕΙΝΑΙ ΠΡΟΑΠΑΙΤΟΥΜΕΝΟ της μισθοδοσίας: η έγκριση παρουσιών θέλει,
+    # για κάθε εργαζόμενο με εκκρεμότητες κάρτας (`svc.card_issues`),
+    # ολοκληρωμένο έλεγχο στο ΗΜΕΡΟΛΟΓΙΟ (`CardMonthChecked`).
+    "card_required": False,
+    # Η εταιρεία είναι ΕΝΤΑΓΜΕΝΗ στην ψηφιακή κάρτα εργασίας: κάθε περίοδος
+    # έχει υποχρέωση CARD_IMPORT (εισαγωγή + έλεγχος αρχείου κάρτας) πριν την
+    # έγκριση παρουσιών. Αλλαγή -> scheduler (γέννηση/κλείσιμο εκκρεμών).
+    "digital_card": True,
     # Αυτόματη εξόφληση πληρωμών: οι υποχρεώσεις στήλης «Πληρωμές» δεν
     # εμφανίζονται στο χρονολόγιο και εξοφλούνται μόλις ξεκλειδώσουν
     # (webapp/actions.auto_settle_payments).
@@ -423,11 +440,20 @@ class EmploymentState:
     # "note"}, …] κατά ώρα. Οι ΒΑΡΔΙΕΣ δεν αποθηκεύονται· παράγονται με
     # ζευγάρωμα (`card_shifts`), ώστε μια ξεχασμένη έξοδος να μένει ορατή.
     card_punches: dict = field(default_factory=dict)
+    # μήνες (έτος, μήνας) με ΟΛΟΚΛΗΡΩΜΕΝΟ έλεγχο κάρτας (`CardMonthChecked`)·
+    # κάθε διέλευση/ακύρωση του μήνα τον αναιρεί
+    card_checked: set = field(default_factory=set)
+    # (έτος, μήνας) -> (τρόπος, απολογιστική) — `MonthPayBasisChosen`
+    pay_basis: dict = field(default_factory=dict)
+    # ημέρα -> κωδικός WorkTimeType της ΑΠΟΥΣΙΑΣ (`RetroAbsenceReasonSet`)
+    absence_reasons: dict = field(default_factory=dict)
     leaves: list = field(default_factory=list)  # LeaveRecorded events
     cancelled_leaves: set = field(default_factory=set)
     sickness_benefits: dict = field(default_factory=dict)  # leave_id -> ποσό ΕΦΚΑ
     # Μειωμένο ωράριο φροντίδας τέκνου: [(από, έως, ώρες/ημέρα)]
     childcare_reduction: list = field(default_factory=list)
+    # Τοκετός → μείωση εισφοράς μητέρας (ΑΠΔ 103), βλ. svc.mother_subsidy_on
+    child_birth_date: date | None = None
     person: PersonState | None = None  # σύνδεσμος με το φυσικό πρόσωπο
     # ΕΧΕΙ ΥΠΟΒΛΗΘΕΙ Η ΑΝΑΓΓΕΛΙΑ ΠΡΟΣΛΗΨΗΣ (Ε3/WebE3N ή «external»);
     # ΜΟΝΗ πηγή: `ErganiSubmissionRecorded`. Δεν τεκμαίρεται ΠΟΤΕ από τον
@@ -802,6 +828,17 @@ class EmploymentState:
             out.append(s)
         return out
 
+    def orphan_shift(self, d: date, s: dict) -> bool:
+        """Είναι ΟΡΦΑΝΗ η βάρδια `s` (του `card_shifts(d)`); Ανοιχτή / έξοδος
+        χωρίς είσοδο, Ή με τυφλό χτύπημα / ταίρι από το πρόγραμμα (η
+        εισαγωγή ΕΡΓΑΝΗ τα συμπληρώνει — η ένδειξη δεν χάνεται)."""
+        if s["open"] or s["orphan"]:
+            return True
+        ids = {s["in_id"], s["out_id"]}
+        return any(p["id"] in ids and (p.get("blind") or p.get("source") == "schedule")
+                   for x in (d - timedelta(days=1), d, d + timedelta(days=1))
+                   for p in self.punches_on(x))
+
     def schedule_completions(self, year: int, month: int) -> int:
         """Πόσα χτυπήματα του μήνα συμπληρώθηκαν ΑΠΟ ΤΟ ΠΡΟΓΡΑΜΜΑ (ορφανά —
         μετρούν στο μηνιαίο όριο `orphan_month_cap`)."""
@@ -814,9 +851,68 @@ class EmploymentState:
         )
 
     def actual_shifts(self, d: date) -> list:
-        """Οι ΠΡΑΓΜΑΤΙΚΕΣ (κλειστές) βάρδιες της `d` ως «ΩΩ:ΛΛ-ΩΩ:ΛΛ», από
-        τις διελεύσεις της κάρτας. Πηγή της απολογιστικής δήλωσης."""
-        return list(self.attendance_shifts.get(d, []))
+        """Οι ΠΡΑΓΜΑΤΙΚΕΣ βάρδιες της `d` ως «ΩΩ:ΛΛ-ΩΩ:ΛΛ», από τις διελεύσεις
+        της κάρτας. Πηγή της μισθοδοσίας (`pay_source`) και της απολογιστικής
+        δήλωσης.
+
+        ΟΡΦΑΝΟ χτύπημα (ανοιχτή είσοδος / έξοδος χωρίς είσοδο): επίσημα
+        λαμβάνεται υπόψη το ΠΡΟΓΡΑΜΜΑ ως κανονική παρουσία — το ταίρι
+        συμπληρώνεται εδώ από το πρόγραμμα της ημέρας (`cp.completion_minute`)
+        ώστε να πληρωθεί και, στο απολογιστικό, να δηλωθεί. Υπολογίζεται ΖΩΝΤΑΝΑ
+        (όχι στο `attendance_shifts`): οι διελεύσεις μένουν όπως χτυπήθηκαν."""
+        from misevent.integrations import card_punches as cp
+        from misevent.rules import constraints
+
+        shifts = self.card_shifts(d)
+        if not any(s["open"] or s["orphan"] for s in shifts):
+            return list(self.attendance_shifts.get(d, []))
+        try:
+            segs = [s for s in constraints.parse_day_schedule(self.day_schedule(d))
+                    if not s["telework"]]
+        except ValueError:
+            segs = []
+        done = []
+        for s in shifts:
+            if s["open"] or s["orphan"]:
+                m = cp.completion_minute(s, segs)
+                if m is None:
+                    continue
+                s = {**s, "e": m} if s["open"] else {**s, "s": m}
+            done.append(s)
+        return list(cp.shift_texts(sorted(done, key=lambda s: s["s"])))
+
+    def declared_on(self, d: date) -> str:
+        """Το ΔΗΛΩΜΕΝΟ ωράριο της `d` (baseline ΕΡΓΑΝΗ), αλλιώς το τρέχον
+        πρόγραμμα — το μέτρο σύγκρισης της κάρτας."""
+        base = self.day_baseline(d)
+        return self.day_schedule(d) if base is None else base
+
+    def pay_source(self, d: date, tol: int = 0, step: int = 0):
+        """Με ΤΙ μετρά η ημέρα `d` στη μισθοδοσία — ΜΙΑ πηγή και για την
+        απολογιστική πρόταση (ARCH_REF §5.11 «Συμφωνία προγράμματος ↔ κάρτας»):
+
+        "card"     — η κάρτα αποκλίνει από το δηλωμένο πέρα από την ευέλικτη
+                     προσέλευση + την ανοχή `tol` (`card_tolerance_minutes`)
+                     και τη στρογγυλοποίηση `step` (`card_rounding_minutes`)
+        "schedule" — η κάρτα συμφωνεί, Ή η ημέρα έχει πρόγραμμα αλλά ΚΑΝΕΝΑ
+                     χτύπημα (τηλεεργασία, βλάβη/ξεχασμένη κάρτα): μετρά το
+                     πρόγραμμα· πραγματική απουσία δηλώνεται ρητά.
+                     Τα τμήματα ΤΗΛΕΕΡΓΑΣΙΑΣ δεν χτυπούν κάρτα: ισχύει ό,τι
+                     λέει το πρόγραμμα και ΔΕΝ μπαίνουν στη σύγκριση
+        None       — ούτε πρόγραμμα ούτε κάρτα."""
+        from misevent.integrations import card_punches as cp
+
+        actual = self.actual_shifts(d)
+        if not actual:
+            return "schedule" if self.day_schedule(d) else None
+        try:
+            flex = int(self.flexible_arrival_minutes or 0)
+        except ValueError:
+            flex = 0
+        # ΜΟΝΟ η φυσική παρουσία συγκρίνεται: η τηλεεργασία δεν χτυπά κάρτα
+        physical, _tele = cp.split_telework(self.declared_on(d))
+        ok = cp.day_matches(physical, cp.schedule_text(actual), flex, tol, step)
+        return "schedule" if ok else "card"
 
     def _sync_attendance(self, d: date) -> None:
         """Ξαναϋπολογίζει την παρουσία των ημερών που αγγίζει μια διέλευση
@@ -959,8 +1055,11 @@ class EmploymentState:
 
     # ------------------------------------------- Κάλυψη προγράμματος στο ΕΡΓΑΝΗ
     def active_on(self, d: date) -> bool:
-        """Ενεργή απασχόληση την ημέρα `d` (εντός πρόσληψης → αποχώρησης)."""
-        return (self.hire_date is None or d >= self.hire_date) and (
+        """Ενεργή απασχόληση την ημέρα `d` ΓΙΑ ΑΥΤΟ το σύστημα (ανάληψη →
+        αποχώρηση). Σε μεταφορά οι ημέρες πριν την `payroll_start` ανήκουν στο
+        προηγούμενο πρόγραμμα: χωρίς πρόγραμμα εργασίας, παρουσίες ή ΕΡΓΑΝΗ."""
+        start = self.payroll_start
+        return (start is None or d >= start) and (
             self.termination_date is None or d <= self.termination_date
         )
 
@@ -1665,6 +1764,7 @@ class Projections:
             )
             day.sort(key=lambda p: (p["m"], 0 if p["kind"] == "in" else 1))
             emp._sync_attendance(event.punch_date)
+            emp.card_checked.discard((event.punch_date.year, event.punch_date.month))
             self.card_pulse += 1
 
         elif isinstance(event, CardPunchCancelled):
@@ -1679,8 +1779,25 @@ class Projections:
                     else:
                         del emp.card_punches[d]
                     emp._sync_attendance(d)
+                    emp.card_checked.discard((d.year, d.month))
                     break
             self.card_pulse += 1
+
+        elif isinstance(event, CardMonthChecked):
+            self.employments[event.employee_id].card_checked.add(
+                (event.year, event.month)
+            )
+
+        elif isinstance(event, MonthPayBasisChosen):
+            self.employments[event.employee_id].pay_basis[
+                (event.year, event.month)] = (event.basis, bool(event.retro))
+
+        elif isinstance(event, RetroAbsenceReasonSet):
+            reasons = self.employments[event.employee_id].absence_reasons
+            if event.code:
+                reasons[event.day] = event.code
+            else:
+                reasons.pop(event.day, None)
 
         elif isinstance(event, LeaveRecorded):
             self.employments[event.employee_id].leaves.append(event)
@@ -1708,6 +1825,9 @@ class Projections:
                 end = _add_months(start, months)
                 emp.childcare_reduction.append((start, end - timedelta(days=1), hours))
                 start = end
+
+        elif isinstance(event, ChildBirthRecorded):
+            self.employments[event.employee_id].child_birth_date = event.birth_date
 
         elif isinstance(event, SicknessBenefitRecorded):
             # Νέα καταχώρηση αντικαθιστά την προηγούμενη (διόρθωση ποσού)

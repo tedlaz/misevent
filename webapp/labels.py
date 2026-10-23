@@ -9,6 +9,13 @@ from misevent.rules import obligation_types as ot
 
 DUE_SOON_DAYS = 14  # πορτοκαλί: λήγει εντός Χ ημερών
 
+# Επιδοτήσεις εισφορών ανά κωδ. ΑΠΔ — ΜΙΑ πηγή για τις αποδείξεις (UI + PDF)
+SUBSIDY_LABELS = {
+    "102": "Επιδότηση εργατικής εισφοράς (ΔΥΠΑ, ΑΠΔ κωδ. 102)",
+    "103": "Μείωση εισφοράς μητέρας (ν. 3655/2008, ΑΠΔ κωδ. 103)",
+    "107": "Επιδότηση εισφοράς νέων έως 25 (ν. 4583/2018, ΑΠΔ κωδ. 107)",
+}
+
 # Μήνες σε ΓΕΝΙΚΗ («Μισθοδοσία Απριλίου 2026») — index 1..12.
 # ΜΙΑ πηγή αλήθειας: τη διαβάζουν και οι εκτυπώσεις PDF.
 MONTHS_GEN = (
@@ -41,6 +48,13 @@ OB_ICONS = ot.ICONS
 # στήλη κάθε τύπου — ΜΙΑ πηγή αλήθειας: το μητρώο `obligation_types`.
 OB_TRACKS = ot.TRACK_OF
 TRACKS = ot.TRACKS
+
+# Τρόπος υπολογισμού των ημερών απόκλισης κάρτας (`MonthPayBasisChosen`)
+PAY_BASIS = {
+    "auto": "Αυτόματα (κανόνας συστήματος)",
+    "schedule": "Με βάση το πρόγραμμα",
+    "card": "Με βάση τα χτυπήματα κάρτας",
+}
 
 # ΚΑΤΑΣΤΑΣΗ ΑΠΑΣΧΟΛΗΣΗΣ — ετικέτα & τόνος ανά `EmploymentState.lifecycle`
 # (ΜΙΑ πηγή: το projection αποφασίζει, εδώ μόνο πώς γράφεται). Η «εκκρεμής»
@@ -215,6 +229,7 @@ EVENT_LABELS = {
     "LeaveRescheduled": "Διόρθωση άδειας",
     "SicknessBenefitRecorded": "Επίδομα ασθενείας ΕΦΚΑ",
     "ChildcareReductionSet": "Μειωμένο ωράριο φροντίδας τέκνου",
+    "ChildBirthRecorded": "Τοκετός (μείωση εισφοράς μητέρας)",
     "ErganiSubmissionRecorded": "Υποβολή ΕΡΓΑΝΗ",
     "CompanyRegistered": "Στοιχεία εργοδότη",
     "CompanyBranchDefined": "Παράρτημα εταιρείας",
@@ -234,6 +249,10 @@ EVENT_LABELS = {
     "AttendanceRecorded": "Παρουσία ημέρας",
     "CardPunchRecorded": "Χτύπημα κάρτας",
     "CardPunchCancelled": "Ακύρωση χτυπήματος κάρτας",
+    "CardMonthChecked": "Ολοκλήρωση ελέγχου κάρτας μήνα",
+    "CardPeriodChecked": "Εισαγωγή & έλεγχος κάρτας περιόδου",
+    "MonthPayBasisChosen": "Τρόπος υπολογισμού μήνα (πρόγραμμα/κάρτα)",
+    "RetroAbsenceReasonSet": "Λόγος απουσίας (απολογιστικό)",
     "AttendanceSheetApproved": "Έγκριση συγκεντρωτικού παρουσιών",
     "MonthlyPayrollCalculated": "Υπολογισμός μισθοδοσίας",
     "GiftCalculated": "Υπολογισμός Δώρου",
@@ -249,6 +268,8 @@ EVENT_LABELS = {
     "SickLeaveRulesDefined": "Παράμετρος: κανόνες ασθενείας",
     "AllowanceRulesDefined": "Παράμετρος: προσαυξήσεις κατώτατου",
     "LaborSubsidyDefined": "Παράμετρος: επιδότηση εργατικής εισφοράς",
+    "MotherSubsidyDefined": "Παράμετρος: μείωση εισφοράς μητέρας",
+    "YouthSubsidyDefined": "Παράμετρος: επιδότηση εισφοράς νέων έως 25",
     "PremiumExemptionDefined": "Παράμετρος: απαλλαγή εισφορών προσαυξήσεων",
     "SeveranceRulesDefined": "Παράμετρος: αποζημίωση απόλυσης",
     "WorkHourRulesDefined": "Παράμετρος: όρια & προσαυξήσεις ωρών",
