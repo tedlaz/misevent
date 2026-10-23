@@ -46,12 +46,15 @@
         '--rest-following-left',
         `${clamp(restMaximumEnd - timelineStart, 0, duration) * 100 / duration}%`
       );
+      // ημερήσια όρια από τις παραμέτρους ωραρίου (βλ. work_schedules._day_context)
+      const overworkFrom = Number(track.dataset.overworkFrom) || 8 * 60;
+      const overtimeFrom = Number(track.dataset.overtimeFrom) || 9 * 60;
       let worked = 0;
       bars.forEach(bar => {
         const barDuration = Number(bar.dataset.end) - Number(bar.dataset.start);
-        const normal = clamp(8 * 60 - worked, 0, barDuration);
+        const normal = clamp(overworkFrom - worked, 0, barDuration);
         const overwork = Math.max(
-          0, clamp(9 * 60 - worked, 0, barDuration) - normal
+          0, clamp(overtimeFrom - worked, 0, barDuration) - normal
         );
         const normalEnd = barDuration ? normal * 100 / barDuration : 0;
         const overworkEnd = barDuration

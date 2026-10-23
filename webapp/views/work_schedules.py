@@ -12,7 +12,7 @@ from datetime import date, datetime, timedelta
 from flask import Blueprint, abort, render_template, request
 
 from misevent.integrations import card_punches as cp
-from misevent.rules import constraints
+from misevent.rules import config, constraints
 
 from ..clock import today
 from ..helpers import flash_to, form_date, live_done, modal_error, run_command
@@ -73,6 +73,7 @@ def _leave_on(employment, day: date):
 
 def _day_context(selected: date, focus_id=None, supplied=None) -> dict:
     rows = []
+    rules = config.work_hour_rules_for(selected)
     for employment in sorted(
         (item for item in proj.employments.values() if item.hire_submitted),
         key=lambda item: item.full_name,
@@ -123,6 +124,12 @@ def _day_context(selected: date, focus_id=None, supplied=None) -> dict:
                     LEAVE_LABELS.get(leave.leave_type.value, leave.leave_type.value)
                     if leave else ""
                 ),
+                # ΗΜΕΡΗΣΙΑ όρια χρωματισμού της μπάρας (παράμετροι ωραρίου,
+                # κατά το σύστημα του εργαζομένου) — ίδια με την κατάταξη
+                # `work_hours.classify_shifts`, χωρίς το εβδομαδιαίο σκέλος
+                "overwork_from": rules.daily_overwork_start * 60,
+                "overtime_from": (rules.daily_legal_5 if employment.weekly_system == 5
+                                  else rules.daily_legal_6) * 60,
                 "minimum_start": max(0, minimum_start),
                 "maximum_end": min(33 * 60, maximum_end),
                 # ΧΤΥΠΗΜΑΤΑ ΚΑΡΤΑΣ (ακριβείς ώρες) — μόνο προβολή, κάτω από
@@ -165,6 +172,7 @@ def _day_context(selected: date, focus_id=None, supplied=None) -> dict:
         "timeline_minutes": timeline_end - timeline_start,
         "slots": slots,
         "counts": counts,
+        "rules": rules,
     }
 
 

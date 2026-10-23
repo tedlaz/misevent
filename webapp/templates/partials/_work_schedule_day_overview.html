@@ -34,9 +34,12 @@
       </div>
 
       <div class="work-day-legend">
-        <span><i class="work-shift-key regular"></i>Κανονική · έως 8ω</span>
-        <span><i class="work-shift-key overwork"></i>Υπερεργασία · 8–9ω</span>
-        <span><i class="work-shift-key overtime"></i>Υπερωρία · πάνω από 9ω</span>
+        {# Ημερήσια όρια από τις παραμέτρους ωραρίου· η ακριβής κατάταξη
+           (εβδομαδιαίο όριο, πρόσθετη μερικής) γίνεται στη μισθοδοσία #}
+        {% set ow, l5, l6 = rules.daily_overwork_start, rules.daily_legal_5, rules.daily_legal_6 %}
+        <span><i class="work-shift-key regular"></i>Κανονική · έως {{ ow }}ω</span>
+        <span><i class="work-shift-key overwork"></i>Υπερεργασία · {{ ow }}–{{ l5 }}ω (πενθήμερο)</span>
+        <span><i class="work-shift-key overtime"></i>Υπερωρία · πάνω από {{ l5 }}ω (εξαήμερο: {{ l6 }}ω)</span>
         <span><i class="work-shift-key telework"></i>Τηλεργασία</span>
         <span><i class="work-time-key night"></i>Νυχτερινές ώρες</span>
         <span><i class="work-time-key next-day"></i>Επόμενη ημέρα · μόνο λήξη</span>
@@ -74,6 +77,7 @@
             <div class="work-shift-track {{ 'focused' if focus_id == row.employment.employment_id }}"
                  data-shift-track data-employment-id="{{ row.employment.employment_id }}"
                  data-min-start="{{ row.minimum_start }}" data-max-end="{{ row.maximum_end }}"
+                 data-overwork-from="{{ row.overwork_from }}" data-overtime-from="{{ row.overtime_from }}"
                  title="Double click για δημιουργία ωραρίου">
               <input type="hidden" name="hours_{{ row.employment.employment_id }}"
                      value="{{ row.raw }}" data-schedule-input>
