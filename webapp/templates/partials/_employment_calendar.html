@@ -6,7 +6,7 @@
      hx-trigger="ecal-refresh from:body" hx-swap="outerHTML">
   <div class="ecal-keys">
     {% for k, lbl in [('plan', 'Ψηφιακή οργάνωση χρόνου εργασίας'),
-                      ('punch', 'Κάρτα εργασίας'), ('overtime', 'Υπερωρία'),
+                      ('punch', 'Κάρτα εργασίας'), ('overtime', 'Πέραν ωραρίου'),
                       ('leave', 'Άδειες')] %}
       <label><input type="checkbox" checked data-k="{{ k }}">
         <i class="ecal-key {{ k }}"></i>{{ lbl }}</label>

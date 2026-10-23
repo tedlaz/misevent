@@ -1050,13 +1050,27 @@ def modal_close():
     return ""
 
 
-# ponytail: υπερωρία = ό,τι ξεπερνά τις 9 ώρες κάρτας της ημέρας (ίδιο όριο
-# με το modal ημέρας)· η ακριβής κατάταξη είναι στο `svc.hours_analysis`.
-_OVERTIME_AFTER = 9 * 60
+# Ώρες ΠΕΡΑΝ ωραρίου στο ημερολόγιο — ετικέτα ανά κλάση της κατάταξης
+_OVER_LABELS = {"extra": "ΠΡΟΣΘΕΤΗ ΕΡΓΑΣΙΑ", "overwork": "ΥΠΕΡΕΡΓΑΣΙΑ",
+                "overtime": "ΥΠΕΡΩΡΙΑ", "illegal": "ΠΑΡΑΝΟΜΗ ΥΠΕΡΩΡΙΑ"}
 
 
-def _calendar_day(e, d: date) -> list:
-    """Τα στοιχεία μιας ημέρας του ημερολογίου: [(κατηγορία, ώρες, ετικέτα)]."""
+def _over_hours(e, year: int, month: int) -> dict:
+    """{ημέρα: {κλάση: ώρες}} πέραν ωραρίου — η ΙΔΙΑ κατάταξη με τη
+    μισθοδοσία (`svc.month_premiums`): ανοχή κάρτας, στρογγυλοποίηση,
+    πρόσθετη/υπερεργασία/υπερωρία κατά το εβδομαδιαίο ωράριο."""
+    out = {}
+    for day in svc.month_premiums(e, year, month)["days"]:
+        for ln in day["lines"]:
+            if ln["cls"] in _OVER_LABELS:
+                cls = out.setdefault(day["day"], {})
+                cls[ln["cls"]] = cls.get(ln["cls"], 0) + ln["hours"]
+    return out
+
+
+def _calendar_day(e, d: date, over: dict | None = None) -> list:
+    """Τα στοιχεία μιας ημέρας του ημερολογίου: [(κατηγορία, ώρες, ετικέτα)].
+    `over` = `_over_hours` του μήνα της (αλλιώς υπολογίζεται εδώ)."""
     if not e.active_on(d):
         return []
     leave = next((lv for lv in e.active_leaves()
@@ -1070,7 +1084,6 @@ def _calendar_day(e, d: date) -> list:
     # ταίρι από το ΠΡΟΓΡΑΜΜΑ (όχι πραγματικό χτύπημα): δείχνεται κενό
     from_schedule = {p["id"] for x in (d - timedelta(days=1), d, d + timedelta(days=1))
                      for p in e.punches_on(x) if p.get("source") == "schedule"}
-    worked = 0
     for s in e.card_shifts(d):
         a = cp.hhmm(s["s"]) if s["s"] is not None else "?"
         b = cp.hhmm(s["e"]) if s["e"] is not None else "?"
@@ -1083,11 +1096,11 @@ def _calendar_day(e, d: date) -> list:
             out.append(("punch orphan", f"{a}-{b}", "ΟΡΦΑΝΟ ΧΤΥΠΗΜΑ"))
         else:
             out.append(("punch", f"{a}-{b}", "ΚΑΡΤΑ ΕΡΓΑΣΙΑΣ"))
-        if s["s"] is not None and s["e"] is not None:
-            worked += s["e"] - s["s"]
-    if worked > _OVERTIME_AFTER:
-        extra = worked - _OVERTIME_AFTER
-        out.append(("overtime", f"+{extra // 60}:{extra % 60:02d}", "ΥΠΕΡΩΡΙΑ"))
+    if over is None:
+        over = _over_hours(e, d.year, d.month)
+    for cls, h in over.get(d, {}).items():
+        m = round(h * 60)
+        out.append(("overtime", f"+{m // 60}:{m % 60:02d}", _OVER_LABELS[cls]))
     # ΑΠΟΥΣΙΑ (απολογιστικό): λιγότερες ώρες κάρτας από το πρόγραμμα -> λόγος
     if proj.schedule_system_on(d) == "retro":
         code = e.absence_reasons.get(d, "")
@@ -1186,9 +1199,13 @@ def calendar(employment_id):
     start = first - timedelta(days=first.weekday())
     last = first.replace(day=monthrange(first.year, first.month)[1])
     weeks = []
+    over = {}
+    for y, m in {(start.year, start.month), (first.year, first.month),
+                 ((last + timedelta(days=6)).year, (last + timedelta(days=6)).month)}:
+        over.update(_over_hours(e, y, m))
     d = start
     while d <= last:
-        weeks.append([(d + timedelta(days=i), _calendar_day(e, d + timedelta(days=i)))
+        weeks.append([(d + timedelta(days=i), _calendar_day(e, d + timedelta(days=i), over))
                       for i in range(7)])
         d += timedelta(days=7)
     # ονόματα αργιών (το πλέγμα μπορεί να περνά σε γειτονικό έτος)
