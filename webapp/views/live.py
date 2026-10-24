@@ -1,5 +1,6 @@
 """
-Ζωντανή εικόνα ημέρας — grid πραγματικού χρόνου.
+Ζωντανή εικόνα ημέρας — grid πραγματικού χρόνου (κάρτα της Επισκόπησης· το
+`/live/` ανακατευθύνει εκεί, εδώ μένουν τα endpoints δεδομένων του widget).
 
 ΜΙΑ γραμμή ανά ενεργή απασχόληση: οριζόντια μπάρα από την ώρα έναρξης έως
 την ώρα λήξης του ΠΡΟΓΡΑΜΜΑΤΟΣ, από κάτω η ΠΡΑΓΜΑΤΙΚΗ παρουσία με τα
@@ -23,7 +24,7 @@ htmx (`hx-trigger="every 60s"`), η κύλιση/ώρα από το `static/live
 
 from datetime import date, timedelta
 
-from flask import Blueprint, jsonify, render_template, request
+from flask import Blueprint, jsonify, redirect, render_template, request, url_for
 
 from misevent.domain.events import LeaveType
 
@@ -53,11 +54,17 @@ def _context():
     return {**q.live_board(day, base, days), "live": not is_simulated()}
 
 
-@bp.get("/")
-def index():
+def board_context() -> dict:
+    """Ό,τι χρειάζεται το `partials/_live_board.html` (κάρτα της Επισκόπησης)."""
     # Μενού τύπου άδειας (μήνας: double click αρχή -> double click τέλος)
     leave_types = [(k.name, LEAVE_LABELS[k.value]) for k in LeaveType]
-    return render_template("live.html", leave_types=leave_types, **_context())
+    return {**_context(), "leave_types": leave_types}
+
+
+@bp.get("/")
+def index():
+    """Η σελίδα καταργήθηκε — το widget ζει στην Επισκόπηση (παλιοί σύνδεσμοι)."""
+    return redirect(url_for("dashboard.index"))
 
 
 @bp.get("/rows")

@@ -78,10 +78,10 @@
          title="{{ r.name }}{% if r.specialty %} · {{ r.specialty }}{% endif %}
 {{ day|date_gr }}: {% if r.leave %}{{ r.leave }}{% elif r.start is none %}ρεπό{% else %}πρόγραμμα {{ '%g'|format(r.hours) }}ω{% if r.worked %} · παρουσία {{ '%g'|format(r.worked) }}ω{% endif %}{% endif %}">{{ r.name }}</a>
       {% if r.declared == 'pending' %}
-        <a class="lb-flag pend" href="{{ url_for('work_schedules.index') }}"
+        <a class="lb-flag pend" href="{{ url_for('ergani.index') }}"
            title="Αδήλωτο πρόγραμμα στο ΕΡΓΑΝΗ — υποβολή">!</a>
       {% elif r.declared == 'modified' %}
-        <a class="lb-flag mod" href="{{ url_for('work_schedules.index') }}"
+        <a class="lb-flag mod" href="{{ url_for('ergani.index') }}"
            title="Το πρόγραμμα άλλαξε μετά τη δήλωση στο ΕΡΓΑΝΗ — υποβολή">~</a>
       {% endif %}
     </div>

@@ -8,9 +8,12 @@
 """
 
 import uuid
+from datetime import timedelta
 
+import misevent.integrations.ergani as ergani_mod
 from misevent.domain.events import (
     LeaveCancelled,
+    LeaveDeclarationSubmitted,
     LeaveRecorded,
     LeaveRescheduled,
     LeaveType,
@@ -79,7 +82,76 @@ class LeavesMixin:
         # Άδεια που ξεκινά σε κλεισμένη περίοδο έχει ήδη μετρήσει σε
         # μισθοδοσία/ημέρες ΕΦΚΑ — δεν ακυρώνεται αναδρομικά.
         self._check_open_period(lv.date_from, "ακύρωση άδειας")
+        self._check_leave_not_declared(emp, lv, "ακυρώνεται")
         self.store.append(employee_id, LeaveCancelled(employee_id, leave_id))
+
+    def leave_declared_to_ergani(self, employee_id, leave_id) -> bool:
+        """Έχει δηλωθεί στο ΕΡΓΑΝΗ έστω μία ημέρα της άδειας (= κλειδωμένη);"""
+        emp = self.proj.employments.get(employee_id)
+        lv = emp and next((x for x in emp.active_leaves() if x.leave_id == leave_id), None)
+        if not lv:
+            return False
+        days = (lv.date_from + timedelta(days=i)
+                for i in range((lv.date_to - lv.date_from).days + 1))
+        return any(d in emp.leave_declared for d in days)
+
+    def _check_leave_not_declared(self, emp, lv, verb: str):
+        """Η άδεια δηλώνεται στο ΕΡΓΑΝΗ ΑΦΟΥ ληφθεί (τον επόμενο μήνα): μετά
+        τη δήλωση δεν αλλάζει τίποτα πάνω της — ούτε ακύρωση ούτε διόρθωση."""
+        if self.leave_declared_to_ergani(emp.employment_id, lv.leave_id):
+            raise ValueError(f"Η άδεια έχει δηλωθεί στο ΕΡΓΑΝΗ — δεν {verb}")
+
+    # ------------------------------------------- Δήλωση αδειών (WTOLeave)
+    def leave_declaration_proposal(self, year: int, month: int) -> dict:
+        """Οι ΑΔΗΛΩΤΕΣ ημέρες άδειας του μήνα: {eid: {date: (κωδικός, έτος,
+        δικαιούμενες)}}. Μόνο ημέρες ΠΡΟΓΡΑΜΜΑΤΟΣ (τα ρεπό μένουν ΑΝ) και μόνο
+        απασχολήσεις με αναγγελία πρόσληψης. Έτος/δικαιούμενες: κανονική άδεια."""
+        out = {}
+        for eid, emp in self.proj.employments.items():
+            if not emp.hire_submitted:
+                continue
+            leaves = emp.active_leaves()
+            days = {}
+            for d in emp.scheduled_days_in_month(year, month):
+                lv = next((x for x in leaves if x.date_from <= d <= x.date_to), None)
+                if lv is None or d in emp.leave_declared:
+                    continue
+                annual = lv.leave_type == LeaveType.ANNUAL
+                days[d] = (ergani_mod.LEAVE_CODES[lv.leave_type.value],
+                           d.year if annual else None,
+                           self.annual_leave_entitlement(eid, d.year) if annual else None)
+            if days:
+                out[eid] = days
+        return out
+
+    def submit_leave_declaration(self, year: int, month: int) -> dict:
+        """ΥΠΟΒΟΛΗ της δήλωσης αδειών του μήνα (υποχρέωση LEAVE_DECLARATION):
+        ΟΛΟΙ οι εργαζόμενοι σε ΜΙΑ κλήση WTOLeave. Κλείνει την υποχρέωση·
+        χωρίς τίποτα αδήλωτο απλώς την κλείνει. Απόρριψη = καμία κάλυψη."""
+        proposal = self.leave_declaration_proposal(year, month)
+        res = {"count": sum(map(len, proposal.values())),
+               "employees": len(proposal), "reference": ""}
+        if proposal:
+            if self.proj.company is None:
+                raise ValueError("Δεν έχουν καταχωρηθεί στοιχεία εταιρείας")
+            sent = self._ergani_submit(
+                "WTOLeave",
+                next(iter(proposal)) if len(proposal) == 1 else "",
+                ergani_mod.merge_wto([
+                    ergani_mod.build_wto_leave(self.proj.employments[eid], days)
+                    for eid, days in proposal.items()
+                ]),
+            )
+            if sent["status"] == "failed":
+                raise ValueError("ΑΠΕΡΡΙΨΕ το ΕΡΓΑΝΗ — " + sent["reference"])
+            res["reference"] = sent["reference"]
+        self.store.append("COMPANY", LeaveDeclarationSubmitted(
+            year, month,
+            {eid: {d.isoformat(): v[0] for d, v in days.items()}
+             for eid, days in proposal.items()},
+            res["reference"],
+        ))
+        return res
 
     def reschedule_leave(
         self, employee_id, leave_id, leave_type: LeaveType, date_from, date_to, notes=""
@@ -101,6 +173,7 @@ class LeavesMixin:
             raise ValueError("Δεν βρέθηκε ενεργή άδεια με αυτό το id")
         if date_to < date_from:
             raise ValueError("Η ημερομηνία λήξης προηγείται της έναρξης")
+        self._check_leave_not_declared(emp, old, "τροποποιείται")
         # Κλειδωμένη και η ΠΑΛΙΑ και η ΝΕΑ θέση της άδειας: ούτε να φύγει από
         # κλεισμένη περίοδο, ούτε να μπει σε αυτήν.
         self._check_open_days({old.date_from, date_from}, "μεταβολή άδειας")

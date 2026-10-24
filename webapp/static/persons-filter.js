@@ -1,6 +1,6 @@
 /* Φίλτρα της οθόνης Εργαζόμενοι — κρύβει γραμμές του #persons-table.
  *
- * Ο server βάζει σε κάθε <tr> data-status / data-specialty / data-search
+ * Ο server βάζει σε κάθε <tbody> (πρόσωπο + προσλήψεις) data-status / data-specialties (|) / data-search
  * (ήδη κανονικοποιημένο: κεφαλαία χωρίς τόνους + ΑΦΜ/ΑΜΚΑ/ΑΜΑ). Ξαναεφαρμόζεται
  * μετά από κάθε swap του htmx (καταχώρηση, εισαγωγή κ.λπ.).
  */
@@ -15,12 +15,12 @@
     const q = norm(form.querySelector("[name=q]").value);
     const status = form.querySelector("[name=status]").value;
     const spec = form.querySelector("[name=specialty]").value;
-    const rows = table.querySelectorAll("tbody tr");
+    const rows = table.querySelectorAll("tbody");
     let shown = 0;
     for (const tr of rows) {
       const ok =
         (!status || tr.dataset.status === status) &&
-        (!spec || tr.dataset.specialty === spec) &&
+        (!spec || tr.dataset.specialties.split("|").includes(spec)) &&
         q.split(/\s+/).every((w) => tr.dataset.search.includes(w));
       tr.hidden = !ok;
       if (ok) shown++;

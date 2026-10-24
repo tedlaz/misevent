@@ -221,3 +221,65 @@ def test_leave_taken_during_the_year_means_no_december_obligation():
     svc.record_leave(eid, LeaveType.ANNUAL, date(2026, 3, 16), date(2026, 3, 20))
     _close_november(svc, eid, 2026)
     assert _allowance_obs(proj, 2026) == {(3, False)}  # μόνο ο μήνας της άδειας
+
+
+def test_december_preview_before_november_closes(fresh_system):
+    """Πριν γεννηθεί η υποχρέωση Δεκεμβρίου, η /payroll δείχνει ΗΔΗ όσους δεν
+    πήραν άδεια — προεπισκόπηση με την παραδοχή ότι εργάζονται έως 31/12,
+    χωρίς κουμπί υπολογισμού (`expected`)."""
+    from webapp import create_app
+    from webapp import queries as q
+    from webapp.clock import today
+    from webapp.system import proj, svc
+
+    app = create_app()
+    c = _bootstrap.ui_client(app)
+    assert _bootstrap.seed(c).status_code == 200
+
+    with app.test_request_context("/"):
+        year = today().year
+        assert 12 not in {m for m, _ in _allowance_obs(proj, year)}
+        dec = svc.allowance_beneficiaries(year, 12)
+        assert dec, "αναμενόταν εργαζόμενος χωρίς άδεια"
+        periods = {p["month"]: p for p in q.allowance_periods(year)}
+        p = periods[12]
+        assert p["expected"] and not p["done"]
+        names = {r["Εργαζόμενος"] for r in p["rows"]}
+        assert {e.full_name for e in dec} <= names
+
+
+def test_earlier_leave_moves_the_period_without_a_second_allowance():
+    """Άδεια Οκτωβρίου, ΜΕΤΑ άδεια Σεπτεμβρίου: η περίοδος μετακινείται στον
+    Σεπτέμβριο και η υποχρέωση Οκτωβρίου (χωρίς δικαιούχο πια) ΚΛΕΙΝΕΙ —
+    ένα επίδομα ανά απασχόληση και έτος, όχι δύο."""
+    svc, proj, eid = setup(date(2026, 1, 5), horizon=12)
+    svc.record_leave(eid, LeaveType.ANNUAL, date(2026, 10, 12), date(2026, 10, 13))
+    assert _allowance_obs(proj, 2026) == {(10, False)}
+    svc.record_leave(eid, LeaveType.ANNUAL, date(2026, 9, 14), date(2026, 9, 15))
+    assert _allowance_obs(proj, 2026) == {(9, False), (10, True)}
+    assert svc.allowance_beneficiaries(2026, 10) == []
+
+
+def test_calculated_allowance_freezes_its_period():
+    """Υπολογισμένο επίδομα Οκτωβρίου + μεταγενέστερη άδεια Σεπτεμβρίου: ο
+    εργαζόμενος ΜΕΝΕΙ στον Οκτώβριο — καμία νέα υποχρέωση, κανένα 2ο επίδομα."""
+    svc, proj, eid = setup(date(2026, 1, 5), horizon=12)
+    svc.record_leave(eid, LeaveType.ANNUAL, date(2026, 10, 12), date(2026, 10, 13))
+    svc.run_leave_allowance(2026, 10)
+    svc.record_leave(eid, LeaveType.ANNUAL, date(2026, 9, 14), date(2026, 9, 15))
+    assert proj.employments[eid].allowance_period_month(2026) == 10
+    assert _allowance_obs(proj, 2026) == {(10, True)}
+    assert svc.allowance_beneficiaries(2026, 9) == []
+
+
+def test_orphan_allowance_closes_on_load():
+    """Ορφανή υποχρέωση από πριν τον έλεγχο (ανοιχτή, χωρίς δικαιούχο):
+    κλείνει με τη φόρτωση του scheduler, χωρίς να χρειαστεί αλλαγή άδειας."""
+    from misevent.domain.events import ObligationScheduled
+
+    svc, proj, eid = setup(date(2026, 1, 5), horizon=12)
+    svc.store.append("COMPANY", ObligationScheduled(
+        "orphan01", "LEAVE_ALLOWANCE", date(2026, 10, 30), "", 2026, 10))
+    assert _allowance_obs(proj, 2026) == {(10, False)}
+    ObligationScheduler(svc.store, proj)
+    assert _allowance_obs(proj, 2026) == {(10, True)}

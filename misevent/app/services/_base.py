@@ -16,6 +16,9 @@ from misevent.persistence.documents import DocumentStore
 PERSON_DOCUMENT_KINDS = {
     "foreign_file": "Νομιμοποιητικά έγγραφα πολίτη τρίτης χώρας",
     "young_file": "Βιβλιάριο ανηλίκου",
+    # Η δήλωση οικειοθελούς αποχώρησης: αποθηκεύεται στην αποχώρηση και
+    # επισυνάπτεται στο WebE5N όταν σταλεί από την οθόνη ΕΡΓΑΝΗ
+    "resignation": "Δήλωση αποχώρησης",
 }
 MAX_DOCUMENT_BYTES = 10 * 1024 * 1024
 
@@ -94,7 +97,7 @@ class ServiceBase:
 
     # ------------------------------------------------------------ ΕΡΓΑΝΗ
     def _ergani_submit(self, doc_type: str, employee_id: str, payload: dict,
-                       endpoint: str = ""):
+                       endpoint: str = "", subject: str = ""):
         """Υποβολή στο ΕΡΓΑΝΗ + καταγραφή ως event. Αποτυχία δικτύου
         καταγράφεται ως failed χωρίς να μπλοκάρει την τοπική ενέργεια.
         Το event κρατά το payload με τα συνημμένα PDF ΣΥΝΟΠΤΙΚΑ (μέγεθος +
@@ -114,6 +117,7 @@ class ServiceBase:
                 res["status"],
                 res["reference"],
                 self.ergani.environment,
+                subject,
             ),
         )
         return res

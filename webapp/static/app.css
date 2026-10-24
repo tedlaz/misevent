@@ -91,6 +91,29 @@ main{max-width:1240px;margin:0 auto;padding:20px 24px;display:flex;
 .card h2{font-size:12px;font-weight:600;letter-spacing:.12em;
   text-transform:uppercase;color:var(--muted);margin-bottom:14px}
 .card h2 .norm{text-transform:none;letter-spacing:0;font-weight:500}
+/* JSON ΥΠΟΒΟΛΗΣ ΕΡΓΑΝΗ (_ergani_json_modal.html) */
+.jt-raw{white-space:pre-wrap;word-break:break-word;margin:0;padding:12px;
+  background:var(--paper);border:1px solid var(--line);border-radius:8px;
+  font-family:var(--mono);font-size:12px;line-height:1.5}
+/* ΤΑΞΙΝΟΜΗΣΙΜΟΣ ΠΙΝΑΚΑΣ (table-sort.js): βέλος στη στήλη ταξινόμησης */
+table[data-sortable] th:not([data-nosort]){cursor:pointer;user-select:none}
+table[data-sortable] th:not([data-nosort]):hover{color:var(--ink)}
+table[data-sortable] th[aria-sort]::after{content:" ▲";font-size:9px}
+table[data-sortable] th[aria-sort="descending"]::after{content:" ▼"}
+/* Γραμμή φίλτρων (data-filterable): ένα πεδίο ανά στήλη, κάτω από τις κεφαλίδες */
+table.tbl tr.tbl-filter th{padding-top:0;cursor:default}
+tr.tbl-filter input{width:100%;min-width:60px;font-size:12px;padding:3px 6px;
+  text-transform:none;letter-spacing:0;font-weight:400}
+/* ΠΤΥΣΣΟΜΕΝΗ ΚΑΡΤΑ: <details class="card fold"> με το <h2> μέσα στο <summary>
+   (μνήμη ανά κάρτα: nav-fold.js, data-fold) */
+details.fold>summary{display:flex;align-items:center;cursor:pointer;list-style:none}
+details.fold>summary::-webkit-details-marker{display:none}
+details.fold>summary h2{margin:0;flex:1}
+details.fold[open]>summary{margin-bottom:14px}
+details.fold>summary::after{content:"›";font-size:18px;line-height:1;color:var(--muted);
+  transition:transform .2s var(--ease)}
+details.fold[open]>summary::after{transform:rotate(90deg)}
+details.fold>summary:hover h2,details.fold>summary:hover::after{color:var(--ink)}
 
 /* ------------------------------------------------------ κάρτες κατάστασης */
 .stats{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}
@@ -242,6 +265,12 @@ table.tbl tr.sub td{border-bottom:0;background:var(--paper);
   color:var(--muted);font-size:12.5px}
 table.tbl a.lnk{font-weight:600;border-bottom:1px solid var(--line)}
 table.tbl a.lnk:hover{border-color:var(--ink)}
+/* Δέντρο: <tbody class="tree"> = ρίζα + παιδιά, κλειστό εκτός αν .open */
+table.tbl tbody.tree:not(.open) tr.tree-child{display:none}
+table.tbl tr.tree-child td{background:var(--paper);font-size:12.5px}
+table.tbl tr.tree-child td:first-child{padding-left:36px}
+.tree-tog{padding:0 6px;margin-right:4px;transition:transform .15s}
+tbody.tree.open .tree-tog{transform:rotate(90deg)}
 
 /* ---------------------------------------------- πίνακας λεπτομερειών */
 .detail table{width:100%;border-collapse:collapse;font-size:12.5px;
@@ -1709,8 +1738,9 @@ button.pick>span:first-of-type{flex:1}
 .obcol .ob .m{font-size:11.5px}
 .obcol .ob .pill{font-size:10.5px;padding:2px 7px}
 
-.obcol-payroll{--tc:#4C7FD1;--tc-bg:#EAF1FA}
-.obcol-submission{--tc:#2E86A0;--tc-bg:#E4F1F5}
+/* Φόντο κεφαλίδας από το χρώμα της στήλης πάνω στο --card: ακολουθεί το θέμα */
+.obcol-payroll{--tc:#4C7FD1;--tc-bg:color-mix(in srgb,var(--tc) 12%,var(--card))}
+.obcol-submission{--tc:#2E86A0;--tc-bg:color-mix(in srgb,var(--tc) 12%,var(--card))}
 .obcol-payment{--tc:var(--ready);--tc-bg:var(--ready-bg)}
 
 /* Το modal λεπτομερειών φέρει την κλάση `detail` ΣΤΟ ΙΔΙΟ ΤΟ .modal, ώστε να
@@ -2572,7 +2602,7 @@ nav.side .co{font-size:11.5px}
 .ecal-nav > b{font-size:20px;font-weight:700;letter-spacing:.2px;
   background:linear-gradient(90deg,var(--ecal-plan),var(--ecal-today));
   -webkit-background-clip:text;background-clip:text;color:transparent;
-  animation:ecal-title .45s var(--ease) both}
+  animation:ecal-title .225s var(--ease) both}
 .ecal-nav button{border-radius:999px;min-width:34px}
 .ecal-grid{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:6px}
 .ecal-h{font-size:11px;font-weight:700;text-align:center;padding:4px 0 2px;
@@ -2581,7 +2611,7 @@ nav.side .co{font-size:11.5px}
 .ecal-d{position:relative;min-height:100px;padding:6px 6px 8px;min-width:0;cursor:pointer;
   background:var(--card);border:1px solid var(--line);border-radius:12px;box-shadow:var(--sh-1);
   transition:transform .2s var(--spring),box-shadow .2s var(--ease),border-color .2s;
-  animation:ecal-in .4s var(--ease) both;animation-delay:calc(var(--i,0) * 12ms)}
+  animation:ecal-in .2s var(--ease) both;animation-delay:calc(var(--i,0) * 6ms)}
 /* Σαββατοκύριακα (στήλες 6, 7 — οι 7 επικεφαλίδες μετρούν ως πρώτη σειρά) */
 .ecal-d:nth-child(7n+6),.ecal-d:nth-child(7n){background:color-mix(in srgb,var(--paper) 70%,var(--card))}
 .ecal-d:hover,.ecal-d:focus-visible{transform:translateY(-3px);box-shadow:var(--sh-3);
@@ -2601,9 +2631,9 @@ nav.side .co{font-size:11.5px}
 .ecal-d.today .ecal-n b{color:#fff;background:linear-gradient(135deg,var(--ecal-plan),var(--ecal-today));
   animation:ecal-pulse 2.4s ease-out infinite}
 .ecal-d.issue{border-color:#F07F00;box-shadow:0 0 0 2px color-mix(in srgb,#F07F00 30%,transparent)}
-.ecal-d.issue.bad{border-color:#C62828;animation:ecal-in .4s var(--ease) both,ecal-shake .5s .6s both;
+.ecal-d.issue.bad{border-color:#C62828;animation:ecal-in .2s var(--ease) both,ecal-shake .25s .3s both;
   box-shadow:0 0 0 2px color-mix(in srgb,#C62828 30%,transparent)}
-.ecal-check{margin:0 0 12px;font-size:13px;animation:ecal-in .35s var(--ease) both}
+.ecal-check{margin:0 0 12px;font-size:13px;animation:ecal-in .175s var(--ease) both}
 .ecal-ok{color:#11A34B;font-weight:600;padding:8px 12px;border-radius:10px;
   background:color-mix(in srgb,#11A34B 9%,var(--card))}
 .ecal-check ul{margin:4px 0 8px 18px}
@@ -2616,7 +2646,7 @@ nav.side .co{font-size:11.5px}
   background:color-mix(in srgb,var(--c) 12%,var(--card));color:color-mix(in srgb,var(--c) 55%,var(--ink));
   padding:3px 6px;margin-top:4px;font-size:11px;line-height:1.3;
   overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
-  animation:ecal-ev .35s var(--spring) both;animation-delay:calc(var(--i,0) * 12ms + 120ms);
+  animation:ecal-ev .175s var(--spring) both;animation-delay:calc(var(--i,0) * 6ms + 60ms);
   transition:background .2s}
 .ecal-d:hover .ecal-ev{background:color-mix(in srgb,var(--c) 20%,var(--card))}
 .ecal-ev b{display:block;font-family:var(--mono);font-weight:600}
@@ -2633,7 +2663,7 @@ nav.side .co{font-size:11.5px}
 /* Modal σύγκρισης πρόγραμμα ↔ κάρτα (_emp_card_compare_modal.html) */
 .cmp-stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:8px;margin-bottom:14px}
 .cmp-stats > div{padding:10px 12px;border:1px solid var(--line);border-radius:12px;background:var(--card);
-  box-shadow:var(--sh-1);animation:ecal-in .35s var(--ease) both}
+  box-shadow:var(--sh-1);animation:ecal-in .175s var(--ease) both}
 .cmp-stats > div:nth-child(2){animation-delay:40ms}.cmp-stats > div:nth-child(3){animation-delay:80ms}
 .cmp-stats > div:nth-child(4){animation-delay:120ms}.cmp-stats > div:nth-child(5){animation-delay:160ms}
 .cmp-stats b{display:block;font-family:var(--mono);font-size:20px}
@@ -2723,3 +2753,183 @@ nav.side .co{font-size:11.5px}
 .ob-block{border:1px solid var(--line);border-radius:10px;padding:10px 12px;background:var(--card)}
 .ob-block-h{display:flex;justify-content:space-between;gap:8px;margin-bottom:6px;font-size:13px}
 .ob-block-h .muted{font-size:11.5px}
+
+/* =========================================================== ΘΕΜΑΤΑ «HackerNoon»
+   Εμπνευσμένα από το hackernoon.com: νέον πράσινο, κίτρινη επισήμανση,
+   σκληρά περιγράμματα, «pixel» σκιές χωρίς θόλωμα, μονόχωρα headings.
+   <html data-theme="hackernoon"> (φωτεινό) ή "hackernoon-dark" (σκοτεινό) —
+   επιλογέας στο μενού, μνήμη στο localStorage (βλ. base.html).
+   Η ΜΟΡΦΗ είναι κοινή (`^=hackernoon`)· τα δύο θέματα διαφέρουν ΜΟΝΟ στα
+   tokens. Το σκοτεινό ξαναντύνει επιπλέον τις επιφάνειες με σταθερό
+   ανοιχτό χρώμα (ενότητα «σκοτεινό: επιφάνειες» πιο κάτω). */
+html[data-theme=hackernoon]{
+  --paper:#F5F5F5; --card:#FFFFFF; --ink:#101010; --muted:#4B5563;
+  --line:#101010; --line-soft:#c0c0c0;
+  --done:#6B7280; --done-bg:#E5E7EB;
+  --ready:#009900; --ready-bg:#D2FBE2; --ready-d:#006B00;
+  --warn:#C77408; --warn-bg:#FFF6C2;
+  --prob:#D1242F; --prob-bg:#FFE4E1;
+  --accent:#1B1B95; --accent-bg:#E6E6FA;
+  --hn-edge:#101010; --hn-hover:#F5EC43; --hn-brand-bg:#101010;
+  --hn-fill:#00FF00; --hn-hl:#F5EC43; --hn-radius:0;
+  --hn-bar:#00FF00; --hn-bar-ink:#101010; --hn-bar-edge:#101010;
+}
+html[data-theme=hackernoon-dark]{
+  /* σκούρο ΠΡΑΣΙΝΟ της hackernoon.com: teal μπάρα, mint γέμισμα, στρογγυλά
+     πλαίσια με λεπτό περίγραμμα αντί για σκληρές σκιές, μονόχωρα παντού */
+  color-scheme:dark;
+  --paper:#07201A; --card:#0B2A21; --ink:#E6FFEE; --muted:#8DB5A2;
+  --line:#1F4D3D; --line-soft:#163A2E;
+  --done:#7FA393; --done-bg:#12352A;
+  --ready:#63FF86; --ready-bg:#0F3A26; --ready-d:#2BC45A;
+  --warn:#FFC857; --warn-bg:#3A3112;
+  --prob:#FF6B61; --prob-bg:#3D1A17;
+  --accent:#63FF86; --accent-bg:#0F3A26;
+  --hn-edge:#1F4D3D; --hn-hover:rgba(99,255,134,.08); --hn-brand-bg:#000;
+  --hn-fill:#63FF86; --hn-hl:#63FF86; --hn-radius:10px;
+  --hn-bar:#1E6B52; --hn-bar-ink:#E6FFEE; --hn-bar-edge:#63FF86;
+  --sh-1:none; --sh-2:0 0 0 1px rgba(99,255,134,.06); --sh-3:0 18px 40px rgba(0,0,0,.5);
+}
+html[data-theme^=hackernoon]{
+  --hn-green:#00FF00; --hn-yellow:#F5EC43; --hn-on:#101010;
+  --sh-1:2px 2px 0 var(--hn-edge); --sh-2:3px 3px 0 var(--hn-edge);
+  --sh-3:6px 6px 0 var(--hn-edge);
+  --ring:0 0 0 3px var(--hn-yellow);
+  /* η IBM Plex Mono ΔΕΝ έχει ελληνικά — η Source Code Pro (και της HackerNoon) έχει */
+  --hn-font:'Source Code Pro',var(--mono);
+}
+html[data-theme^=hackernoon] :is(h1,h2,h3,.brand,nav.side summary.navgrp-h){
+  font-family:var(--hn-font)}
+html[data-theme^=hackernoon] ::selection{background:var(--hn-fill);color:var(--hn-on)}
+
+/* σκελετός: πράσινη μπάρα επάνω, «παράθυρο» με σκληρό περίγραμμα */
+html[data-theme^=hackernoon] header{background:var(--hn-bar);color:var(--hn-bar-ink);
+  border-bottom:3px solid var(--hn-bar-edge)}
+html[data-theme^=hackernoon] header :is(.sub,label.ref,a,.who){color:var(--hn-bar-ink)}
+html[data-theme^=hackernoon] nav.side{background:var(--card);
+  border-right:3px solid var(--hn-edge)}
+html[data-theme^=hackernoon] nav.side .brand{background:var(--hn-brand-bg);
+  color:var(--hn-fill);padding:6px 10px;margin-bottom:8px;border-radius:var(--hn-radius);
+  -webkit-background-clip:border-box;background-clip:border-box}
+html[data-theme^=hackernoon] nav.side a.nl.on{background:var(--hn-hl);
+  color:var(--hn-on);box-shadow:inset 4px 0 0 var(--hn-on);border-radius:var(--hn-radius)}
+html[data-theme^=hackernoon] nav.side a.nl:hover,
+html[data-theme^=hackernoon] nav.side summary.navgrp-h:hover{background:var(--hn-fill);
+  color:var(--hn-on);border-radius:var(--hn-radius)}
+
+/* κάρτες & modals: τετράγωνες γωνίες, σκληρή σκιά */
+html[data-theme^=hackernoon] :is(.card,.stat,.modal,.warnbox){border-radius:var(--hn-radius);
+  border:2px solid var(--hn-edge);box-shadow:var(--sh-2)}
+html[data-theme^=hackernoon] .modal .mhead{background:var(--hn-fill);color:var(--hn-on);
+  border-radius:var(--hn-radius);border-bottom:2px solid var(--hn-on)}
+html[data-theme^=hackernoon] .modal .mhead :is(.muted,a){color:var(--hn-on)}
+html[data-theme^=hackernoon] .modal .mfoot{background:var(--paper);border-radius:var(--hn-radius);
+  border-top:2px solid var(--hn-edge)}
+html[data-theme^=hackernoon] .modal-backdrop{background:rgba(0,0,0,.6)}
+html[data-theme^=hackernoon] .card h2{color:var(--ink)}
+
+/* κουμπιά: «πατιούνται» — η σκιά χάνεται στο :active */
+html[data-theme^=hackernoon] :is(button.run,a.run,button.ghost,a.ghost,label.ghost){
+  border-radius:var(--hn-radius);border:2px solid var(--hn-edge);box-shadow:var(--sh-1);
+  font-family:var(--hn-font);transition:transform .08s,box-shadow .08s}
+html[data-theme^=hackernoon] :is(button.ghost,a.ghost,label.ghost){
+  background:var(--card);color:var(--ink)}
+html[data-theme^=hackernoon] :is(button.run,a.run){background:var(--hn-fill);color:var(--hn-on)}
+html[data-theme^=hackernoon] button.run.danger{background:var(--prob);color:#fff}
+html[data-theme^=hackernoon] :is(button.run,a.run,button.ghost,a.ghost,label.ghost):hover{
+  background:var(--hn-hl);color:var(--hn-on)}
+html[data-theme^=hackernoon] :is(button.run,a.run,button.ghost,a.ghost,label.ghost):active{
+  transform:translate(2px,2px);box-shadow:none}
+html[data-theme^=hackernoon] button.run:disabled{background:var(--done-bg);
+  color:var(--done);box-shadow:none}
+html[data-theme^=hackernoon] button.ghost.on{background:var(--hn-brand-bg);
+  color:var(--hn-fill);border-color:var(--hn-edge)}
+
+/* φόρμες & πίνακες */
+html[data-theme^=hackernoon] :is(input:not([type=checkbox],[type=radio]),select,textarea){
+  border-radius:var(--hn-radius);border:2px solid var(--line);background:var(--card);color:var(--ink)}
+html[data-theme^=hackernoon] :is(input,select,textarea):focus{outline:none;
+  box-shadow:var(--ring)}
+html[data-theme^=hackernoon] input:is([type=checkbox],[type=radio]){accent-color:var(--ready-d)}
+html[data-theme^=hackernoon] table.tbl th{color:var(--ink);font-family:var(--hn-font)}
+html[data-theme^=hackernoon] table.tbl td{border-bottom-color:var(--line-soft)}
+html[data-theme^=hackernoon] table.tbl tbody tr:hover{background:var(--hn-hover)}
+html[data-theme^=hackernoon] table.tbl tr.tot td{background:var(--paper)}
+
+html[data-theme^=hackernoon] #toast{border-radius:var(--hn-radius);border:2px solid var(--hn-fill);
+  background:#101010;color:var(--hn-fill);font-family:var(--hn-font)}
+html[data-theme^=hackernoon] #toast.err{background:var(--prob);color:#fff;border-color:#101010}
+
+/* ------------------------------------------------ σκοτεινό: επιφάνειες
+   Ό,τι στο υπόλοιπο φύλλο έχει ΣΤΑΘΕΡΟ ανοιχτό φόντο (όχι token). Νέα
+   επιφάνεια με ανοιχτό hex; πρόσθεσέ τη εδώ — αλλιώς μένει «λευκό νησί». */
+/* σκούρο: μονόχωρα ΠΑΝΤΟΥ, τίτλοι mint κεφαλαία (όπως «TRENDING STORIES»),
+   κουμπιά-περιγράμματα σαν το «Book a Demo», μπάρα επάνω με mint τίτλο */
+html[data-theme=hackernoon-dark] body{font-family:var(--hn-font)}
+html[data-theme=hackernoon-dark] header h1{color:var(--hn-fill)}
+html[data-theme=hackernoon-dark] .card h2{color:var(--hn-fill);font-weight:700}
+html[data-theme=hackernoon-dark] .card{border-width:1px}
+html[data-theme=hackernoon-dark] :is(button.ghost,a.ghost,label.ghost){
+  background:transparent;border:1px solid var(--muted)}
+html[data-theme=hackernoon-dark] header :is(button.ghost,a.ghost){border-color:var(--hn-bar-ink);
+  color:var(--hn-bar-ink)}
+html[data-theme=hackernoon-dark] :is(button.run,a.run){border:0;font-weight:700}
+html[data-theme=hackernoon-dark] :is(button.run,a.run,button.ghost,a.ghost,label.ghost):hover{
+  background:var(--hn-fill);border-color:var(--hn-fill);color:var(--hn-on)}
+html[data-theme=hackernoon-dark] :is(button.run,a.run,button.ghost,a.ghost,label.ghost):active{
+  transform:translateY(1px)}
+html[data-theme=hackernoon-dark] nav.side{border-right:1px solid var(--line)}
+html[data-theme=hackernoon-dark] nav.side a.nl.on{box-shadow:none}
+html[data-theme=hackernoon-dark] nav.side a.nl:hover,
+html[data-theme=hackernoon-dark] nav.side summary.navgrp-h:hover{background:var(--hn-hover);
+  color:var(--hn-fill)}
+html[data-theme=hackernoon-dark] .modal .mhead{background:var(--hn-bar);color:var(--hn-bar-ink);
+  border-bottom:1px solid var(--line)}
+html[data-theme=hackernoon-dark] .modal .mhead :is(.muted,a){color:var(--hn-bar-ink)}
+html[data-theme=hackernoon-dark] .modal{border-width:1px}
+html[data-theme=hackernoon-dark] :is(input:not([type=checkbox],[type=radio]),select,textarea){
+  border-width:1px;background:#06190F}
+html[data-theme=hackernoon-dark] #toast{background:var(--hn-fill);color:var(--hn-on);border:0}
+html[data-theme=hackernoon-dark] .lb-daynow{background:var(--hn-fill);color:var(--hn-on)}
+html[data-theme=hackernoon-dark] ::selection{background:var(--hn-fill)}
+html[data-theme=hackernoon-dark] :is(
+  .work-day-legend, .work-shift-track, .payslip .pd-grp-h,
+  .payslip .prem-det.det-efka, .payslip .prem-det.det-tax,
+  .payslip .ledger tr.l-gross td, .punchchip, .shiftchip,
+  .work-day-person.focused, .work-staff-count, .leave-range-head button:hover,
+  .pslip-h, .pslip-h:hover, .payslip .prem-det, .payslip .det-efka .pd-grp-h,
+  .payslip .det-tax .pd-grp-h, .facts .f.hi, .wk .d.on,
+  .audit-log tbody tr:has(input:checked), details.box summary:hover,
+  .tb-y:has(> input:checked), .tabbar label:hover, .ecal-ok,
+  .lb-t.t-leave){background:var(--card)}
+html[data-theme=hackernoon-dark] :is(.work-staff-count .is-night,
+  .work-staff-count .is-next-day,.work-staff-count .is-next-day.is-night){background:#1D1730}
+html[data-theme=hackernoon-dark] .leave-range-day:hover::before{background:var(--hn-hover)}
+html[data-theme=hackernoon-dark] .leave-range-day.in-range::before{background:var(--ready-bg)}
+html[data-theme=hackernoon-dark] .lb-accr{background:#12301C;color:#9BE8B0}
+html[data-theme=hackernoon-dark] .lb-legend i.k-leave{background:#2A2E33}
+html[data-theme=hackernoon-dark] .work-next-alert{background:var(--warn-bg);color:var(--warn)}
+html[data-theme=hackernoon-dark] .work-absence-track{color:#FF9A94;
+  background:repeating-linear-gradient(135deg,#2A1A1A 0 8px,#241616 8px 16px)}
+html[data-theme=hackernoon-dark] .work-absence-track span{background:rgba(0,0,0,.6);
+  border-color:#5A2E2E}
+html[data-theme=hackernoon-dark] .work-shift-track.over-maximum{
+  background:repeating-linear-gradient(135deg,#33141F 0 8px,#2A1019 8px 16px)}
+html[data-theme=hackernoon-dark] .lb-accr.tone-warn{background:#3A2A12;color:#FFD08A}
+html[data-theme=hackernoon-dark] .lb-accr.tone-danger{background:#3D1715;color:#FF9A94}
+html[data-theme=hackernoon-dark] .warnbox.closedbox{background:#2A1F3D;color:#D2A8FF;
+  border-color:#D2A8FF}
+html[data-theme=hackernoon-dark] :is(.leave-range-day.today,.facts .f.hi>span,
+  .facts .f.hi>b,.wk .d.on b,.mo-gantt-axis span.today,.tag.lnk-tag:hover){color:#58A6FF}
+/* Ετικέτες/σήματα με παστέλ φόντο και σκούρο κείμενο: αναστροφή φωτεινότητας
+   με ΔΙΑΤΗΡΗΣΗ απόχρωσης (invert + hue-rotate) — ΜΟΝΟ σε «φύλλα» (χωρίς
+   εικόνες/άλλα φιλτραρισμένα μέσα), αλλιώς τα παιδιά αναστρέφονται διπλά. */
+html[data-theme=hackernoon-dark] :is(.tag.teka, .pslip-h .badge, .payslip .pd-tag,
+  .contract-status-full, .contract-status-part, .contract-status-rotation,
+  .ins-no, .ins-team, .ins-teka, .ins-welfare, .ins-other, .trl-chip.info,
+  .payslip .pd-rate){filter:invert(.88) hue-rotate(180deg)}
+
+/* επιλογέας θέματος (κάτω στο μενού) */
+.themesel{display:flex;gap:8px;align-items:center;margin-top:18px;padding:0 10px;
+  font-size:12px;color:var(--muted)}
+.themesel select{font:inherit;font-size:12px;padding:3px 6px}

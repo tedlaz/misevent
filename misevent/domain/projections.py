@@ -48,6 +48,7 @@ from misevent.domain.events import (
     LeaveAllowanceCalculated,
     LeaveCancelled,
     LeaveCompensationCalculated,
+    LeaveDeclarationSubmitted,
     LeaveRecorded,
     LeaveRescheduled,
     LeaveType,
@@ -408,6 +409,10 @@ class EmploymentState:
     # ΠΑΡΕΛΘΟΝΤΑ χρόνο — π.χ. το Δώρο Πάσχα υπολογίζεται στον μισθό που
     # ίσχυε 15 ημέρες πριν την καταβολή (βλ. `contract_on`).
     contract_history: list[ContractTerms] = field(default_factory=list)
+    # Οι ΜΕΤΑΒΟΛΕΣ σύμβασης με σειρά καταχώρησης: (όροι, αναγγελμένη_τότε).
+    # Κάθε μία θέλει τη δική της Δήλωση Μεταβολής ΕΡΓΑΝΗ (`subject` "E4:<n>")·
+    # όσες έγιναν ΠΡΙΝ την αναγγελία πρόσληψης τις καλύπτει το ίδιο το WebE3N.
+    contract_changes: list[tuple[ContractTerms, bool]] = field(default_factory=list)
     schedule: dict = field(default_factory=dict)  # εβδομαδιαίο: "MON" -> ωράριο
     schedule_history: list[tuple[date, dict, date | None]] = field(default_factory=list)
     # (ισχύς από, εβδομαδιαίο μοτίβο, ημ. λήξης ή None) — απαιτείται για
@@ -449,6 +454,12 @@ class EmploymentState:
     absence_reasons: dict = field(default_factory=dict)
     leaves: list = field(default_factory=list)  # LeaveRecorded events
     cancelled_leaves: set = field(default_factory=set)
+    # ημέρα -> κωδικός ΕΡΓΑΝΗ της ΔΗΛΩΜΕΝΗΣ άδειας (`LeaveDeclarationSubmitted`)·
+    # άδεια με δηλωμένη ημέρα είναι κλειδωμένη (svc.leave_locked)
+    leave_declared: dict = field(default_factory=dict)
+    # έτος -> μήνας-περίοδος του Επιδόματος Αδείας, ΠΑΓΩΜΕΝΟΣ με τον υπολογισμό
+    # (`allowance_period_month`): ΕΝΑ επίδομα ανά απασχόληση και έτος
+    allowance_months: dict = field(default_factory=dict)
     sickness_benefits: dict = field(default_factory=dict)  # leave_id -> ποσό ΕΦΚΑ
     # Μειωμένο ωράριο φροντίδας τέκνου: [(από, έως, ώρες/ημέρα)]
     childcare_reduction: list = field(default_factory=list)
@@ -645,7 +656,13 @@ class EmploymentState:
         εκκαθαρίζεται pro-rata στην αποχώρηση). Αλλιώς, αν απασχολήθηκε μέσα
         στο έτος, ο **Δεκέμβριος**: το επίδομα ΠΡΕΠΕΙ να καταβληθεί μέσα στο
         έτος, άρα όποιος δεν πήρε άδεια το παίρνει υποχρεωτικά τον τελευταίο
-        μήνα. None μόνο για όποιον δεν απασχολήθηκε καθόλου μέσα στο έτος."""
+        μήνα. None μόνο για όποιον δεν απασχολήθηκε καθόλου μέσα στο έτος.
+
+        ⚠️ Μόλις υπολογιστεί το επίδομα, ο μήνας ΠΑΓΩΝΕΙ (`allowance_months`):
+        μια μεταγενέστερη άδεια σε προγενέστερο μήνα δεν το μεταφέρει — αλλιώς
+        θα γεννούσε δεύτερο επίδομα για το ίδιο έτος."""
+        if year in self.allowance_months:
+            return self.allowance_months[year]
         first = self.first_annual_leave(year)
         if first is not None:
             return first.month
@@ -1633,6 +1650,8 @@ class Projections:
                 emp.contract_weekly_system = event.weekly_system
             emp.contract_history.append(_terms_of(event, event.effective_from))
             emp.contract_history.sort(key=lambda t: t.effective_from or date.min)
+            emp.contract_changes.append(
+                (_terms_of(event, event.effective_from), emp.hire_submitted))
 
         elif isinstance(event, EmploymentDeleted):
             # Εκ παραδρομής καταχώρηση: η απασχόληση φεύγει ΟΛΟΚΛΗΡΗ από τα
@@ -1658,6 +1677,12 @@ class Projections:
 
         elif isinstance(event, LeaveCancelled):
             self.employments[event.employee_id].cancelled_leaves.add(event.leave_id)
+
+        elif isinstance(event, LeaveDeclarationSubmitted):
+            for eid, days in event.days.items():
+                if eid in self.employments:   # διαγραμμένη απασχόληση: αγνοείται
+                    self.employments[eid].leave_declared.update(
+                        {date.fromisoformat(iso): code for iso, code in days.items()})
 
         elif isinstance(event, ErganiSubmissionRecorded):
             self.ergani_submissions.append(event)
@@ -1845,6 +1870,9 @@ class Projections:
 
         elif isinstance(event, LeaveAllowanceCalculated):
             self._allowances[(event.employee_id, event.year)] = event
+            emp = self.employments.get(event.employee_id)
+            if emp is not None:
+                emp.allowance_months[event.year] = emp.allowance_period_month(event.year)
 
         elif isinstance(event, LeaveCompensationCalculated):
             self._leave_compensations[event.employee_id] = event

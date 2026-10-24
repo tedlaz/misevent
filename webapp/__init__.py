@@ -3,9 +3,9 @@ Web UI Μισθοδοσίας — Flask + Jinja2 + htmx.
 
 Μία σελίδα ανά οντότητα/ενέργεια (blueprint ανά σελίδα):
   /              Επισκόπηση        /payroll       Μισθοδοσία
-  /obligations   Υποχρεώσεις       /payments      Πληρωμές (προβολή μόνο)
+  /obligations   (htmx panel → /)  /payments      Πληρωμές (προβολή μόνο)
   /persons       Πρόσωπα           /eapd · /fmy   Αρχεία ΑΠΔ · Αρχεία ΦΜΥ
-  /live          Ζωντανά (ημέρα)    /work-schedules Πρόγραμμα → ΕΡΓΑΝΗ
+  /live          (widget → /)      /work-schedules (→ /ergani)
   /employments   Απασχολήσεις      /ergani        ΕΡΓΑΝΗ
                                    /company       Εταιρεία
                                    /audit         Event log

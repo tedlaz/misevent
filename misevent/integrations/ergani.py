@@ -21,6 +21,7 @@ Client για το Web API (REST) του ΠΣ ΕΡΓΑΝΗ ΙΙ.
                (αποδοχές / ωράριο / μερική απασχόληση)
   E5_LIXI      Ψηφιακή Αναγγελία Λήξης: WebE5N (οικειοθελής αποχώρηση) ή
                WebE7N (λήξη ορισμένου χρόνου)· η καταγγελία ΔΕΝ υπάρχει στο API
+  WTOLeave     Δήλωση αδειών (απολογιστική, έως το τέλος του επόμενου μήνα)
 
 ΠΡΟΣΟΧΗ: Με simulate=True (προεπιλογή) ΔΕΝ γίνεται καμία κλήση δικτύου·
 ο client παράγει το πλήρες payload και «εικονικό» αριθμό πρωτοκόλλου,
@@ -48,6 +49,7 @@ DOC_LABELS = {
     "WTO": "Ψηφιακή Οργάνωση Χρόνου Εργασίας (Σταθερό Εβδομαδιαίο)",
     "E4_METAVOLI": "Δήλωση Μεταβολής Στοιχείων Εργασιακής Σχέσης",
     "E5_LIXI": "Ψηφιακή Αναγγελία Λήξης Εργασίας",
+    "WTOLeave": "Δήλωση αδειών (Οργάνωση Χρόνου Εργασίας)",
 }
 
 
@@ -435,6 +437,26 @@ def _wto(emp, from_date: date, to_date: date | None, rows: list) -> dict:
     }]}}
 
 
+def merge_wto(payloads: list[dict]) -> dict:
+    """ΠΟΛΛΕΣ δηλώσεις WTO σε ΜΙΑ κλήση του API.
+
+    Το σχήμα (WTOWeek/WTODaily) έχει ΔΥΟ επίπεδα λίστας: `WTOS.WTO[]` =
+    δηλώσεις (παράρτημα + περίοδος) και, μέσα σε κάθε μία,
+    `Ergazomenoi.ErgazomenoiWTO[]` = εργαζόμενοι. Όσοι έχουν ΙΔΙΟ παράρτημα
+    ΚΑΙ ΙΔΙΑ περίοδο μπαίνουν στην ίδια δήλωση· οι υπόλοιποι ως επιπλέον
+    δηλώσεις της λίστας — με τη σειρά που ήρθαν."""
+    groups: dict[tuple, dict] = {}
+    for p in payloads:
+        for w in p["WTOS"]["WTO"]:
+            k = (w["f_aa_pararthmatos"], w["f_from_date"], w["f_to_date"])
+            rows = w["Ergazomenoi"]["ErgazomenoiWTO"]
+            if k in groups:
+                groups[k]["Ergazomenoi"]["ErgazomenoiWTO"].extend(rows)
+            else:
+                groups[k] = {**w, "Ergazomenoi": {"ErgazomenoiWTO": list(rows)}}
+    return {"WTOS": {"WTO": list(groups.values())}}
+
+
 def build_wto(
     company, emp, schedule: dict, effective_from: date, end_date: date | None = None
 ) -> dict:
@@ -471,8 +493,41 @@ def build_wto_variable(company, emp, days: dict, week_start: date,
     ])
 
 
-def build_metavoli(company, emp, effective_from: date) -> dict:
-    """Δήλωση Μεταβολής Στοιχείων Εργασιακής Σχέσης (αποδοχές/ωράριο)."""
+# Τύπος άδειας της εφαρμογής -> κωδικός WorkTimeType (ΑΔΕΙΑ-ΑΔΕΙΑ)
+LEAVE_CODES = {
+    "kanoniki_adeia": "ΑΔΚΑΝ",
+    "astheneia": "ΑΔΑΣ",
+    "adeia_aneu_apodoxon": "ΑΔΑΑ",
+    "mitrotita": "ΑΔΜΗ",
+    "goniki": "ΑΔΓΟΝ",
+    "frontida_teknou": "ΑΔΦΠ",
+}
+
+
+def build_wto_leave(emp, days: dict) -> dict:
+    """WTOLeave — δήλωση αδειών: `days` = {date: (κωδικός, έτος|None,
+    δικαιούμενες|None)}, μία εγγραφή ανά ημέρα. Έτος αναφοράς και
+    δικαιούμενες ημέρες μόνο στην κανονική άδεια (αλλιώς κενά)."""
+    dates = sorted(days)
+
+    def row(d):
+        code, year, req = days[d]
+        return {"f_type": code, "f_from": "", "f_to": "",
+                "f_year": str(year) if year else "",
+                "f_req_days": f"{req:03d}" if req is not None else ""}
+
+    return _wto(emp, dates[0], dates[-1], [
+        {"f_date": _d_gr(d), "ErgazomenosAnalytics": {"ErgazomenosWTOAnalytics": [row(d)]}}
+        for d in dates
+    ])
+
+
+def build_metavoli(company, emp, effective_from: date, terms=None) -> dict:
+    """Δήλωση Μεταβολής Στοιχείων Εργασιακής Σχέσης (αποδοχές/ωράριο).
+    `terms`: οι όροι ΤΗΣ μεταβολής (`ContractTerms`) — αλλιώς οι τρέχοντες
+    της απασχόλησης. Με δύο εκκρεμείς μεταβολές, η παλαιότερη ΔΕΝ πρέπει να
+    σταλεί με τα ποσά της νεότερης."""
+    t = terms or emp
     return {
         "Entypo": "E4_METAVOLI",
         "Ergodotis": {"AME": company.ame, "AFM": company.afm},
@@ -483,11 +538,11 @@ def build_metavoli(company, emp, effective_from: date) -> dict:
         },
         "IsxysApo": _d(effective_from),
         "NeaStoixeia": {
-            "TyposApasxolisis": ("ΜΕΡΙΚΗ" if emp.weekly_hours < 40 else "ΠΛΗΡΗΣ"),
-            "EvdomadiaiesOres": emp.weekly_hours,
-            "TyposAmoivis": ("ΗΜΕΡΟΜΙΣΘΙΟ" if emp.pay_type == "daily" else "ΜΙΣΘΟΣ"),
+            "TyposApasxolisis": ("ΜΕΡΙΚΗ" if t.weekly_hours < 40 else "ΠΛΗΡΗΣ"),
+            "EvdomadiaiesOres": t.weekly_hours,
+            "TyposAmoivis": ("ΗΜΕΡΟΜΙΣΘΙΟ" if t.pay_type == "daily" else "ΜΙΣΘΟΣ"),
             "MiktesApodoxes": (
-                emp.daily_wage if emp.pay_type == "daily" else emp.monthly_gross
+                t.daily_wage if t.pay_type == "daily" else t.monthly_gross
             ),
         },
     }

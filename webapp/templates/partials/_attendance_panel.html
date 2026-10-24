@@ -14,6 +14,9 @@
         <input type="number" name="y" value="{{ y }}" min="2020" max="2100" style="width:90px">
       </label>
       <button class="ghost" type="submit">Προβολή</button>
+      <a class="ghost" href="{{ url_for('attendance.ideal_karta', y=y, m=m) }}"
+         title="Τα χτυπήματα του προγράμματος όλου του προσωπικού — χωρίς άδειες/αργίες/τηλεεργασία">
+        ⬇ Ιδανική κάρτα xlsx</a>
     </form>
 
     {# Εισαγωγή πραγματικών παρουσιών από «Κάρτα Εργασίας» ΕΡΓΑΝΗ (xlsx) #}

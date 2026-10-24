@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% block title %}Ημερολόγιο — misevent{% endblock %}
+{% block heading %}Ημερολόγιο{% endblock %}
+
+{% block content %}
+{% if emps %}
+<div class="card">
+  <form class="frm" method="get" action="{{ url_for('employments.calendar_page') }}">
+    <label>Εργαζόμενος
+      <select name="eid" onchange="this.form.submit()">
+        {% for e in emps %}
+          <option value="{{ e.employment_id }}" {{ 'selected' if e.employment_id == eid }}>
+            {{ e.full_name }}{{ '' if e.active else ' (αποχώρησε)' }}</option>
+        {% endfor %}
+      </select></label>
+  </form>
+  <div hx-get="{{ url_for('employments.calendar', employment_id=eid, m=m or None) }}"
+       hx-trigger="load" hx-swap="outerHTML"></div>
+</div>
+{% else %}
+  <div class="card"><div class="empty">Κανένας εργαζόμενος με αναγγελία πρόσληψης.</div></div>
+{% endif %}
+<div id="modal-host"></div>
+{% endblock %}

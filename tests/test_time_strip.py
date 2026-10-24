@@ -43,7 +43,7 @@ def test_pages_render_the_strip_in_the_header(fresh_system):
 
     c = ui_client(create_app())
     assert _bootstrap.seed(c).status_code == 200  # δοκιμαστικά δεδομένα: υπάρχουν υποχρεώσεις
-    for url in ("/", "/obligations/", "/payroll/"):
+    for url in ("/", "/payroll/"):
         html = c.get(url, follow_redirects=True).get_data(as_text=True)
         head = html.split("</header>")[0]
         assert 'class="tbar"' in head, url
@@ -70,7 +70,7 @@ def test_htmx_command_returns_the_strip_oob_with_open_year_kept(fresh_system):
         cell = re.findall(r'class="tb-emp">[^<]*</small><i>([^<]*)', y)[ym[1] - 1]
         return int(cell or 0)
 
-    before = month_open(c.get("/obligations/").get_data(as_text=True))
+    before = month_open(c.get("/").get_data(as_text=True))
     hx = {"HX-Request": "true", "X-Time-Bar": str(ym[0])}
     html = c.post(f"/obligations/{ob.obligation_id}/run", headers=hx).get_data(as_text=True)
     assert proj.obligations[ob.obligation_id].fulfilled

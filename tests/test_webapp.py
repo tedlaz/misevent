@@ -79,9 +79,12 @@ def test_webapp(fresh_system):
 
     print("\n=== Σελίδες (GET) ===")
     check("/            Επισκόπηση", c.get("/"), "Επισκόπηση")
-    check("/obligations Υποχρεώσεις", c.get("/obligations/"), "Χρονολόγιο")
+    check("/  υποχρεώσεις (κάρτα)", c.get("/"), 'data-fold="obligations"')
+    r = c.get("/obligations/?view=all")
+    assert r.status_code == 302 and r.headers["Location"].endswith("/?view=all")
     check("/persons     Εργαζόμενοι", c.get("/persons/"), "Εργαζόμενοι")
-    check("/live        Ζωντανά", c.get("/live/"), "Ζωντανή εικόνα ημέρας")
+    check("/persons     ταξινόμηση", c.get("/persons/"), "data-sortable")
+    check("/  Ζωντανά (κάρτα)", c.get("/"), 'id="lboard"')
     check("/live/rows   γραμμές (htmx)", c.get("/live/rows"))
     check("/live/rows   αργία 28/10", c.get("/live/rows?base=2026-10-27&days=3"),
           "28η Οκτωβρίου")
@@ -92,9 +95,9 @@ def test_webapp(fresh_system):
         s["hol"] for r in hb["rows"] for s in r["segs"]
     ):
         fails.append("Ζωντανά: η αργία χωρίς παρουσία δεν εμφανίζεται κλειστή")
-    check("/work-schedules Πρόγραμμα → ΕΡΓΑΝΗ", c.get("/work-schedules/"), "Εκκρεμείς υποβολές")
+    check("/ergani      εκκρεμείς υποβολές", c.get("/ergani/"), "Εκκρεμείς υποβολές")
     # Ιστορικό: και οι εβδομαδιαίες υποβολές (π.χ. το αρχικό πρόγραμμα)
-    check("/work-schedules ιστορικό εβδομαδιαίων", c.get("/work-schedules/"), "Εβδομαδιαίο")
+    check("/ergani      ιστορικό εβδομαδιαίων", c.get("/ergani/"), "Εβδομαδιαίο")
     check("/work-schedules/day Ημέρα",
           c.get("/work-schedules/day?date=2026-07-14"), "Πρόγραμμα ημέρας")
     check("/attendance  Παρουσίες", c.get("/attendance/"), "Παρουσίες")
@@ -111,8 +114,16 @@ def test_webapp(fresh_system):
           "/eapd/raw άγνωστη περίοδος -> 404")
     if _r.status_code != 404:
         fails.append("το /eapd/raw σέρβιρε περίοδο εκτός των events")
-    check("/ergani      ΕΡΓΑΝΗ", c.get("/ergani/"), "Υποβολές εντύπων",
+    check("/ergani      ΕΡΓΑΝΗ", c.get("/ergani/"), "Ιστορικό υποβολών",
           iso_ok=True)  # ωμό JSON payload ΕΡΓΑΝΗ
+    # Ημερομηνία υποβολής: από το occurred_at κάθε υποβολής (σε τοπική ώρα)
+    import re as _re
+
+    from webapp.system import proj as _proj
+    _erg = c.get("/ergani/").get_data(as_text=True)
+    if _proj.ergani_submissions and not _re.search(
+            r"<td[^>]*>\d{2}/\d{2}/\d{4} \d{2}:\d{2}</td>", _erg):
+        fails.append("/ergani: λείπει η ημερομηνία υποβολής")
     check("/company     Εταιρεία", c.get("/company/"), "Στοιχεία εργοδότη")
     # Σύστημα δήλωσης αλλαγών ωραρίου (ανά εταιρεία, από τον επόμενο μήνα)
     check("/company σύστημα δήλωσης", c.post("/company/schedule-system", data={
@@ -318,8 +329,18 @@ def test_webapp(fresh_system):
     if f'r="A2" t="inlineStr"><is><t>{emp.insurance_profile.branch_no}</t>' not in sheet:
         fails.append("ιδανική κάρτα xlsx: λάθος ΑΑ παραρτήματος")
     want = [d for d in (_date(2026, 8, n) for n in range(1, 32))
-            if emp.day_schedule(d) and emp.active_on(d)
+            if emp.day_schedule(d) and emp.active_on(d) and not emp.holiday_off(d)
             and not any(lv.date_from <= d <= lv.date_to for lv in emp.active_leaves())]
+    if any(p.day == _date(2026, 8, 15) for p in kp):
+        fails.append("ιδανική κάρτα xlsx: χτυπήματα σε αργία (15/8)")
+    # ιδανική κάρτα ΟΛΟΥ του προσωπικού (Παρουσίες): περιέχει και αυτόν τον εργαζόμενο
+    check("/attendance κουμπί ιδανικής κάρτας", c.get("/attendance/?y=2026&m=8"),
+          "Ιδανική κάρτα xlsx")
+    allp = karta_import.parse_karta(
+        c.get("/attendance/karta.xlsx?y=2026&m=8").data)
+    if {(p.day, p.time_in) for p in kp} - {(p.day, p.time_in) for p in allp
+                                         if p.afm == emp.afm}:
+        fails.append("ιδανική κάρτα προσωπικού: λείπουν χτυπήματα του εργαζομένου")
     if not kp or {p.day for p in kp} != set(want) or any(p.afm != emp.afm for p in kp) \
             or f"{kp[0].time_in}-{kp[0].time_out}" not in emp.day_schedule(kp[0].day):
         fails.append(f"ιδανική κάρτα xlsx: {kp[:2]}")
@@ -392,23 +413,23 @@ def test_webapp(fresh_system):
     if (_e.day_schedule(_date(2026, 9, 8)), _e.day_schedule(_date(2026, 9, 9))) != (
             "10:00-18:00", "08:00-16:00"):
         fails.append("Ημερήσιο ανά εβδομάδα: δεν αποθηκεύτηκαν οι ημέρες")
-    # Η υποβολή γίνεται ΜΟΝΟ από το «Πρόγραμμα → ΕΡΓΑΝΗ» (+ ειδοποίηση στις Υποχρεώσεις)
-    check("υποχρεώσεις: εκκρεμείς υποβολές", c.get("/obligations/"),
-          "εκκρεμείς υποβολές προγράμματος")
-    check("Πρόγραμμα → ΕΡΓΑΝΗ: ημερήσια ομάδα", c.get("/work-schedules/"),
+    # Η υποβολή γίνεται ΜΟΝΟ από την οθόνη ΕΡΓΑΝΗ (+ ειδοποίηση στις Υποχρεώσεις)
+    check("υποχρεώσεις: εκκρεμείς υποβολές", c.get("/"),
+          "εκκρεμείς υποβολές στο")
+    check("ΕΡΓΑΝΗ: ημερήσια ομάδα", c.get("/ergani/"),
           "📆 Ημερήσιο πρόγραμμα")
-    c.post("/work-schedules/ergani", data={"week": f"{eid}|2026-09-07"})
+    c.post("/ergani/schedules", data={"week": f"{eid}|2026-09-07"})
     # Εβδομαδιαίο: καταγράφεται (εκκρεμεί), υποβάλλεται από την ομάδα «Εβδομαδιαίο»
     c.post(f"/employments/{eid}/schedule", data={
         "effective_from": "2026-09-14",
         **{f"day_{k}": v for k, v in _e.schedule.items()}})
     if not _e.pending_weekly:
         fails.append("Εβδομαδιαίο: δεν έμεινε εκκρεμές για υποβολή")
-    check("Πρόγραμμα → ΕΡΓΑΝΗ: εβδομαδιαία ομάδα", c.get("/work-schedules/"),
+    check("ΕΡΓΑΝΗ: εβδομαδιαία ομάδα", c.get("/ergani/"),
           "🗓️ Εβδομαδιαίο πρόγραμμα")
-    c.post("/work-schedules/ergani", data={"weekly": f"{eid}|2026-09-14"})
+    c.post("/ergani/schedules", data={"weekly": f"{eid}|2026-09-14"})
     if _e.pending_weekly:
-        fails.append("Εβδομαδιαίο: δεν υποβλήθηκε από το «Πρόγραμμα → ΕΡΓΑΝΗ»")
+        fails.append("Εβδομαδιαίο: δεν υποβλήθηκε από την οθόνη ΕΡΓΑΝΗ")
     # Όρια 11ω/3ω και στο «Ημερήσιο»· το σφάλμα ανανεώνει μόνο το περιεχόμενο
     _next = _e.day_schedule(_date(2026, 9, 16))
     _r = c.post(f"/employments/{eid}/schedule/daily", data={
@@ -420,7 +441,7 @@ def test_webapp(fresh_system):
     check("Ημερήσιο: ◀ ▶ χωρίς νέο .modal", c.get(
         f"/employments/{eid}/modal/daily?week=2026-09-21"), 'id="daily-modal"')
     if _e.day_status(_date(2026, 9, 8)) != "submitted":
-        fails.append("Πρόγραμμα → ΕΡΓΑΝΗ: η υποβολή δεν δήλωσε τις ημέρες")
+        fails.append("ΕΡΓΑΝΗ: η υποβολή δεν δήλωσε τις ημέρες")
     c.post(f"/employments/{eid}/schedule/daily", data={"hours_2026-08-20": ""})
     if not _e.day_schedule(_date(2026, 8, 20)):
         fails.append("Ημερήσιο: άλλαξε ημέρα του παρελθόντος")
@@ -455,6 +476,12 @@ def test_webapp(fresh_system):
         data={"termination_date": "2026-06-30", "reason": "ΟΙΚΕΙΟΘΕΛΗΣ_ΑΠΟΧΩΡΗΣΗ",
               "resignation": (io.BytesIO(img.getvalue()), "dilosi.jpg")},
     )
+    # Η αποχώρηση ΔΕΝ στέλνει: η Αναγγελία Λήξης εκκρεμεί στην οθόνη ΕΡΓΑΝΗ
+    if any(s.employee_id == eid and s.doc_type == "E5_LIXI"
+           for s in proj.ergani_submissions):
+        fails.append("η αποχώρηση έστειλε μόνη της Αναγγελία Λήξης")
+    check("ΕΡΓΑΝΗ: εκκρεμής Αναγγελία Λήξης", c.get("/ergani/"), "δήλωση ✓")
+    c.post(f"/ergani/e5/{eid}")
     lixi = [s for s in proj.ergani_submissions
             if s.employee_id == eid and s.doc_type == "E5_LIXI"]
     ok = bool(lixi) and '"AnaggeliesE5N"' in lixi[-1].payload and \
@@ -478,6 +505,10 @@ def test_webapp(fresh_system):
     print(f"  {'OK  ' if ok else 'FAIL'} μισθοδοσία 6/2026 μόνο για τον αποχωρούντα")
     if not ok:
         fails.append("η μισθοδοσία αποχώρησης δεν αφορά μόνο τον αποχωρούντα")
+    # Η καρτέλα του αποχωρήσαντος ΠΡΕΠΕΙ να ανοίγει (ιστορικό, εκκαθάριση)
+    check("καρτέλα αποχωρήσαντος", c.get(f"/employments/{eid}"))
+    check("εργαζόμενοι: link στην καρτέλα αποχωρήσαντος", c.get("/persons/"),
+          f"/employments/{eid}\"")
     # 2. νέα περίοδος στο ΙΔΙΟ πρόσωπο
     SCHEDULE = {f"day_{d}": "09:00-17:00" for d in ("MON", "TUE", "WED", "THU", "FRI")}
     r = c.post(

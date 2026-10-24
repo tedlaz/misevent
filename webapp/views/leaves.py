@@ -39,6 +39,7 @@ def leave_modal(employment_id, leave_id):
         e=employment,
         lv=leave,
         leave_labels=LEAVE_LABELS,
+        locked=svc.leave_declared_to_ergani(employment_id, leave_id),
     )
 
 

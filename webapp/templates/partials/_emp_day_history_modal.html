@@ -44,8 +44,10 @@
       {% if can_plan %}
         <h3 class="sec">Πρόγραμμα ημέρας</h3>
         <form class="frm" hx-post="{{ url_for('employments.schedule_daily', employment_id=e.employment_id) }}"
-              hx-target="#employment-card" hx-swap="outerHTML">
+              {% if on_calendar_page %}hx-target="#day-modal" hx-select="#day-modal" hx-swap="outerHTML"
+              {% else %}hx-target="#employment-card" hx-swap="outerHTML"{% endif %}>
           <input type="hidden" name="week" value="{{ d.isoformat() }}">
+          {% if on_calendar_page %}<input type="hidden" name="cal" value="1">{% endif %}
           <label>Ωράριο (κενό = ρεπό)
             <input name="hours_{{ d.isoformat() }}" placeholder="ρεπό" data-time-rail
                    value="{{ e.day_schedule(d) }}"></label>

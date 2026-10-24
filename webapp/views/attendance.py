@@ -12,12 +12,16 @@ MODAL. Οι διορθώσεις «σταδιάζονται» σε κρυφά in
 event) και ΟΛΕΣ μαζί γράφονται με το κουμπί «Έγκριση».
 """
 
-from flask import Blueprint, render_template, request
+from datetime import date
+
+from flask import Blueprint, Response, render_template, request
 
 from .. import queries as q
+from ..actions import trigger
 from ..clock import today
 from ..helpers import flash_to, run_command
 from ..system import proj, svc
+from .employments import ideal_punches, karta_response
 
 bp = Blueprint("attendance", __name__, url_prefix="/attendance")
 
@@ -178,10 +182,28 @@ def _cast_form(f, field, name):
         raise ValueError(f"Μη έγκυρη τιμή στο πεδίο «{name}»") from None
 
 
+@bp.get("/karta.xlsx")
+def ideal_karta():
+    """«Ιδανική κάρτα» ΟΛΟΥ του προσωπικού που εργάζεται στον μήνα: ένα
+    xlsx (μορφή εισαγωγής) με τα χτυπήματα του προγράμματος κάθε εργαζομένου."""
+    y, m = _period()
+    first = date(y, m, 1)
+    punches = []
+    try:
+        for e in sorted((e for e in proj.employments.values() if e.hire_submitted),
+                        key=lambda e: e.full_name):
+            punches += ideal_punches(e, first)
+    except ValueError as exc:
+        return Response(str(exc), status=400, content_type="text/plain; charset=utf-8")
+    return karta_response(punches, f"karta_{y}-{m:02d}.xlsx")
+
+
 @bp.post("/import")
 def import_karta():
     """Εισαγωγή πραγματικών παρουσιών από αρχείο «Κάρτας Εργασίας» ΕΡΓΑΝΗ
-    (xlsx). Οι παρουσίες αντιστοιχίζονται με ΑΦΜ."""
+    (xlsx). Οι παρουσίες αντιστοιχίζονται με ΑΦΜ. Το ΜΟΝΟ σημείο εισαγωγής:
+    με ψηφιακή κάρτα τρέχει αμέσως και ο έλεγχος της υποχρέωσης CARD_IMPORT
+    — αν αποτύχει, τα χτυπήματα μένουν για διόρθωση στο ΗΜΕΡΟΛΟΓΙΟ."""
 
     def cmd():
         up = request.files.get("karta")
@@ -214,6 +236,15 @@ def import_karta():
                 f"{afm} {name}".strip() for afm, name in res["unmatched"].items()
             )
             msg += f" · ΑΓΝΩΣΤΑ ΑΦΜ (χωρίς ενεργή απασχόληση): {afms}"
+        card = next((o for o in proj.obligations.values()
+                     if o.obligation_type == "CARD_IMPORT" and not o.fulfilled
+                     and (o.period_year, o.period_month) == (y, m)), None)
+        if card is not None:
+            try:
+                trigger(card.obligation_id)
+                msg += f" · ✔ ελέγχθηκε η κάρτα {m}/{y}"
+            except ValueError as e:
+                msg += f" · ⚠️ έλεγχος κάρτας: {e} — διόρθωση στο ΗΜΕΡΟΛΟΓΙΟ"
         return msg
 
     ok, msg = run_command(cmd)

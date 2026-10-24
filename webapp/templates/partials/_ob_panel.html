@@ -9,15 +9,15 @@
 <div id="ob-panel"
      hx-vals='{"view": "{{ view }}", "locked": "{{ '1' if show_locked else '0' }}"}'>
 
-  {% if schedule_pending %}
+  {% if ergani_pending %}
     <div class="work-next-alert" role="alert" style="margin-bottom:14px">
-      📤 Υπάρχουν <b>{{ schedule_pending }}</b> εκκρεμείς υποβολές προγράμματος στο
-      ΕΡΓΑΝΗ — <a class="lnk" href="{{ url_for('work_schedules.index') }}">Πρόγραμμα → ΕΡΓΑΝΗ</a>
+      📤 Υπάρχουν <b>{{ ergani_pending }}</b> εκκρεμείς υποβολές στο
+      ΕΡΓΑΝΗ — <a class="lnk" href="{{ url_for('ergani.index') }}">οθόνη ΕΡΓΑΝΗ</a>
     </div>
   {% endif %}
 
-  <div class="card">
-    <h2>Χρονολόγιο υποχρεώσεων</h2>
+  <details class="card fold" data-fold="obligations" open>
+    <summary><h2>Υποχρεώσεις</h2></summary>
 
     {# Φίλτρο: εκκρεμείς / ολοκληρωμένες / όλες #}
     <div class="btnrow" style="margin-bottom:10px">
@@ -66,10 +66,12 @@
       </div>
     {% endif %}
 
-    {# Ο host του modal ζει ΜΕΣΑ στο panel: κάθε swap του panel τον αδειάζει,
-       οπότε το modal κλείνει μετά από ενεργοποίηση/παράταση. #}
-    <div id="modal-host">
-      {% if detail %}{% include "partials/_ob_detail_modal.html" %}{% endif %}
-    </div>
+  </details>
+
+  {# Ο host του modal ζει ΜΕΣΑ στο panel: κάθε swap του panel τον αδειάζει,
+     οπότε το modal κλείνει μετά από ενεργοποίηση/παράταση. ΕΞΩ από το
+     <details>: σε διπλωμένη κάρτα ένα modal (π.χ. `?id=`) θα έμενε κρυφό. #}
+  <div id="modal-host">
+    {% if detail %}{% include "partials/_ob_detail_modal.html" %}{% endif %}
   </div>
 </div>

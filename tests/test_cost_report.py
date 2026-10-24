@@ -108,7 +108,7 @@ def test_cost_report(fresh_system):
         assert after[i] < before[i], f"ο μήνας {i + 1} δεν έφτηνε μετά την απόλυση"
 
     # ── Η σελίδα αποδίδεται με την αναφορά μέσα της ──────────────────────
-    body = c.get("/").get_data(as_text=True)
+    body = c.get("/stats").get_data(as_text=True)
     for needle in ("Μηνιαία εξέλιξη", "cost-bars", "cost-cum",
                    "Προβλεπόμενο σύνολο", "Αποζημιώσεις αποχώρησης"):
         assert needle in body, f"λείπει «{needle}» από την Επισκόπηση"
@@ -281,7 +281,7 @@ def test_monthly_hours_column(fresh_system):
     )
 
     # Οι στήλες φτάνουν ΚΑΙ στη σελίδα
-    body = c.get("/").get_data(as_text=True)
+    body = c.get("/stats").get_data(as_text=True)
     for label in ("Π.ώρες", "Αργίες", "Άδειες", "Ώρες"):
         assert f'>{label}</th>' in body, f"λείπει η στήλη «{label}»"
 
@@ -322,7 +322,7 @@ def test_take_home_per_hour(fresh_system):
         )
         assert r["take"] < r["rate"], "η Εργ/Ωρα ξεπέρασε το κόστος της ώρας"
 
-    body = c.get("/").get_data(as_text=True)
+    body = c.get("/stats").get_data(as_text=True)
     for needle in ("<th class=\"num\">Πληρωτέο</th>",
                    "<th class=\"num\">Εργ/Ωρα</th>"):
         assert needle in body, f"λείπει η στήλη «{needle}»"
@@ -497,7 +497,7 @@ def test_report_measures(fresh_system):
     assert abs(rep["by"]["net"]["total"] - rep["hourly"]["total"]["net"]) < 0.05
 
     # Η οθόνη: επιλογέας + κάθε ποσό με τις τρεις τιμές του
-    body = c.get("/").get_data(as_text=True)
+    body = c.get("/stats").get_data(as_text=True)
     for needle in ('data-measure="cost"', 'data-measure="gross"',
                    'data-measure="net"', "Συνολικό κόστος", "Μικτά", "Καθαρά"):
         assert needle in body, f"λείπει «{needle}» από τη Μηνιαία εξέλιξη"
@@ -554,6 +554,6 @@ def test_unused_leave_is_deducted_after_the_total(fresh_system):
             assert r["unused_leave"] > 0, "κανένας δεν έχει εξαντλήσει την άδεια"
 
     # Η αφαίρεση φαίνεται ΡΗΤΑ στη σελίδα, μετά το σύνολο
-    body = c.get("/").get_data(as_text=True)
+    body = c.get("/stats").get_data(as_text=True)
     for needle in ("μείον υπόλοιπο κανονικής αδείας", f"Ώρες εργασίας {year}"):
         assert needle in body, f"λείπει «{needle}» από τη Μηνιαία εξέλιξη"

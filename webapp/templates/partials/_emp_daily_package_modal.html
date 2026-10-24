@@ -1,6 +1,6 @@
 {# ΠΑΚΕΤΟ ΥΠΟΒΟΛΗΣ μετά την αποθήκευση του ημερήσιου: οι ημέρες της
    εβδομάδας που εκκρεμούν δήλωση (δηλωμένο → νέο). Η υποβολή γίνεται ΜΟΝΟ
-   από το «Πρόγραμμα → ΕΡΓΑΝΗ» (εκεί περιμένει το ίδιο πακέτο). #}
+   από την οθόνη ΕΡΓΑΝΗ (εκεί περιμένει το ίδιο πακέτο). #}
 <div class="modal-backdrop">
   <div class="modal">
       <div class="mhead">
@@ -26,7 +26,7 @@
         <button type="button" class="ghost"
                 hx-get="{{ url_for('employments.modal_close') }}"
                 hx-target="#modal-host" hx-swap="innerHTML">Κλείσιμο</button>
-        <a class="run" href="{{ url_for('work_schedules.index') }}">📤 Πρόγραμμα → ΕΡΓΑΝΗ</a>
+        <a class="run" href="{{ url_for('ergani.index') }}">📤 ΕΡΓΑΝΗ</a>
       </div>
   </div>
 </div>

@@ -66,8 +66,10 @@ from misevent.domain.events import (
     GiftCalculated,
     InsuranceProfileAssigned,
     LeaveAllowanceCalculated,
+    LeaveCancelled,
+    LeaveDeclarationSubmitted,
     LeaveRecorded,
-    LeaveType,
+    LeaveRescheduled,
     MinimumWageDefined,
     MiscSettingsChanged,
     MonthlyPayrollCalculated,
@@ -124,7 +126,6 @@ class ObligationScheduler:
         self._company_periods: set[tuple[int, int]] = set()
         self._teka_periods: set[tuple[int, int]] = set()
         self._gift_keys: set[tuple[str, int]] = set()
-        self._allowance_periods: set[tuple[int, int]] = set()
         self._wage_adjust_periods: set[tuple[int, int]] = set()
         self._retro_periods: set[tuple[int, int]] = set()
         # «Διάφορα → digital_card» ως τώρα: η φόρμα στέλνει ΟΛΑ τα κλειδιά
@@ -146,21 +147,19 @@ class ObligationScheduler:
             elif ob.obligation_type in ANNUAL_TYPES:
                 self._gift_keys.add((ob.obligation_type, ob.period_year))
 
-            elif ob.obligation_type == "LEAVE_ALLOWANCE":
-                self._allowance_periods.add(key)
-
             elif ob.obligation_type == "WAGE_ADJUSTMENT":
                 self._wage_adjust_periods.add(key)
 
             elif ob.obligation_type == "RETRO_SCHEDULE":
                 self._retro_periods.add(key)
 
+        self._close_orphan_allowances()
+
     def rebuild(self):
         """Ξαναχτίζει την εσωτερική απομνημόνευση μετά από event rollback."""
         self._company_periods.clear()
         self._teka_periods.clear()
         self._gift_keys.clear()
-        self._allowance_periods.clear()
         self._wage_adjust_periods.clear()
         self._retro_periods.clear()
         self._digital_card = bool(self.proj.misc_settings.get("digital_card", True))
@@ -227,9 +226,23 @@ class ObligationScheduler:
                 if m == 11:  # κλείνει ο Νοέμβριος -> υποχρεωτικό επίδομα Δεκ.
                     self._ensure_year_end_allowance(y)
 
-        elif isinstance(event, LeaveRecorded):
-            if event.leave_type == LeaveType.ANNUAL:
-                self._on_annual_leave(event.employee_id, event.date_from.year)
+        elif isinstance(event, LeaveRecorded | LeaveRescheduled):
+            # και η διόρθωση άδειας: μπορεί να ήταν ή να γίνει κανονική
+            self._sync_allowances({event.date_from.year} | self._open_allowance_years())
+            # Δήλωση αδειών ΕΡΓΑΝΗ για κάθε μήνα της άδειας — ΝΕΑ και σε μήνα
+            # που δηλώθηκε ήδη (ξεχασμένη άδεια -> εκπρόθεσμη υποχρέωση)
+            for y, m in _months(event.date_from, event.date_to):
+                if not any(o.obligation_type == "LEAVE_DECLARATION" and not o.fulfilled
+                           and (o.period_year, o.period_month) == (y, m)
+                           for o in self.proj.obligations.values()):
+                    self._schedule("LEAVE_DECLARATION",
+                                   ot.due_date("LEAVE_DECLARATION", y, m), y, m)
+
+        elif isinstance(event, LeaveDeclarationSubmitted):
+            self._fulfill("LEAVE_DECLARATION", event.period_year, event.period_month)
+
+        elif isinstance(event, LeaveCancelled):
+            self._sync_allowances(self._open_allowance_years())
 
         elif isinstance(event, GiftCalculated):
             t = "CHRISTMAS_GIFT" if event.gift_type == "christmas" else "EASTER_GIFT"
@@ -500,28 +513,59 @@ class ObligationScheduler:
             if not exists:
                 self._schedule(code, ot.due_date(code, y, m, source_due), y, m)
 
-    def _on_annual_leave(self, employee_id: str, year: int):
+    def _allowance_obs(self, year: int, month: int | None = None) -> list:
+        return [o for o in self.proj.obligations.values()
+                if o.obligation_type == "LEAVE_ALLOWANCE" and o.period_year == year
+                and (month is None or o.period_month == month)]
+
+    def _open_allowance_years(self) -> set[int]:
+        return {o.period_year for o in self.proj.obligations.values()
+                if o.obligation_type == "LEAVE_ALLOWANCE" and not o.fulfilled}
+
+    def _allowance_pending(self, year: int, month: int) -> bool:
+        """Υπάρχει δικαιούχος της περιόδου ΧΩΡΙΣ υπολογισμένο επίδομα έτους;"""
+        done = {a.employee_id for a in self.proj.allowances if a.year == year}
+        return any(e.hire_submitted and e.employee_id not in done
+                   and e.allowance_period_month(year) == month
+                   for e in self.proj.employments.values())
+
+    def _sync_allowances(self, years):
         """Κανονική άδεια -> Επίδομα Αδείας στην περίοδο της ΠΡΩΤΗΣ άδειας
-        του συγκεκριμένου εργαζόμενου μέσα στο έτος.
+        κάθε εργαζόμενου μέσα στο έτος — ΕΝΑ ανά απασχόληση και έτος.
 
         Πολλαπλές περίοδοι ανά έτος (έως 12): κάθε μήνας που κάποιος παίρνει
         την πρώτη του άδεια γεννά μία ενιαία υποχρέωση για όλους όσους την
-        πήραν τότε. Αν άλλος εργαζόμενος έχει ήδη «ανοίξει» τον μήνα, δεν
-        δημιουργείται δεύτερη."""
-        emp = self.proj.employments.get(employee_id)
-        first = emp.first_annual_leave(year) if emp else None
-        if first is None:
-            return
-        self._ensure_allowance_period(year, first.month)
+        πήραν τότε. Η «πρώτη άδεια» ΜΕΤΑΚΙΝΕΙΤΑΙ (νέα άδεια σε προγενέστερο
+        μήνα, ακύρωση, διόρθωση): η ανοιχτή υποχρέωση που μένει χωρίς
+        εκκρεμή δικαιούχο ΚΛΕΙΝΕΙ — αλλιώς θα έμενε ανοιχτή για πάντα ως
+        δεύτερο «επίδομα», μπλοκάροντας την ΑΠΔ."""
+        self._close_orphan_allowances()
+        for year in years:
+            for e in list(self.proj.employments.values()):
+                first = e.first_annual_leave(year)
+                if (first is not None and e.hire_submitted
+                        and e.allowance_period_month(year) == first.month):
+                    self._ensure_allowance_period(year, first.month)
+
+    def _close_orphan_allowances(self):
+        """Κλείνει κάθε ανοιχτή υποχρέωση Επιδόματος Αδείας χωρίς εκκρεμή
+        δικαιούχο. Τρέχει και στη φόρτωση (`_bootstrap`), ώστε να καθαρίζουν
+        και όσες ορφάνεψαν πριν υπάρξει αυτός ο έλεγχος."""
+        for ob in [o for o in self.proj.obligations.values()
+                   if o.obligation_type == "LEAVE_ALLOWANCE" and not o.fulfilled]:
+            if not self._allowance_pending(ob.period_year, ob.period_month):
+                self.store.append(COMPANY, ObligationFulfilled(ob.obligation_id, ""))
 
     def _ensure_allowance_period(self, year: int, month: int):
         """Γεννά (αν λείπει) την υποχρέωση Επιδόματος Αδείας της περιόδου
         (year, month). Κοινό για: πρώτη κανονική άδεια εργαζόμενου ΚΑΙ
-        εκκαθάριση αποχώρησης χωρίς άδεια."""
-        key = (year, month)
-        if key in self._allowance_periods:
+        εκκαθάριση αποχώρησης χωρίς άδεια. Νέα υποχρέωση και σε μήνα που
+        ήδη έκλεισε, αν προέκυψε νέος δικαιούχος χωρίς επίδομα."""
+        obs = self._allowance_obs(year, month)
+        if any(not o.fulfilled for o in obs):
             return
-        self._allowance_periods.add(key)
+        if obs and not self._allowance_pending(year, month):
+            return
         self._schedule(
             "LEAVE_ALLOWANCE",
             ot.due_date("LEAVE_ALLOWANCE", year, month),

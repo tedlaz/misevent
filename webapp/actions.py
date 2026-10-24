@@ -11,6 +11,7 @@ from misevent.rules import obligation_types as ot
 from misevent.rules.calendar_gr import is_working_day
 
 from . import clock
+from .labels import ERGANI_ONLY
 from .queries import blocked_reason, dep_label
 from .system import proj, svc
 
@@ -126,8 +127,8 @@ def _apply_minimum_adjustments(y, m):
         for a in res
     )
     return (
-        f"Προσαρμόστηκαν {len(res)} συμβάσεις ({mode}) — {m}/{y}, υποβλήθηκαν "
-        f"Δηλώσεις Μεταβολής στο ΕΡΓΑΝΗ: {names}"
+        f"Προσαρμόστηκαν {len(res)} συμβάσεις ({mode}) — {m}/{y}: {names} · "
+        "οι Δηλώσεις Μεταβολής εκκρεμούν στην οθόνη ΕΡΓΑΝΗ"
     )
 
 
@@ -145,6 +146,14 @@ def _submit_retro_schedule(y, m):
         return f"Απολογιστικό {m}/{y}: τίποτα προς υποβολή (καμία εκκρεμής απόκλιση)"
     return (f"Υποβλήθηκε το απολογιστικό {m}/{y} στο ΕΡΓΑΝΗ: {res['count']} ημέρες "
             f"({res['employees']} εργαζόμενοι), batch {res['batch_no']}")
+
+
+def _submit_leave_declaration(y, m):
+    res = svc.submit_leave_declaration(y, m)
+    if not res["count"]:
+        return f"Δήλωση αδειών {m}/{y}: τίποτα προς δήλωση"
+    return (f"Υποβλήθηκε η δήλωση αδειών {m}/{y} στο ΕΡΓΑΝΗ: {res['count']} ημέρες "
+            f"({res['employees']} εργαζόμενοι)")
 
 
 def _check_card_period(y, m):
@@ -174,6 +183,7 @@ COMMANDS = {
     "pay_fmy": _pay_fmy,
     "apply_minimum_adjustments": _apply_minimum_adjustments,
     "submit_retro_schedule": _submit_retro_schedule,
+    "submit_leave_declaration": _submit_leave_declaration,
     "check_card_period": _check_card_period,
 }
 
@@ -183,11 +193,13 @@ if _missing:
     raise RuntimeError(f"Λείπουν εντολές για: {sorted(_missing)}")
 
 
-def trigger(ob_id: str) -> str:
+def trigger(ob_id: str, via_ergani: bool = False) -> str:
     """Ενεργοποίηση υποχρέωσης — εκτελεί την εντολή του τύπου της."""
     ob = proj.obligations.get(ob_id)
     if ob is None:
         raise ValueError("Άγνωστη υποχρέωση")
+    if ob.obligation_type in ERGANI_ONLY and not via_ergani:
+        raise ValueError("Υποβάλλεται ΜΟΝΟ από την οθόνη ΕΡΓΑΝΗ")
     if ob.fulfilled:
         raise ValueError("Η υποχρέωση έχει ήδη ολοκληρωθεί")
     reason = blocked_reason(ob)

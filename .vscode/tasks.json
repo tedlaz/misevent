@@ -6,7 +6,7 @@
     {
       "label": "local server",
       "type": "shell",
-      "command": "uv run -m webapp",
+      "command": "uv run -m webapp --reload",
       "problemMatcher": []
     },
     {

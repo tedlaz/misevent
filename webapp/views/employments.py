@@ -17,6 +17,7 @@ from calendar import monthrange
 from copy import copy
 from datetime import date, datetime, timedelta
 from types import SimpleNamespace
+from urllib.parse import urlparse
 
 from flask import Blueprint, Response, abort, jsonify, render_template, request, url_for
 
@@ -800,7 +801,8 @@ def _card(employment_id):
             svc.ergani_hire_submitted(employment_id, "WebE3N")
             or svc.ergani_hire_submitted(employment_id, "E3")
         ),
-        "wto_done": svc.ergani_hire_submitted(employment_id, "WTO"),
+        # η ΚΑΛΥΨΗ — μια κοινή υποβολή για πολλούς δεν έχει employee_id
+        "wto_done": bool(e.standing_history or e.declared_days),
         # Τρέχον κατώτατο όριο (με ωριμασμένες τριετίες/γάμο/λοιπές)
         "min_floor": svc.minimum_floor(
             e.pay_type,
@@ -1152,8 +1154,8 @@ def calendar_basis(employment_id):
 @bp.get("/<employment_id>/calendar/karta.xlsx")
 def calendar_karta(employment_id):
     """Αρχείο «Κάρτας Εργασίας» (ίδια μορφή με την εισαγωγή) με τα ΙΔΑΝΙΚΑ
-    χτυπήματα του μήνα: ακριβώς το πρόγραμμα — χωρίς ημέρες άδειας/εκτός
-    απασχόλησης και χωρίς τηλεεργασία (δεν χτυπά κάρτα)."""
+    χτυπήματα του μήνα: ακριβώς το πρόγραμμα — χωρίς ημέρες άδειας/αργίας/
+    εκτός απασχόλησης και χωρίς τηλεεργασία (δεν χτυπά κάρτα)."""
     e = proj.employments.get(employment_id)
     if e is None:
         abort(404)
@@ -1161,28 +1163,59 @@ def calendar_karta(employment_id):
         first = date.fromisoformat(request.args.get("m", "") + "-01")
     except ValueError:
         first = today().replace(day=1)
+    try:
+        punches = ideal_punches(e, first)
+    except ValueError as exc:
+        return Response(str(exc), status=400, content_type="text/plain; charset=utf-8")
+    return karta_response(punches, f"karta_{e.afm}_{first:%Y-%m}.xlsx")
+
+
+def ideal_punches(e, first: date) -> list:
+    """Τα ΙΔΑΝΙΚΑ χτυπήματα ενός εργαζομένου στον μήνα του `first` (βλ.
+    `calendar_karta`). ValueError αν κάποιο ωράριο δεν διαβάζεται."""
+    # παράρτημα πρόσληψης: ίδιο με τη WebE3N (ασφαλιστικό προφίλ)
+    branch = getattr(e.insurance_profile, "branch_no", 0) or 0
     punches = []
     for n in range(monthrange(first.year, first.month)[1]):
         d = first.replace(day=n + 1)
-        if not e.active_on(d) or any(lv.date_from <= d <= lv.date_to
-                                     for lv in e.active_leaves()):
+        if not e.active_on(d) or e.holiday_off(d) or any(
+                lv.date_from <= d <= lv.date_to for lv in e.active_leaves()):
             continue
         try:
             segs = constraints.parse_day_schedule(e.day_schedule(d))
         except ValueError as exc:
-            return Response(f"{d:%d/%m/%Y}: {exc}", status=400,
-                            content_type="text/plain; charset=utf-8")
+            raise ValueError(f"{e.full_name} {d:%d/%m/%Y}: {exc}") from None
         punches += [karta_import.KartaPunch(e.afm, e.last_name, e.first_name, d,
-                                            cp.hhmm(s["start"]), cp.hhmm(s["end"]))
+                                            cp.hhmm(s["start"]), cp.hhmm(s["end"]),
+                                            branch)
                     for s in segs if not s["telework"]]
+    return punches
+
+
+def karta_response(punches: list, filename: str) -> Response:
     return Response(
-        # παράρτημα πρόσληψης: ίδιο με τη WebE3N (ασφαλιστικό προφίλ)
-        karta_import.build_karta(
-            punches, getattr(e.insurance_profile, "branch_no", 0) or 0),
+        karta_import.build_karta(punches),
         content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        headers={"Content-Disposition":
-                 f'attachment; filename="karta_{e.afm}_{first:%Y-%m}.xlsx"'},
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
+
+
+@bp.get("/calendar")
+def calendar_page():
+    """Οθόνη «Ημερολόγιο»: το μηνιαίο ημερολόγιο ενός εργαζομένου (επιλογή
+    από λίστα) — το ίδιο partial που φορτώνει μέσω htmx."""
+    emps = sorted((e for e in proj.employments.values() if e.hire_submitted),
+                  key=lambda e: (not e.active, e.full_name))
+    eid = request.args.get("eid") or (emps[0].employment_id if emps else "")
+    return render_template("calendar.html", emps=emps, eid=eid,
+                           m=request.args.get("m", ""))
+
+
+def _on_calendar_page() -> bool:
+    """Το αίτημα htmx ήρθε από την οθόνη «Ημερολόγιο» (όχι από την καρτέλα:
+    εκεί δεν υπάρχει #employment-card για να αντικατασταθεί)."""
+    path = urlparse(request.headers.get("HX-Current-URL", "")).path
+    return path == url_for("employments.calendar_page")
 
 
 @bp.get("/<employment_id>/calendar")
@@ -1338,6 +1371,7 @@ def _day_modal(employment_id: str, d: date, form=None) -> str:
                       (svc.retro_absence_gaps(e, d)
                        if proj.schedule_system_on(d) == "retro" else [])],
         absence_reasons=ergani_params.absence_reasons(),
+        on_calendar_page=_on_calendar_page(),
         **_punch_suggestion(e, d),
     )
 
@@ -1656,7 +1690,8 @@ def contract(employment_id):
             weekly_hours=form_float(f, "weekly_hours", 40.0),
             weekly_system=form_int(f, "weekly_system", 5),
         )
-        return "Άλλαξε η σύμβαση — υποβλήθηκε Δήλωση Μεταβολής στο ΕΡΓΑΝΗ"
+        return ("Άλλαξε η σύμβαση — η Δήλωση Μεταβολής εκκρεμεί στην "
+                "οθόνη ΕΡΓΑΝΗ")
 
     ok, msg = run_command(cmd)
     if ok:
@@ -1664,18 +1699,9 @@ def contract(employment_id):
     return _modal_error(employment_id, "contract", msg)
 
 
-@bp.post("/<employment_id>/ergani/e3")
-def ergani_e3(employment_id):
-    def cmd():
-        missing = svc.missing_hire_documents(employment_id)
-        res = svc.submit_hire_e3(employment_id)
-        msg = f"Υποβλήθηκε Αναγγελία Πρόσληψης WebE3N ({res['status']})"
-        return msg + (f" ⚠ χωρίς: {', '.join(missing)}" if missing else "")
-
-    ok, msg = run_command(cmd)
-    return flash_to(_fragment(employment_id), msg, err=not ok)
-
-
+# ⚠️ ΚΑΜΙΑ αποστολή στο ΕΡΓΑΝΗ από την καρτέλα: το WebE3N (όπως κάθε έντυπο)
+# στέλνεται ΜΟΝΟ από την οθόνη ΕΡΓΑΝΗ (`views/ergani.py`). Εδώ μένει μόνο η
+# προεπισκόπηση του JSON.
 @bp.get("/<employment_id>/ergani/e3/json")
 def ergani_e3_json(employment_id):
     """Προεπισκόπηση του ακριβούς WebE3N JSON, χωρίς υποβολή (τα συνημμένα
@@ -1768,7 +1794,7 @@ def schedule_daily(employment_id):
     """ΗΜΕΡΗΣΙΟ πρόγραμμα μιας εβδομάδας: κάθε ημέρα με το δικό της ωράριο
     (`hours_<ISO>`, κενό = ρεπό) — υπερισχύει του εβδομαδιαίου. Γράφονται
     ΜΟΝΟ όσες ημέρες άλλαξαν· η δήλωση στο ΕΡΓΑΝΗ γίνεται από το
-    «Πρόγραμμα → ΕΡΓΑΝΗ» (οι ημέρες μένουν τροποποιημένες/αδήλωτες ως τότε)."""
+    την οθόνη ΕΡΓΑΝΗ (οι ημέρες μένουν τροποποιημένες/αδήλωτες ως τότε)."""
     e = proj.employments.get(employment_id) or abort(404)
     f = request.form
 
@@ -1785,10 +1811,17 @@ def schedule_daily(employment_id):
             return "Καμία αλλαγή — το πρόγραμμα της εβδομάδας μένει ως έχει"
         _ensure_future(days)
         svc.set_daily_schedule(employment_id, days)
-        return (f"Καταγράφηκαν {len(days)} αλλαγές ημερών — υποβολή από το "
-                "«Πρόγραμμα → ΕΡΓΑΝΗ»")
+        return (f"Καταγράφηκαν {len(days)} αλλαγές ημερών — υποβολή από την "
+                "οθόνη ΕΡΓΑΝΗ")
 
     ok, msg = run_command(cmd)
+    if ok and f.get("cal"):
+        # από την οθόνη «Ημερολόγιο»: ανανεώνεται μόνο το modal + ημερολόγιο
+        resp = flash_to(_day_modal(employment_id, date.fromisoformat(f["week"])),
+                        msg, err=False)
+        resp.headers["HX-Trigger"] = json.dumps(
+            {"flash": {"msg": msg, "err": False}, "ecal-refresh": True})
+        return resp
     if ok:
         return flash_to(_with_package(employment_id, f.get("week")), msg, err=False)
     resp = _modal_error(employment_id, "daily", msg, **_daily_week(e, f.get("week")))
@@ -1950,8 +1983,8 @@ def terminate(employment_id):
         )
         if note:
             return f"Καταχωρήθηκε η αποχώρηση και η εκκαθάριση αποδοχών ⚠ {note}"
-        return ("Καταχωρήθηκε η αποχώρηση — Ψηφιακή Αναγγελία Λήξης στο ΕΡΓΑΝΗ "
-                "και εκκαθάριση αποδοχών")
+        return ("Καταχωρήθηκε η αποχώρηση και η εκκαθάριση αποδοχών — η "
+                "Αναγγελία Λήξης εκκρεμεί στην οθόνη ΕΡΓΑΝΗ")
 
     ok, msg = run_command(cmd)
     if ok:

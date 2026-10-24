@@ -20,7 +20,7 @@
     </select>
     <select name="specialty" aria-label="Ειδικότητα">
       <option value="">Όλες οι ειδικότητες</option>
-      {% for s in rows|map(attribute='specialty')|select|unique|sort %}
+      {% for s in rows|map(attribute='specialties')|sum(start=[])|unique|sort %}
         <option>{{ s }}</option>
       {% endfor %}
     </select>

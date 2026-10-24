@@ -42,6 +42,7 @@ class KartaPunch:
     day: date
     time_in: str  # "HH:MM"
     time_out: str  # "HH:MM"
+    branch: int = 0  # ΑΑ παραρτήματος (στήλη A)
 
     @property
     def minutes(self) -> int:
@@ -275,9 +276,9 @@ def daily_shifts(punches: list[KartaPunch]) -> dict[tuple[str, date], list[str]]
     return {k: [s for _, s in sorted(v)] for k, v in out.items()}
 
 
-def build_karta(punches: list[KartaPunch], branch: int = 0) -> bytes:
+def build_karta(punches: list[KartaPunch]) -> bytes:
     """Το ΑΝΤΙΣΤΡΟΦΟ του `parse_karta`: xlsx με τη γραμμογράφηση ΕΡΓΑΝΗ
-    (`COLUMNS`, ημ/νία Η/Μ/ΕΕΕΕ, ΑΑ παραρτήματος `branch`) — ελάχιστο έγκυρο πακέτο που
+    (`COLUMNS`, ημ/νία Η/Μ/ΕΕΕΕ, ΑΑ παραρτήματος ανά χτύπημα) — ελάχιστο έγκυρο πακέτο που
     ανοίγει στο Excel και ξαναδιαβάζεται από την εισαγωγή. Μόνο stdlib."""
     import io
     from xml.sax.saxutils import escape
@@ -289,7 +290,7 @@ def build_karta(punches: list[KartaPunch], branch: int = 0) -> bytes:
         ) + "</row>"
 
     rows = [COLUMNS] + [
-        (branch, p.afm, p.last_name, p.first_name,
+        (p.branch, p.afm, p.last_name, p.first_name,
          f"{p.day.day}/{p.day.month}/{p.day.year}", p.time_in, p.time_out)
         for p in punches
     ]

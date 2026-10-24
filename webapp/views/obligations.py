@@ -1,6 +1,6 @@
 """Υποχρεώσεις: χρονολόγιο, λεπτομέρειες, ενεργοποίηση."""
 
-from flask import Blueprint, abort, render_template, request
+from flask import Blueprint, abort, redirect, render_template, request, url_for
 
 from .. import queries as q
 from ..actions import trigger
@@ -8,7 +8,7 @@ from ..clock import today
 from ..helpers import flash_to, form_date, run_command
 from ..labels import TRACKS
 from ..system import proj, svc
-from .work_schedules import pending_count
+from .ergani import pending_count
 
 bp = Blueprint("obligations", __name__, url_prefix="/obligations")
 
@@ -50,17 +50,16 @@ def _panel(selected: str | None, ref, show_locked: bool = False, view: str = "ac
             if not (t[0] == "payment" and proj.misc_settings.get("auto_payments"))
         ],
         "detail": q.detail_payload(selected, ref) if selected else None,
-        # εκκρεμείς υποβολές προγράμματος (γίνονται ΜΟΝΟ από «Πρόγραμμα → ΕΡΓΑΝΗ»)
-        "schedule_pending": pending_count(),
+        # εκκρεμείς υποβολές ΕΡΓΑΝΗ (γίνονται ΜΟΝΟ από την οθόνη ΕΡΓΑΝΗ)
+        "ergani_pending": pending_count(),
     }
 
 
 @bp.get("/")
 def index():
-    sel = request.args.get("id")
-    return render_template(
-        "obligations.html", **_panel(sel, _ref(), _locked(), _view())
-    )
+    """Το χρονολόγιο ζει πλέον στην Επισκόπηση — οι παλιοί σύνδεσμοι
+    (`?id=`, `?view=`) οδηγούνται εκεί με τα ίδια ορίσματα."""
+    return redirect(url_for("dashboard.index", **request.args))
 
 
 @bp.get("/modal")
@@ -93,22 +92,9 @@ def run(ob_id):
     ob = proj.obligations.get(ob_id)
     late = q.days_late(ob, ref) if ob else 0
 
-    def cmd():
-        # «Εισαγωγή κάρτας περιόδου»: το αρχείο του modal εισάγεται ΠΡΙΝ τον
-        # έλεγχο — τα χτυπήματα μένουν ακόμη κι αν ο έλεγχος αποτύχει, ώστε
-        # να διορθωθούν στο ΗΜΕΡΟΛΟΓΙΟ και να ξαναενεργοποιηθεί.
-        up = request.files.get("karta")
-        skipped = []
-        if ob is not None and up is not None and up.filename:
-            skipped = svc.import_karta_attendance(
-                up.read(), ob.period_year, ob.period_month)["skipped"]
-        msg = trigger(ob_id)
-        if skipped:
-            msg += (f" · παραλείφθηκαν {len(skipped)} ημέρες άλλου μήνα "
-                    f"({skipped[0]:%d/%m/%Y}–{skipped[-1]:%d/%m/%Y})")
-        return msg
-
-    ok, msg = run_command(cmd)
+    # «Εισαγωγή κάρτας περιόδου»: το αρχείο εισάγεται ΜΟΝΟ από τις Παρουσίες
+    # — εδώ η ενεργοποίηση είναι ο (επαν)έλεγχος μετά από διορθώσεις.
+    ok, msg = run_command(lambda: trigger(ob_id))
     if ok and late:
         msg = f"{msg} — ΕΚΠΡΟΘΕΣΜΑ κατά {late} ημέρες"
     # Μετά την ενεργοποίηση, ό,τι ξεκλείδωσε εμφανίζεται πλέον στο χρονολόγιο.

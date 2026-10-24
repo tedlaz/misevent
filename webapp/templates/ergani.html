@@ -1,52 +1,13 @@
 {% extends "base.html" %}
-{% block title %}ΕΡΓΑΝΗ ΙΙ{% endblock %}
+{% block title %}ΕΡΓΑΝΗ — misevent{% endblock %}
 {% block heading %}ΕΡΓΑΝΗ ΙΙ{% endblock %}
 {% block subheading %}
-  ιστορικό υποβολών — προεπιλογή simulate
+  εκκρεμείς υποβολές και ιστορικό — κάθε αποστολή στο ΕΡΓΑΝΗ γίνεται από εδώ
 {% endblock %}
 
 {% block content %}
-<div class="card">
-  <h2>Υποβολές εντύπων</h2>
-  {% if subs %}
-    <table class="tbl">
-      <thead><tr>
-        <th>Έντυπο</th><th>Αφορά</th><th>Κατάσταση</th>
-        <th>Αρ. πρωτοκόλλου</th><th>Περιβάλλον</th><th>JSON</th>
-      </tr></thead>
-      <tbody>
-        {% for s in subs %}
-          <tr>
-            <td>{{ s.label }} <span class="tag">{{ s.doc }}</span></td>
-            <td>{{ s.who }}</td>
-            <td>
-              {% if s.status == 'failed' %}
-                <span class="tag" style="color:var(--prob);border-color:var(--prob)">
-                  Αποτυχία</span>
-              {% elif s.status == 'submitted' %}
-                <span class="tag ok">Υποβλήθηκε</span>
-              {% else %}
-                <span class="tag">Προσομοίωση</span>
-              {% endif %}
-            </td>
-            <td class="mono">{{ s.reference or '—' }}</td>
-            <td class="muted">{{ s.environment }}</td>
-            <td>
-              <details>
-                <summary class="lnk" style="cursor:pointer;white-space:nowrap">
-                  Προβολή JSON</summary>
-                <pre style="max-width:760px;max-height:460px;overflow:auto;
-                            white-space:pre-wrap;word-break:break-word;
-                            padding:12px;background:var(--panel2,#f6f7f9);
-                            border-radius:8px;font-size:12px">{{ s.payload }}</pre>
-              </details>
-            </td>
-          </tr>
-        {% endfor %}
-      </tbody>
-    </table>
-  {% else %}
-    <div class="empty">Καμία υποβολή στο ΕΡΓΑΝΗ ακόμη.</div>
-  {% endif %}
-</div>
+  {{ panel|safe }}
+  {# Host των modals (JSON υποβολής) — ΕΞΩ από το panel: ένα swap του panel
+     δεν πρέπει να κλείνει το modal που διαβάζει ο χρήστης #}
+  <div id="modal-host"></div>
 {% endblock %}

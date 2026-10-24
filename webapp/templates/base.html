@@ -5,10 +5,15 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>{% block title %}misevent{% endblock %}</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&family=Source+Code+Pro:wght@400;600;700&display=swap" rel="stylesheet">
 <link rel="icon" href="{{ url_for('static', filename='app.ico') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='vendor/flatpickr.min.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='app.css') }}">
+{# ΘΕΜΑ ΕΜΦΑΝΙΣΗΣ: εφαρμόζεται ΠΡΙΝ το πρώτο σχέδιο (αλλιώς αναβοσβήνει το
+   προεπιλεγμένο). Μνήμη ανά browser — προτίμηση, όχι δεδομένο. #}
+<script>
+try { const t = localStorage.getItem('theme'); if (t) document.documentElement.dataset.theme = t; } catch (e) {}
+</script>
 <script src="{{ url_for('static', filename='htmx.min.js') }}" defer></script>
 {# Ελληνική μορφή ΗΗ/ΜΜ/ΕΕΕΕ σε ΚΑΘΕ πεδίο ημερομηνίας — ο browser θα
    μορφοποιούσε το native input με τη ΔΙΚΗ ΤΟΥ γλώσσα (mm/dd/yyyy) #}
@@ -22,6 +27,7 @@
 {# Αναζήτηση με πληκτρολόγηση σε κάθε μεγάλο <select> (ΣΕΠΕ, ΚΑΔ, Καλλικράτης…) #}
 <script src="{{ url_for('static', filename='select-search.js') }}" defer></script>
 <script src="{{ url_for('static', filename='persons-filter.js') }}" defer></script>
+<script src="{{ url_for('static', filename='table-sort.js') }}" defer></script>
 <script src="{{ url_for('static', filename='leave-range.js') }}" defer></script>
 <script src="{{ url_for('static', filename='third-country-tab.js') }}" defer></script>
 <script src="{{ url_for('static', filename='employment-relationship.js') }}" defer></script>
@@ -79,6 +85,20 @@
         {% endfor %}
       </details>
     {% endfor %}
+    <label class="themesel">Θέμα
+      <select onchange="
+          try { localStorage.setItem('theme', this.value); } catch (e) {}
+          if (this.value) document.documentElement.dataset.theme = this.value;
+          else delete document.documentElement.dataset.theme;">
+        <option value="">Κλασικό</option>
+        <option value="hackernoon">HackerNoon</option>
+        <option value="hackernoon-dark">HackerNoon σκοτεινό</option>
+      </select>
+    </label>
+    <script>
+      document.currentScript.previousElementSibling.querySelector('select').value =
+        document.documentElement.dataset.theme || '';
+    </script>
   </nav>
   <label for="navtog" class="navshade" aria-hidden="true"></label>
 

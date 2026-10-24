@@ -78,11 +78,10 @@
             hx-target="#modal-host" hx-swap="innerHTML"
             title="Διόρθωση της αρχικής φόρμας πριν από το WebE3N">
             ✏️ Επεξεργασία φόρμας πρόσληψης</button>
-          <button class="run sm"
-            hx-post="{{ url_for('employments.ergani_e3', employment_id=mid) }}"
-            hx-target="#employment-card" hx-swap="outerHTML"
-            {% if missing_docs %}hx-confirm="Λείπει: {{ missing_docs|join(', ') }} (Πληροφορίες προσώπου → Έγγραφα). Υποβολή χωρίς αυτό;"{% endif %}
-            title="Αναγγελία Πρόσληψης WebE3N">Υποβολή WebE3N</button>
+          {# Η αποστολή γίνεται ΜΟΝΟ από την οθόνη ΕΡΓΑΝΗ #}
+          <a class="run sm" href="{{ url_for('ergani.index') }}#ergani-e3"
+             title="Αναγγελία Πρόσληψης WebE3N — υποβολή από την οθόνη ΕΡΓΑΝΗ">
+            📤 WebE3N → ΕΡΓΑΝΗ</a>
           {% if missing_docs %}
             <span class="tag warn" title="Ανεβάστε το από τις πληροφορίες του προσώπου → Έγγραφα">
               ⚠ Λείπει: {{ missing_docs|join(', ') }}</span>
@@ -95,10 +94,10 @@
           <span class="tag off" title="Το ΕΡΓΑΝΗ δέχεται ΟΧΕ μόνο μετά την αναγγελία πρόσληψης">
             ΟΧΕ μετά το WebE3N</span>
         {% else %}
-          {# Η υποβολή προγράμματος γίνεται ΜΟΝΟ από το «Πρόγραμμα → ΕΡΓΑΝΗ» #}
-          <a class="ghost sm" href="{{ url_for('work_schedules.index') }}"
-             title="Ψηφιακή Οργάνωση Χρόνου Εργασίας — υποβολή από το «Πρόγραμμα → ΕΡΓΑΝΗ»">
-            📤 ΟΧΕ → Πρόγραμμα → ΕΡΓΑΝΗ</a>
+          {# Η υποβολή προγράμματος γίνεται ΜΟΝΟ από την οθόνη ΕΡΓΑΝΗ #}
+          <a class="ghost sm" href="{{ url_for('ergani.index') }}"
+             title="Ψηφιακή Οργάνωση Χρόνου Εργασίας — υποβολή από την οθόνη ΕΡΓΑΝΗ">
+            📤 ΟΧΕ → ΕΡΓΑΝΗ</a>
         {% endif %}
         {% if not (e3_done and wto_done) %}
           <span class="muted" style="font-size:12px">
@@ -315,11 +314,12 @@
   </div>
 
   {% if e.hire_submitted %}
-  {# ---------------------------------------------- Ημερολόγιο (htmx, ανά μήνα) #}
+  {# Το μηνιαίο ημερολόγιο είναι ξεχωριστή οθόνη («Ημερολόγιο») #}
   <div class="card" style="margin-top:20px">
-    <h2>Ημερολόγιο</h2>
-    <div hx-get="{{ url_for('employments.calendar', employment_id=mid) }}"
-         hx-trigger="load" hx-swap="outerHTML"></div>
+    <h2 class="bar"><span>Ημερολόγιο</span>
+      <span class="acts"><a class="ghost sm"
+        href="{{ url_for('employments.calendar_page', eid=mid) }}">📆 Άνοιγμα ημερολογίου</a></span>
+    </h2>
   </div>
 
   {# ------------------------------------------------------------ Παρουσίες #}

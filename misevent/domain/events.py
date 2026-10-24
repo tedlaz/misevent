@@ -342,6 +342,19 @@ class RetroScheduleSubmitted(DomainEvent):
 
 
 @dataclass(frozen=True)
+class LeaveDeclarationSubmitted(DomainEvent):
+    """Δήλωση ΑΔΕΙΩΝ του μήνα στο ΕΡΓΑΝΗ (WTOLeave) — κλείνει την υποχρέωση
+    LEAVE_DECLARATION. `days` = {employment_id: {ISO ημέρα: κωδικός ΕΡΓΑΝΗ}}
+    (κενό = τίποτα προς δήλωση). Οι δηλωμένες ημέρες ΚΛΕΙΔΩΝΟΥΝ την άδεια:
+    δεν ακυρώνεται ούτε τροποποιείται πια (`EmploymentState.leave_declared`)."""
+
+    period_year: int
+    period_month: int
+    days: dict = field(default_factory=dict)
+    reference: str = ""
+
+
+@dataclass(frozen=True)
 class AttendanceRecorded(DomainEvent):
     """Πραγματική παρουσία ημέρας (π.χ. από ψηφιακή κάρτα εργασίας).
 
@@ -904,6 +917,10 @@ class ErganiSubmissionRecorded(DomainEvent):
     status: str  # submitted | simulated | failed
     reference: str = ""  # αρ. πρωτοκόλλου ΕΡΓΑΝΗ
     environment: str = "trial"  # trial | production
+    # ΤΙ καλύπτει η υποβολή, όταν ένας τύπος εντύπου έχει πολλές εκκρεμότητες
+    # ανά απασχόληση: "E4:<n>" = η n-οστή μεταβολή σύμβασης (βλ.
+    # `EmploymentState.contract_changes`). Κενό = παλιά εγγραφή / μοναδικό.
+    subject: str = ""
 
 
 # ------------------------------------------------- Παράμετροι εφαρμογής
@@ -1260,6 +1277,7 @@ EVENT_TYPES = {
         ScheduleDaysSubmitted,
         ScheduleSystemDeclared,
         RetroScheduleSubmitted,
+        LeaveDeclarationSubmitted,
         AttendanceRecorded,
         CardPunchRecorded,
         CardPunchCancelled,

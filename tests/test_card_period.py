@@ -58,9 +58,10 @@ def test_toggle_digital_card(fresh_system):
     assert _approval_locked(proj)
 
 
-def test_obligation_modal_uploads_card(fresh_system):
-    """UI: το modal της CARD_IMPORT έχει upload· χωρίς κάρτα η ενεργοποίηση
-    απορρίπτεται με τον λόγο, με το αρχείο κάρτας ολοκληρώνεται."""
+def test_card_import_from_attendance(fresh_system):
+    """UI: η κάρτα εισάγεται ΜΟΝΟ στις Παρουσίες — το modal της CARD_IMPORT
+    δείχνει εκεί· χωρίς κάρτα η ενεργοποίηση απορρίπτεται με τον λόγο, η
+    εισαγωγή στις Παρουσίες τρέχει τον έλεγχο και την ολοκληρώνει."""
     import io
     import json
 
@@ -82,7 +83,8 @@ def test_obligation_modal_uploads_card(fresh_system):
         emps = [e for e in proj.employments.values() if e.hire_submitted]
     y, m = ob.period_year, ob.period_month
 
-    assert 'name="karta"' in c.get(f"/obligations/modal?id={ob.obligation_id}").text
+    modal = c.get(f"/obligations/modal?id={ob.obligation_id}").text
+    assert 'name="karta"' not in modal and "/attendance" in modal
 
     def flash(r):
         return json.loads(r.headers["HX-Trigger"])["flash"]
@@ -95,10 +97,11 @@ def test_obligation_modal_uploads_card(fresh_system):
     for e in emps:
         r = c.get(f"/employments/{e.employment_id}/calendar/karta.xlsx?m={y}-{m:02d}")
         punches += karta_import.parse_karta(r.data)
-    data = {"karta": (io.BytesIO(karta_import.build_karta(punches)), "karta.xlsx")}
-    f = flash(c.post(f"/obligations/{ob.obligation_id}/run", data=data,
+    data = {"karta": (io.BytesIO(karta_import.build_karta(punches)), "karta.xlsx"),
+            "y": str(y), "m": str(m)}
+    f = flash(c.post("/attendance/import", data=data,
                      content_type="multipart/form-data"))
-    assert not f["err"], f["msg"]
+    assert not f["err"] and "ελέγχθηκε" in f["msg"], f["msg"]
     assert proj.obligations[ob.obligation_id].fulfilled
 
     # η «Έγκριση παρουσιών» δείχνει αναλυτικά ανά εργαζόμενο

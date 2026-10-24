@@ -1,26 +1,39 @@
+{% from "_macros.html" import emp_status, emp_pay %}
 {# Πίνακας εργαζομένων. Στήλη ΚΑΤΑΣΤΑΣΗ = badges:
    (α) πλήθος απασχολήσεων -> ανοίγει το modal πληροφοριών (περίοδοι
        απασχόλησης, άδεια, ασθένεια — με links στις καρτέλες),
    (β) αν ενεργός: «ενεργή» -> καρτέλα της ενεργής απασχόλησης,
-       αλλιώς: «πρόσληψη»/«επαναπρόσληψη» -> modal (επανα)πρόσληψης. #}
+       αλλιώς: «πρόσληψη»/«επαναπρόσληψη» -> modal (επανα)πρόσληψης.
+   ΔΕΝΤΡΟ: ένα <tbody class="tree"> ανά πρόσωπο — ρίζα ο εργαζόμενος, παιδιά
+   (κλειστά, ▸ ανοίγει) οι προσλήψεις του με link στην καρτέλα. Ταξινόμηση
+   (table-sort.js) και φίλτρα (persons-filter.js) κινούν ΟΛΟ το tbody. #}
 <div id="persons-table">
 {% if rows %}
-  <table class="tbl">
+  {# Κλικ στην κεφαλίδα = ταξινόμηση (table-sort.js) #}
+  <table class="tbl" data-sortable>
     <thead><tr>
       <th>Ονοματεπώνυμο</th><th>Πατρώνυμο / Μητρώνυμο</th>
       <th>Κατάσταση</th><th>Ειδικότητα</th>
-      <th style="text-align:right">Ενέργειες</th>
+      <th style="text-align:right" data-nosort>Ενέργειες</th>
     </tr></thead>
-    <tbody>
       {% for r in rows %}
-        <tr data-status="{{ r.status }}" data-specialty="{{ r.specialty }}"
-            data-search="{{ r.search }}">
-          <td>
+      <tbody class="tree" data-status="{{ r.status }}" data-specialties="{{ r.specialties|join('|') }}"
+             data-search="{{ r.search }}">
+        <tr>
+          <td data-sort="{{ r.person.full_name }}">
+            {% if r.employments %}
+              <button type="button" class="ghost tree-tog" aria-expanded="false"
+                      title="Προσλήψεις"
+                      onclick="this.setAttribute('aria-expanded',
+                               this.closest('tbody').classList.toggle('open'))">▸</button>
+            {% endif %}
             <b>{{ r.person.full_name }}</b>
             <div class="muted mono" style="font-size:11.5px">ΑΦΜ {{ r.person.afm }}</div>
           </td>
           <td class="muted">{{ r.person.father_name }} / {{ r.person.mother_name }}</td>
-          <td class="btnrow" style="gap:6px">
+          {# σειρά: ενεργοί · εκκρεμής πρόσληψη · αποχωρήσαντες · χωρίς πρόσληψη #}
+          <td class="btnrow" style="gap:6px"
+              data-sort="{{ {'active': 1, 'pending': 2, 'terminated': 3}.get(r.status, 4) }}">
             <button type="button" class="tag lnk-tag"
                     hx-get="{{ url_for('persons.info_modal', person_id=r.person.person_id) }}"
                     hx-target="#modal-host" hx-swap="innerHTML"
@@ -42,7 +55,7 @@
                 ➕ {{ 'επαναπρόσληψη' if r.count else 'πρόσληψη' }}</button>
             {% endif %}
           </td>
-          <td>{{ r.specialty or '—' }}</td>
+          <td></td>
           <td class="btnrow" style="justify-content:flex-end">
             <button class="ghost" title="Μεταβολή στοιχείων (τέκνα, ταυτότητα… από ημερομηνία)"
                     hx-get="{{ url_for('persons.change_modal', person_id=r.person.person_id) }}"
@@ -52,8 +65,20 @@
                     hx-target="#modal-host" hx-swap="innerHTML">✏️</button>
           </td>
         </tr>
+        {% for e in r.employments|reverse %}
+          <tr class="tree-child">
+            <td class="mono">↳ {{ e.hire_date|date_gr }} – {{
+              e.termination_date|date_gr if e.termination_date else 'σήμερα' }}</td>
+            <td class="muted">{{ emp_pay(e) }}</td>
+            <td class="btnrow" style="gap:6px">{{ emp_status(e) }}</td>
+            <td>{{ (e.insurance_profile.specialty_name if e.insurance_profile) or '—' }}</td>
+            <td style="text-align:right"><a class="lnk"
+              href="{{ url_for('employments.detail', employment_id=e.employment_id) }}">
+              Καρτέλα →</a></td>
+          </tr>
+        {% endfor %}
+      </tbody>
       {% endfor %}
-    </tbody>
   </table>
   <div class="empty" id="persons-nomatch" hidden>Κανένας εργαζόμενος δεν ταιριάζει στα φίλτρα.</div>
 {% else %}

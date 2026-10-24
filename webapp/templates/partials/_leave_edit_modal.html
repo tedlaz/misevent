@@ -7,6 +7,10 @@
         <h3>🏖️ Άδεια — {{ e.full_name }}</h3>
         <span class="muted" style="font-size:12.5px">Επεξεργασία τύπου και περιόδου</span>
       </div>
+      {% if locked %}
+        <div class="warnbox">🔒 Η άδεια έχει δηλωθεί στο ΕΡΓΑΝΗ — δεν ακυρώνεται
+          ούτε τροποποιείται.</div>
+      {% endif %}
       <div class="mbody">
         <div class="frm cols">
           {% set sel = f.get('leave_type', lv.leave_type.name) %}
@@ -44,7 +48,7 @@
       <div class="mfoot">
         <button type="button" class="ghost" hx-get="{{ url_for('leaves.modal_close') }}"
                 hx-target="#modal-host" hx-swap="innerHTML">Άκυρο</button>
-        <button class="run" type="submit">Αποθήκευση</button>
+        {% if not locked %}<button class="run" type="submit">Αποθήκευση</button>{% endif %}
       </div>
     </form>
   </div>

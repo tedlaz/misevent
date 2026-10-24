@@ -1,0 +1,25 @@
+{# JSON μιας υποβολής ΕΡΓΑΝΗ σε MODAL (μοτίβο §9: κλείνει ΜΟΝΟ με κουμπί):
+   το ακατέργαστο JSON, μορφοποιημένο, με αντιγραφή. Τα συνημμένα PDF είναι
+   ήδη ΣΥΝΟΠΤΙΚΑ στο event (μέγεθος + sha256). #}
+<div class="modal-backdrop">
+  <div class="modal wide">
+    <div class="mhead">
+      <h3><span class="tag" title="{{ label }}">{{ ev.doc_type }}</span> {{ label }}</h3>
+      <span class="muted" style="font-size:12.5px">
+        {{ who }} · {{ at.strftime('%d/%m/%Y %H:%M') }} · {{ ev.status }}
+        {%- if ev.reference %} · <span class="mono">{{ ev.reference }}</span>{% endif %}
+        · {{ ev.environment }}</span>
+    </div>
+    <div class="mbody">
+      <pre class="jt-raw" id="ergani-json-raw">{{ raw }}</pre>
+    </div>
+    <div class="mfoot">
+      <button type="button" class="ghost"
+              onclick="navigator.clipboard && navigator.clipboard.writeText(document.getElementById('ergani-json-raw').textContent).then(() => { this.textContent = '✓ Αντιγράφηκε'; })">
+        📋 Αντιγραφή JSON</button>
+      <button type="button" class="ghost"
+              hx-get="{{ url_for('ergani.modal_close') }}"
+              hx-target="#modal-host" hx-swap="innerHTML">Κλείσιμο</button>
+    </div>
+  </div>
+</div>

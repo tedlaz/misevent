@@ -118,6 +118,21 @@ LEAVE_LABELS = {
     "frontida_teknou": "Φροντίδα τέκνου (ισόχρονη)",
 }
 
+# Υποχρεώσεις που ΣΤΕΛΝΟΥΝ στο ΕΡΓΑΝΗ: μένουν στο χρονολόγιο ως προθεσμία,
+# αλλά ενεργοποιούνται ΜΟΝΟ από την οθόνη ΕΡΓΑΝΗ (`actions.trigger(...,
+# via_ergani=True)`) — εκεί ζει ΚΑΘΕ αποστολή στο ΕΡΓΑΝΗ (`views/ergani.py`).
+ERGANI_ONLY = {"RETRO_SCHEDULE", "LEAVE_DECLARATION"}
+
+# Η άδεια ως ΚΑΤΑΣΤΑΣΗ «τώρα» (Επισκόπηση → Προσωπικό τώρα)
+LEAVE_NOW = {
+    "kanoniki_adeia": "Σε άδεια κανονική",
+    "astheneia": "Σε άδεια ασθενείας",
+    "adeia_aneu_apodoxon": "Σε άδεια άνευ αποδοχών",
+    "mitrotita": "Σε άδεια μητρότητας",
+    "goniki": "Σε γονική άδεια",
+    "frontida_teknou": "Σε άδεια φροντίδας τέκνου",
+}
+
 ERGANI_LABELS = {
     "WebE3N": "Αναγγελία Πρόσληψης",
     # Ιστορικές εγγραφές πριν από την υιοθέτηση του επίσημου WebE3N schema.
@@ -125,6 +140,7 @@ ERGANI_LABELS = {
     "WTO": "Ψηφιακή Οργάνωση Χρόνου Εργασίας",
     "E4_METAVOLI": "Δήλωση Μεταβολής",
     "E5_LIXI": "Αναγγελία Λήξης",
+    "WTOLeave": "Δήλωση αδειών",
 }
 
 TERMINATION_REASONS = [
@@ -150,21 +166,18 @@ NAV_HOME = ("dashboard.index", "📊", "Επισκόπηση")
 # `webapp/__init__.py`: εκεί ο guard κάνει `abort(403)`, οπότε ένας σύνδεσμος
 # χωρίς τη σημαία θα οδηγούσε απλό χρήστη σε σελίδα σφάλματος.
 NAV_GROUPS = [
-    ("daily", "Καθημερινά", "🗓️", [
-        ("obligations.index", "🗓️", "Υποχρεώσεις", False),
-        ("live.index", "🟢", "Ζωντανά", False),
-    ]),
     ("staff", "Προσωπικό", "👥", [
         ("persons.index", "👥", "Εργαζόμενοι", False),
         ("attendance.index", "⏱️", "Παρουσίες", False),
+        ("employments.calendar_page", "📆", "Ημερολόγιο", False),
     ]),
     ("pay", "Αμοιβές", "🧮", [
         ("payroll.index", "🧮", "Μισθοδοσία", False),
         ("payments.index", "💶", "Πληρωμές", False),
+        ("dashboard.stats", "📈", "Στατιστικά", False),
     ]),
     ("filings", "Υποβολές", "🏛️", [
         ("ergani.index", "🏛️", "ΕΡΓΑΝΗ", False),
-        ("work_schedules.index", "📅", "Πρόγραμμα → ΕΡΓΑΝΗ", False),
         ("eapd.index", "📄", "Αρχεία ΑΠΔ", False),
         ("fmy.index", "🧾", "Αρχεία ΦΜΥ", False),
     ]),
@@ -246,6 +259,7 @@ EVENT_LABELS = {
     "ScheduleDaysSubmitted": "Υποβολή ημερήσιων προγραμμάτων ΕΡΓΑΝΗ",
     "ScheduleSystemDeclared": "Σύστημα δήλωσης αλλαγών ωραρίου",
     "RetroScheduleSubmitted": "Απολογιστική δήλωση ωραρίου",
+    "LeaveDeclarationSubmitted": "Δήλωση αδειών ΕΡΓΑΝΗ",
     "AttendanceRecorded": "Παρουσία ημέρας",
     "CardPunchRecorded": "Χτύπημα κάρτας",
     "CardPunchCancelled": "Ακύρωση χτυπήματος κάρτας",

@@ -579,16 +579,16 @@
     };
   }
 
-  /** ΕΒΔΟΜΑΔΑ: double click σε ημέρα -> «Πρόγραμμα ημέρας» (η οθόνη με τις
-   *  συρόμενες μπάρες του Προγράμματος)· σε γραμμή εργαζομένου εστιάζει σε
-   *  αυτόν. ΜΗΝΑΣ: νέα άδεια — βλ. `leavePick`. */
+  /** ΗΜΕΡΑ / ΕΒΔΟΜΑΔΑ: double click σε ημέρα -> «Πρόγραμμα ημέρας» (η οθόνη
+   *  με τις συρόμενες μπάρες του Προγράμματος)· σε γραμμή εργαζομένου
+   *  εστιάζει σε αυτόν. ΜΗΝΑΣ: νέα άδεια — βλ. `leavePick`. */
   function dayOpen(el) {
     const grid = el.querySelector(".lb-grid");
     if (!grid) return;
     grid.addEventListener("dblclick", (e) => {
       const key = zoomLevel().key;
       if (key === "month") { leavePick(el, e); return; }
-      if (key !== "week" || !el.dataset.dayUrl) return;
+      if ((key !== "week" && key !== "day") || !el.dataset.dayUrl) return;
       const at = dayAt(el, e);
       if (!at) return;
       const url = new URL(el.dataset.dayUrl, window.location.origin);
@@ -709,7 +709,19 @@
     el.querySelectorAll("#lb-zoom button").forEach((b) => {
       b.classList.toggle("on", parseInt(b.dataset.span, 10) === span());
     });
+    // Τα ◀ ▶ μετακινούν κατά ΕΝΑ εύρος (step) — το hint ακολουθεί το zoom
+    const [p, n] = STEP_HINT[zoomLevel().key];
+    const prev = el.querySelector("#lb-prev"), next = el.querySelector("#lb-next");
+    if (prev) prev.title = p;
+    if (next) next.title = n;
   }
+
+  const STEP_HINT = {
+    day: ["Προηγούμενη ημέρα", "Επόμενη ημέρα"],
+    week: ["Προηγούμενη εβδομάδα", "Επόμενη εβδομάδα"],
+    month: ["Προηγούμενος μήνας", "Επόμενος μήνας"],
+    year: ["Προηγούμενο έτος", "Επόμενο έτος"],
+  };
 
   /** Αλλαγή επιπέδου zoom: κρατά το ΙΔΙΟ κέντρο, αλλά ζητά το παράθυρο που
    *  χρειάζεται το νέο εύρος (η εβδομάδα/ο μήνας θέλουν πολύ περισσότερες

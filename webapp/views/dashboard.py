@@ -1,6 +1,7 @@
-"""Επισκόπηση: στατιστικά, γραφήματα, επόμενες υποχρεώσεις."""
+"""Επισκόπηση (προσωπικό τώρα, υποχρεώσεις) και Στατιστικά (γραφήματα κόστους)."""
 
 import json
+from datetime import datetime
 
 from flask import Blueprint, render_template, request
 
@@ -11,16 +12,33 @@ from .. import queries as q
 from ..actions import seed_demo
 from ..clock import today
 from ..helpers import flash_to, pdf_response, run_command
-from ..system import proj, store
+from ..system import proj
+from . import live, obligations
 
 bp = Blueprint("dashboard", __name__)
 
 
 def _context():
     ref = today()
-    obs = q.obligation_list(ref, view="all")  # η επισκόπηση μετράει και τις ολοκληρωμένες
-    counts = q.status_counts(obs)
-    mw = config.minimum_wage_for(ref)
+    now = datetime.now()
+    return {
+        # Χρονολόγιο υποχρεώσεων (ίδιο panel/htmx με το blueprint «obligations»)
+        **obligations._panel(
+            request.args.get("id"), ref, obligations._locked(), obligations._view(),
+        ),
+        # «Ζωντανά»: αποδίδεται ΧΩΡΙΣΤΑ — το context του (`detail`, `rows`,
+        # `day`…) θα συγκρουόταν με του χρονολογίου (`detail` = modal)
+        "live_html": render_template(
+            "partials/_live_board.html", **live.board_context(),
+        ),
+        "staff": q.staff_now(ref, now.hour * 60 + now.minute),
+        "min_wage": config.minimum_wage_for(ref),
+        "empty": not proj.persons and not proj.obligations,
+    }
+
+
+def _stats_context():
+    ref = today()
 
     # «Μηνιαία εξέλιξη»: η ΕΤΗΣΙΑ ΑΝΑΦΟΡΑ ΚΟΣΤΟΥΣ του έτους αναφοράς — 12
     # μήνες × 4 συνιστώσες (μισθοδοσία, Δώρα, Επίδομα Αδείας, αποζημιώσεις),
@@ -51,7 +69,6 @@ def _context():
         }
 
     chart = {
-        "counts": counts,
         "labels": [m["label"] for m in report["months"]],
         "long": [m["long"] for m in report["months"]],
         "order": [ms["key"] for ms in report["measures"]],
@@ -67,28 +84,10 @@ def _context():
             "hours": [r["hours"] for r in report["hourly"]["rows"]],
         },
     }
-    upcoming = [o for o in obs if o["status"] != "done"][:8]
     return {
-        "counts": counts,
-        "upcoming": upcoming,
-        "leave_alerts": q.leave_compliance(ref.year),
-        "ref_year": ref.year,
         "report": report,
         "months_gen": labels.MONTHS_GEN,
         "chart_json": json.dumps(chart, ensure_ascii=False),
-        "min_wage": mw,
-        "persons_n": sum(
-            1
-            for person in proj.persons.values()
-            if any(
-                eid in proj.employments and proj.employments[eid].hire_submitted
-                for eid in person.employment_ids
-            )
-        ),
-        "employments_n": sum(
-            1 for e in proj.employments.values() if e.hire_submitted and e.active
-        ),
-        "events_n": len(store.load()),
         "empty": not proj.persons and not proj.obligations,
     }
 
@@ -96,6 +95,11 @@ def _context():
 @bp.get("/")
 def index():
     return render_template("dashboard.html", **_context())
+
+
+@bp.get("/stats")
+def stats():
+    return render_template("stats.html", **_stats_context())
 
 
 @bp.post("/seed")

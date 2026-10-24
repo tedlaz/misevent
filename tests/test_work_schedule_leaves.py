@@ -1,9 +1,9 @@
 """
-ΑΔΕΙΕΣ & ΠΡΟΓΡΑΜΜΑ ΣΤΑ «ΖΩΝΤΑΝΑ» + οθόνη «Πρόγραμμα → ΕΡΓΑΝΗ».
+ΑΔΕΙΕΣ & ΠΡΟΓΡΑΜΜΑ ΣΤΑ «ΖΩΝΤΑΝΑ» + οθόνη ΕΡΓΑΝΗ.
 
 Οι άδειες δημιουργούνται/επεξεργάζονται από τα Ζωντανά (modal → κενό σώμα +
 `lb-refresh`). Οι αλλαγές προγράμματος (μαζική αλλαγή στα Ζωντανά)
-συγκεντρώνονται στην οθόνη `/work-schedules/`, από όπου αναιρούνται ή
+συγκεντρώνονται στην οθόνη `/ergani/`, από όπου αναιρούνται ή
 στέλνονται στο ΕΡΓΑΝΗ — και μένουν στο ιστορικό αποστολών.
 
 ⚠️ Ζητά `fresh_system`: στήνει εταιρεία και γράφει άδειες/προγράμματα.
@@ -34,7 +34,7 @@ def test_schedule_changes_go_through_ergani_screen(fresh_system):
     old = e.day_schedule(day)
     new = "10:00-18:00" if old != "10:00-18:00" else "09:00-17:00"
 
-    assert c.get("/live/").get_data(as_text=True).count("/work-schedules/") >= 1
+    assert c.get("/").get_data(as_text=True).count("/ergani/") >= 1
     assert "Μαζική αλλαγή" in c.get("/work-schedules/range").get_data(as_text=True)
     r = c.post("/work-schedules/range", data={
         "eid": eid, "date_from": day.isoformat(), "date_to": day.isoformat(),
@@ -43,14 +43,15 @@ def test_schedule_changes_go_through_ergani_screen(fresh_system):
     assert "lb-refresh" in r.headers["HX-Trigger"]
     assert e.day_schedule(day) == new
 
-    page = c.get("/work-schedules/").get_data(as_text=True)
+    assert c.get("/work-schedules/").status_code == 302  # → οθόνη ΕΡΓΑΝΗ
+    page = c.get("/ergani/").get_data(as_text=True)
     assert f'value="{eid}|{monday.isoformat()}"' in page
     assert new in page
 
     # Το seed έχει δηλωμένο πρόγραμμα -> η αλλαγή είναι «τροποποιημένη»
     assert e.day_status(day) == "modified"
     # ΑΝΑΙΡΕΣΗ: επαναφορά στη δηλωμένη τιμή
-    c.post("/work-schedules/ergani/revert",
+    c.post("/ergani/schedules/revert",
            data={"week": f"{eid}|{monday.isoformat()}"})
     assert e.day_schedule(day) == old
     c.post("/work-schedules/range", data={
@@ -60,9 +61,11 @@ def test_schedule_changes_go_through_ergani_screen(fresh_system):
     # ΥΠΟΒΟΛΗ όλων των εκκρεμών (χρονολογικά — καμία τρύπα)
     weeks = re.findall(r'name="week" checked\s+value="([^"]+)"', page)
     assert weeks
-    html = c.post("/work-schedules/ergani", data={"week": weeks}).get_data(as_text=True)
+    html = c.post("/ergani/schedules", data={"week": weeks}).get_data(as_text=True)
     assert e.day_status(day) == "submitted"
-    assert "Ιστορικό αποστολών" in html and "Καμία αποστολή" not in html
+    # ΕΝΑ ιστορικό: η υποβολή WTO κουβαλά και το περιεχόμενο (batch + ημέρες)
+    assert "Ιστορικό υποβολών" in html and "Ημερήσιο #" in html
+    assert f"{day.strftime('%d/%m/%Y')}: {new}" in html
     assert f'value="{eid}|{monday.isoformat()}"' not in html
 
 
@@ -83,7 +86,7 @@ def test_work_schedule_leaves(fresh_system):
 
     # ΖΩΝΤΑΝΑ (μήνας: μενού τύπου άδειας): κενό σώμα (κλείνει το modal) +
     # εντολή ανανέωσης του grid
-    assert 'id="lb-leave-menu"' in c.get("/live/").get_data(as_text=True)
+    assert 'id="lb-leave-menu"' in c.get("/").get_data(as_text=True)
     for kind, d0, d1 in (("ANNUAL", 14, 16), ("SICK", 21, 22)):
         r = c.post(
             f"/leaves/{eid}/new",

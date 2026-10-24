@@ -486,35 +486,39 @@ class EmploymentMixin:
     def _declare_standing_weekly(
         self, employment_id, effective_from=None, end_date=None, pattern=None
     ):
-        """Υποβάλλει το σταθερό εβδομαδιαίο στο ΕΡΓΑΝΗ και το καταγράφει ως
-        κάλυψη. Χωρίς στοιχεία εταιρείας δεν υποβάλλεται. `end_date` κενό =
-        χωρίς λήξη· διαφορετικά το πρόγραμμα δηλώνεται με ισχύ έως τη λήξη."""
-        emp = self.proj.employments[employment_id]
-        pattern = dict(pattern if pattern is not None else emp.schedule)
-        if not self.proj.company or not pattern:
-            return
+        """Ένα σταθερό εβδομαδιαίο (βλ. `_declare_weekly`)."""
+        return self._declare_weekly([(employment_id, effective_from, end_date, pattern)])
+
+    def _declare_weekly(self, items):
+        """Υποβάλλει σταθερά εβδομαδιαία στο ΕΡΓΑΝΗ σε ΜΙΑ κλήση (WTOWeek,
+        `ergani.merge_wto`) και τα καταγράφει ως κάλυψη. `items` =
+        [(employment_id, ισχύς από, λήξη, μοτίβο)] — None = της απασχόλησης·
+        `end_date` κενό = χωρίς λήξη. Χωρίς στοιχεία εταιρείας δεν
+        υποβάλλεται. Ένα event υποβολής για όλους: `employee_id` ο εργαζόμενος
+        αν είναι ΕΝΑΣ, αλλιώς κενό (η κάλυψη ζει στα ScheduleDeclaredToErgani)."""
+        todo = []
+        for eid, start, end, pattern in items:
+            emp = self.proj.employments[eid]
+            pattern = dict(pattern if pattern is not None else emp.schedule)
+            if pattern:
+                todo.append((eid, emp, start or emp.payroll_start, end, pattern))
+        if not self.proj.company or not todo:
+            return None
         res = self._ergani_submit(
             "WTO",
-            employment_id,
-            ergani_mod.build_wto(
-                self.proj.company,
-                emp,
-                pattern,
-                effective_from or emp.payroll_start,
-                end_date,
-            ),
+            todo[0][0] if len({t[0] for t in todo}) == 1 else "",
+            ergani_mod.merge_wto([
+                ergani_mod.build_wto(self.proj.company, emp, pattern, start, end)
+                for _eid, emp, start, end, pattern in todo
+            ]),
             endpoint="WTOWeek",
         )
         # Κάλυψη ΜΟΝΟ αν το ΕΡΓΑΝΗ τη δέχτηκε — απορριφθείσα ΟΧΕ δεν καλύπτει
-        # τίποτα (μένει καταγεγραμμένη ως failed και ξαναστέλνεται).
+        # ΚΑΝΕΝΑΝ (μένει καταγεγραμμένη ως failed και ξαναστέλνεται).
         if res["status"] != "failed":
-            self.store.append(
-                employment_id,
-                ScheduleDeclaredToErgani(
-                    employment_id, pattern,
-                    effective_from or emp.payroll_start, end_date,
-                ),
-            )
+            for eid, _emp, start, end, pattern in todo:
+                self.store.append(eid, ScheduleDeclaredToErgani(eid, pattern, start, end))
+        return res
 
     # -------------------------------------------------- Υποβολές πρόσληψης ΕΡΓΑΝΗ
     def hire_announced(self, employment_id: str) -> bool:
@@ -617,7 +621,9 @@ class EmploymentMixin:
             )
         if not emp.schedule:
             raise ValueError("Δεν έχει οριστεί εβδομαδιαίο πρόγραμμα εργασίας")
-        if self.ergani_hire_submitted(employment_id, "WTO"):
+        # Η ΚΑΛΥΨΗ (όχι το employee_id της υποβολής: μια κοινή κλήση για
+        # πολλούς έχει κενό) — ό,τι δηλώθηκε επιτυχώς γράφει standing_history
+        if emp.standing_history:
             raise ValueError("Η ΟΧΕ πρόσληψης έχει ήδη υποβληθεί")
         self._require_hire_announced(employment_id)
         self._declare_standing_weekly(employment_id)

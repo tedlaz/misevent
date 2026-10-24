@@ -205,6 +205,14 @@ TYPES: dict[str, ObligationType] = {t.code: t for t in [
        spawn="reactive", due=("eom_cal", 1), command="submit_retro_schedule",
        requires=(("ATTENDANCE_APPROVAL", "same"),)),
 
+    # Δήλωση αδειών (WTOLeave): αντιδραστικό — γεννιέται με την καταχώρηση
+    # άδειας, για κάθε μήνα που καλύπτει. Απολογιστική, έως το τέλος του
+    # ΕΠΟΜΕΝΟΥ ημερολογιακού μήνα· μετά την έγκριση παρουσιών (ο μήνας
+    # έκλεισε, οι άδειες είναι οριστικές). Η δηλωμένη άδεια κλειδώνει.
+    _t("LEAVE_DECLARATION", "Δήλωση αδειών ΕΡΓΑΝΗ", "🏖️", track="submission",
+       spawn="reactive", due=("eom_cal", 1), command="submit_leave_declaration",
+       requires=(("ATTENDANCE_APPROVAL", "same"),)),
+
     # ------------------------------------------- Καταβολές Δώρων/Επιδόματος
     _t("EASTER_GIFT_PAYMENT", "Καταβολή Δώρου Πάσχα", "💶", track="payment",
        spawn="on_source", payout_source="EASTER_GIFT",

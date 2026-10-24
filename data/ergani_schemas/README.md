@@ -9,6 +9,7 @@
 | `WebE3N.json` | Αναγγελία πρόσληψης | `ergani.build_web_e3n` |
 | `WTOWeek.json` | Οργάνωση χρόνου εργασίας — σταθερό εβδομαδιαίο | `ergani.build_wto` |
 | `WTODaily.json` | Οργάνωση χρόνου εργασίας — ημερήσιο (μεταβλητό) | `ergani.build_wto_variable` |
+| `WTOLeave.json` | Δήλωση αδειών (απολογιστική) — ⚠️ ληφθέν από δημόσιο αντίγραφο GET (github chrismfz/ekdosi), όχι από δικό μας token | `ergani.build_wto_leave` |
 | `WebE5N.json` | Οικειοθελής αποχώρηση (με δήλωση εργαζομένου, PDF) | `ergani.build_web_e5n` |
 | `WebE7N.json` | Λύση σύμβασης ορισμένου χρόνου | `ergani.build_web_e7n` |
 | `WorkTimeType.json` | Κωδικοί `f_type` (υπηρεσία EX_BASE_03, Parameter=WorkTimeType) | `ergani._wto_analytics` |

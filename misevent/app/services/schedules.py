@@ -108,13 +108,13 @@ class SchedulesMixin:
             todo += [(eid, p) for p in emp.pending_weekly if p[0] in wanted]
         if not todo:
             raise ValueError("Δεν επιλέχθηκε εκκρεμές εβδομαδιαίο πρόγραμμα")
-        rejected = []
-        for eid, (start, pattern, end) in sorted(todo, key=lambda t: t[1][0]):
-            self._declare_standing_weekly(eid, start, end, pattern)
-            if any(p[0] == start for p in self.proj.employments[eid].pending_weekly):
-                rejected.append(self.proj.employments[eid].full_name)
-        if rejected:
-            raise ValueError("ΑΠΕΡΡΙΨΕ το ΕΡΓΑΝΗ το εβδομαδιαίο: " + ", ".join(rejected))
+        # ΜΙΑ κλήση για όλα, με τη σειρά ισχύος (το νεότερο τελευταίο)
+        res = self._declare_weekly([
+            (eid, start, end, pattern)
+            for eid, (start, pattern, end) in sorted(todo, key=lambda t: t[1][0])
+        ])
+        if res is not None and res["status"] == "failed":
+            raise ValueError("ΑΠΕΡΡΙΨΕ το ΕΡΓΑΝΗ το εβδομαδιαίο — " + res["reference"])
         return len(todo)
 
     def validate_daily_schedule(self, employee_id, days: dict) -> dict:
@@ -267,32 +267,33 @@ class SchedulesMixin:
         if not grouped:
             raise ValueError("Δεν επιλέχθηκαν ημέρες προς υποβολή")
 
+        # ΟΛΟ το batch σε ΜΙΑ κλήση (WTODaily, `ergani.merge_wto`): το σχήμα
+        # δέχεται πολλούς εργαζομένους — δεν «σπάει» ανά εργαζόμενο.
         batch_no = self.next_schedule_batch_no()
-        total = 0
-        rejected = []
-        for eid, days in grouped.items():
-            emp = self.proj.employments[eid]
-            payload = {d.isoformat(): emp.day_schedule(d) for d in days}
-            res = self._ergani_submit(
-                "WTO",
-                eid,
+        payloads = {
+            eid: {d.isoformat(): self.proj.employments[eid].day_schedule(d) for d in days}
+            for eid, days in grouped.items()
+        }
+        res = self._ergani_submit(
+            "WTO",
+            next(iter(grouped)) if len(grouped) == 1 else "",
+            ergani_mod.merge_wto([
                 ergani_mod.build_wto_variable(
-                    self.proj.company, emp, payload, self._week_monday(days[0]),
+                    self.proj.company, self.proj.employments[eid], payload,
+                    self._week_monday(grouped[eid][0]),
                     {d.isoformat(): rows for d, rows in absences.get(eid, {}).items()},
-                ),
-                endpoint="WTODaily",
-            )
-            # Απορριφθείσες ημέρες ΔΕΝ σημειώνονται δηλωμένες — μένουν pending.
-            if res["status"] == "failed":
-                rejected.append(f"{emp.full_name}: {res['reference']}")
-                continue
+                )
+                for eid, payload in payloads.items()
+            ]),
+            endpoint="WTODaily",
+        )
+        # Απόρριψη = ΚΑΜΙΑ ημέρα δηλωμένη (όλες μένουν pending, ξαναστέλνονται).
+        if res["status"] == "failed":
+            raise ValueError("ΑΠΕΡΡΙΨΕ το ΕΡΓΑΝΗ — " + res["reference"])
+        for eid, payload in payloads.items():
             self.store.append(eid, ScheduleDaysSubmitted(eid, batch_no, payload))
-            total += len(payload)
-        if rejected:
-            raise ValueError(
-                (f"Δηλώθηκαν {total} ημερήσια προγράμματα· " if total else "")
-                + "ΑΠΕΡΡΙΨΕ το ΕΡΓΑΝΗ — " + " · ".join(rejected))
-        return {"batch_no": batch_no, "count": total, "employees": len(grouped)}
+        return {"batch_no": batch_no, "count": sum(map(len, payloads.values())),
+                "employees": len(grouped)}
 
     def _earliest_pending_before(self, emp, limit: date):
         """Η πρώτη ΑΔΗΛΩΤΗ (pending) ενεργή ημέρα πριν την `limit`, ή None."""

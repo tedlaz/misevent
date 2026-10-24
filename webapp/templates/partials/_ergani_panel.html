@@ -1,0 +1,300 @@
+{# Οθόνη ΕΡΓΑΝΗ — η ΜΟΝΗ αποστολή στο ΕΡΓΑΝΗ (views/ergani.py). Πάνω οι
+   ΕΚΚΡΕΜΟΤΗΤΕΣ ανά είδος εντύπου, από κάτω το ιστορικό. Κάθε ενέργεια
+   ξαναχτίζει ΟΛΟ το panel (#ergani-panel), ώστε εκκρεμότητες και ιστορικό
+   να συμφωνούν πάντα. #}
+<div id="ergani-panel">
+  {% set total = hires|length + retros|length + metavoles|length + exits|length
+                 + rows|length + weekly|length %}
+
+  {% if next_week.names %}
+    <div class="work-next-alert" role="alert">
+      ⚠️ Η <b>επόμενη εβδομάδα</b> ({{ next_week.label }}) δεν έχει δηλωμένο
+      πρόγραμμα στο ΕΡΓΑΝΗ για: <b>{{ next_week.names|join(', ') }}</b>.
+    </div>
+  {% endif %}
+
+  <div class="card">
+    <h2>Εκκρεμείς υποβολές
+      <span class="norm">— ό,τι πρέπει να σταλεί στο ΕΡΓΑΝΗ· η αποστολή γίνεται
+        ΜΟΝΟ από εδώ</span></h2>
+
+    {% if not total %}
+      <div class="empty">✓ Καμία εκκρεμότητα — όλα έχουν δηλωθεί στο ΕΡΓΑΝΗ.</div>
+    {% endif %}
+
+    {# ---------------------------------------------- Αναγγελίες Πρόσληψης #}
+    {% if hires %}
+      <h3 class="sec" id="ergani-e3">👤 Αναγγελίες Πρόσληψης <span class="norm">— WebE3N</span></h3>
+      <table class="tbl">
+        <thead><tr><th>Εργαζόμενος</th><th>Πρόσληψη</th><th>Έγγραφα</th>
+          <th style="text-align:right">Ενέργειες</th></tr></thead>
+        <tbody>
+          {% for r in hires %}
+            <tr>
+              <td><a class="lnk" href="{{ url_for('employments.detail', employment_id=r.e.employment_id) }}">
+                {{ r.e.full_name }}</a></td>
+              <td class="mono">{{ r.e.hire_date|date_gr }}</td>
+              <td>{% if r.missing %}<span class="tag warn">⚠ Λείπει: {{ r.missing|join(', ') }}</span>
+                  {% else %}—{% endif %}</td>
+              <td class="btnrow" style="justify-content:flex-end">
+                {% if r.ready %}
+                  <a class="ghost sm" target="_blank"
+                     href="{{ url_for('employments.ergani_e3_json', employment_id=r.e.employment_id) }}">JSON</a>
+                  <button class="run sm"
+                          hx-post="{{ url_for('ergani.submit_e3', employment_id=r.e.employment_id) }}"
+                          hx-target="#ergani-panel" hx-swap="outerHTML"
+                          {% if r.missing %}hx-confirm="Λείπει: {{ r.missing|join(', ') }} (Πληροφορίες προσώπου → Έγγραφα). Υποβολή χωρίς αυτό;"{% endif %}>
+                    📤 Υποβολή WebE3N</button>
+                {% else %}
+                  <span class="tag off" title="Ορίστε ειδικότητα/ασφάλιση στην καρτέλα">χωρίς ασφαλιστικό προφίλ</span>
+                {% endif %}
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    {% endif %}
+
+    {# ------------------------------------------------ Πρόγραμμα εργασίας #}
+    {% if rows or weekly %}
+      <form hx-post="{{ url_for('ergani.submit_schedules') }}"
+            hx-target="#ergani-panel" hx-swap="outerHTML">
+        {% if weekly %}
+          <h3 class="sec">🗓️ Εβδομαδιαίο πρόγραμμα <span class="norm">— standing ΟΧΕ</span></h3>
+          <table class="tbl">
+            <thead><tr>
+              <th></th><th>Εργαζόμενος</th><th>Ισχύς</th><th>Πρόγραμμα εβδομάδας</th>
+            </tr></thead>
+            <tbody>
+              {% for r in weekly %}
+                <tr>
+                  <td><input type="checkbox" name="weekly" checked
+                             value="{{ r.e.employment_id }}|{{ r.start.isoformat() }}"
+                             aria-label="Επιλογή {{ r.e.full_name }} εβδομαδιαίο {{ r.start|date_gr }}"></td>
+                  <td>{{ r.e.full_name }}</td>
+                  <td class="mono">{{ r.start|date_gr }} – {{ r.end|date_gr if r.end else 'αορίστου' }}</td>
+                  <td class="mono" style="font-size:12.5px">
+                    {% for lbl, h in r.days %}{{ lbl }} {{ h or 'ρεπό' }}{{ ' · ' if not loop.last }}{% endfor %}</td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        {% endif %}
+        {% if rows %}
+          <h3 class="sec">📆 Ημερήσιο πρόγραμμα <span class="norm">— ημέρες
+            αδήλωτες ή τροποποιημένες μετά τη δήλωση· χρονολογικά, χωρίς να
+            παραλείπεται προγενέστερη αδήλωτη ημέρα</span></h3>
+          <table class="tbl">
+            <thead><tr>
+              <th></th><th>Εργαζόμενος</th><th>Εβδομάδα</th><th>Ημέρες (δηλωμένο → νέο)</th>
+            </tr></thead>
+            <tbody>
+              {% for r in rows %}
+                <tr id="erg-{{ r.e.employment_id }}-{{ r.monday.isoformat() }}">
+                  <td><input type="checkbox" name="week" checked
+                             value="{{ r.e.employment_id }}|{{ r.monday.isoformat() }}"
+                             aria-label="Επιλογή {{ r.e.full_name }} {{ r.label }}"></td>
+                  <td>{{ r.e.full_name }}</td>
+                  <td class="mono">Ε{{ r.iso_week }} · {{ r.label }}</td>
+                  <td>
+                    {% for d in r.days %}
+                      <div class="mono" style="font-size:12.5px">
+                        {{ d.date|date_gr }}:
+                        {% if d.status == 'pending' %}
+                          <span class="tag">αδήλωτο</span> → {{ d.new or 'ρεπό' }}
+                        {% else %}
+                          <s class="muted">{{ d.old or 'ρεπό' }}</s> → <b>{{ d.new or 'ρεπό' }}</b>
+                        {% endif %}
+                      </div>
+                    {% endfor %}
+                  </td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        {% endif %}
+        <div class="acts" style="display:flex;gap:8px;margin-top:12px">
+          <button class="run" type="submit">📤 Υποβολή επιλεγμένου προγράμματος στο ΕΡΓΑΝΗ</button>
+          {% if rows %}
+          <button class="ghost" type="submit"
+                  hx-post="{{ url_for('ergani.revert_schedules') }}"
+                  hx-confirm="Αναίρεση των τροποποιημένων ημερών των επιλεγμένων εβδομάδων (επαναφορά στη δηλωμένη τιμή);">
+            ↺ Αναίρεση επιλεγμένων ημερήσιων αλλαγών</button>
+          {% endif %}
+        </div>
+      </form>
+    {% endif %}
+
+    {# ------------------- Υποχρεώσεις ΕΡΓΑΝΗ: απολογιστικό, δήλωση αδειών #}
+    {% if retros %}
+      <h3 class="sec">🕘 Απολογιστικό & άδειες <span class="norm">— προθεσμία στις
+        Υποχρεώσεις· η υποβολή την ολοκληρώνει</span></h3>
+      <table class="tbl">
+        <thead><tr><th>Περίοδος</th><th>Προθεσμία</th><th>Κατάσταση</th>
+          <th style="text-align:right">Ενέργειες</th></tr></thead>
+        <tbody>
+          {% for r in retros %}
+            <tr>
+              <td>{{ r.label }}</td>
+              <td class="mono">{{ r.ob.due_date|date_gr }}</td>
+              <td>{% if r.reason %}<span class="tag off">🔒 {{ r.reason }}</span>
+                  {% elif r.late %}<span class="tag warn">εκπρόθεσμη</span>
+                  {% else %}<span class="tag ok">διαθέσιμη</span>{% endif %}</td>
+              <td class="btnrow" style="justify-content:flex-end">
+                <button class="run sm {{ 'danger' if r.late and not r.reason }}"
+                        hx-post="{{ url_for('ergani.submit_retro', ob_id=r.ob.obligation_id) }}"
+                        hx-target="#ergani-panel" hx-swap="outerHTML"
+                        {{ 'disabled' if r.reason }}>📤 {{ 'Δήλωση αδειών'
+                          if r.ob.obligation_type == 'LEAVE_DECLARATION'
+                          else 'Υποβολή απολογιστικού' }}</button>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    {% endif %}
+
+    {# ------------------------------------------- Δηλώσεις Μεταβολής (Ε4) #}
+    {% if metavoles %}
+      <h3 class="sec">✍️ Δηλώσεις Μεταβολής <span class="norm">— αλλαγές σύμβασης</span></h3>
+      <table class="tbl">
+        <thead><tr><th>Εργαζόμενος</th><th>Ισχύς από</th><th>Νέοι όροι</th>
+          <th style="text-align:right">Ενέργειες</th></tr></thead>
+        <tbody>
+          {% for r in metavoles %}
+            <tr>
+              <td><a class="lnk" href="{{ url_for('employments.detail', employment_id=r.e.employment_id) }}">
+                {{ r.e.full_name }}</a></td>
+              <td class="mono">{{ r.t.effective_from|date_gr }}</td>
+              <td>{{ r.t.wage|money }}€ {{ 'ημερομίσθιο' if r.t.pay_type == 'daily' else 'μισθός' }}
+                · {{ '%g'|format(r.t.weekly_hours) }} ώρ./εβδ.</td>
+              <td class="btnrow" style="justify-content:flex-end">
+                <button class="run sm"
+                        hx-post="{{ url_for('ergani.submit_e4', employment_id=r.e.employment_id, n=r.n) }}"
+                        hx-target="#ergani-panel" hx-swap="outerHTML">📤 Υποβολή Ε4</button>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    {% endif %}
+
+    {# ------------------------------------------------ Αναγγελίες Λήξης #}
+    {% if exits %}
+      <h3 class="sec">🚪 Αναγγελίες Λήξης <span class="norm">— εντός 4 εργάσιμων
+        από την αποχώρηση</span></h3>
+      <table class="tbl">
+        <thead><tr><th>Εργαζόμενος</th><th>Λήξη</th><th>Αιτία</th>
+          <th style="text-align:right">Ενέργειες</th></tr></thead>
+        <tbody>
+          {% for r in exits %}
+            <tr>
+              <td><a class="lnk" href="{{ url_for('employments.detail', employment_id=r.e.employment_id) }}">
+                {{ r.e.full_name }}</a></td>
+              <td class="mono">{{ r.e.termination_date|date_gr }}</td>
+              <td>{{ r.reason }}</td>
+              <td>
+                {% if r.api %}
+                  <form class="btnrow" style="justify-content:flex-end"
+                        hx-post="{{ url_for('ergani.submit_e5', employment_id=r.e.employment_id) }}"
+                        hx-target="#ergani-panel" hx-swap="outerHTML"
+                        hx-encoding="multipart/form-data">
+                    {% if r.voluntary %}
+                      {% if r.has_pdf %}<span class="tag ok" title="Θα επισυναφθεί στο WebE5N">δήλωση ✓</span>
+                      {% else %}
+                        <input type="file" name="resignation" multiple
+                               accept="application/pdf,image/*" style="font-size:12px;max-width:190px"
+                               aria-label="Δήλωση αποχώρησης {{ r.e.full_name }}"
+                               title="Δήλωση αποχώρησης με υπογραφή (PDF ή φωτογραφίες)">
+                      {% endif %}
+                    {% endif %}
+                    <button class="run sm" type="submit">📤 Υποβολή {{ 'WebE5N' if r.voluntary else 'WebE7N' }}</button>
+                  </form>
+                {% else %}
+                  <form class="btnrow" style="justify-content:flex-end"
+                        hx-post="{{ url_for('ergani.external_e5', employment_id=r.e.employment_id) }}"
+                        hx-target="#ergani-panel" hx-swap="outerHTML">
+                    <span class="muted" style="font-size:12px">δεν διατίθεται μέσω API — portal ΕΡΓΑΝΗ</span>
+                    <input name="reference" placeholder="Αρ. πρωτοκόλλου" style="max-width:150px"
+                           aria-label="Αρ. πρωτοκόλλου {{ r.e.full_name }}">
+                    <button class="ghost sm" type="submit">✓ Υποβλήθηκε στο portal</button>
+                  </form>
+                {% endif %}
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    {% endif %}
+  </div>
+
+  {# --------------------------------------------------------- Ιστορικό #}
+  <div class="card">
+    <h2>Ιστορικό υποβολών
+      <span class="norm">— όλα τα έντυπα, μαζί με τις απορρίψεις· στο πρόγραμμα
+        και οι ημέρες που δηλώθηκαν</span></h2>
+    {% if history %}
+      {# Ταξινόμηση + γραμμή φίλτρων κάτω από τις κεφαλίδες (table-sort.js) #}
+      <table class="tbl" data-sortable data-filterable>
+        <thead><tr>
+          <th>Ημερομηνία υποβολής</th><th>Έντυπο</th><th>Αφορά</th>
+          <th data-nosort>Περιεχόμενο</th><th>Κατάσταση</th>
+          <th>Αρ. πρωτοκόλλου</th><th>Περιβάλλον</th><th data-nosort data-nofilter>JSON</th>
+        </tr></thead>
+        <tbody>
+          {% for s in history %}
+            <tr>
+              <td class="mono" style="white-space:nowrap"
+                  data-sort="{{ s.at.isoformat() }}">{{ s.at.strftime('%d/%m/%Y %H:%M') }}</td>
+              <td><span class="tag" title="{{ s.label }}">{{ s.doc }}</span></td>
+              <td>{{ s.who }}</td>
+              <td>
+                {% set sc = s.schedule %}
+                {% if sc %}
+                  {% set first = sc[0] %}
+                  <details>
+                    <summary class="lnk" style="cursor:pointer;white-space:nowrap">
+                      {% if first.kind == 'daily' %}Ημερήσιο #{{ first.no }}
+                      {% else %}Εβδομαδιαίο{% endif %}</summary>
+                    {% for i in sc %}
+                      <div style="margin:6px 0 2px"><b>{{ i.name }}</b>
+                        {% if i.period %}<span class="muted">· ισχύς
+                          {{ i.period[0]|date_gr if i.period[0] else '—' }} έως
+                          {{ i.period[1]|date_gr if i.period[1] else 'αορίστου' }}</span>{% endif %}</div>
+                      {% for label, hours in i.days %}
+                        <div class="mono" style="font-size:12.5px">{{ label }}: {{ hours or 'ρεπό' }}</div>
+                      {% endfor %}
+                    {% endfor %}
+                  </details>
+                {% else %}<span class="muted">—</span>{% endif %}
+              </td>
+              <td>
+                {% if s.status == 'failed' %}
+                  <span class="tag" style="color:var(--prob);border-color:var(--prob)">
+                    Αποτυχία</span>
+                {% elif s.status == 'submitted' %}
+                  <span class="tag ok">Υποβλήθηκε</span>
+                {% elif s.status == 'external' %}
+                  <span class="tag off">Εκτός συστήματος</span>
+                {% else %}
+                  <span class="tag">Προσομοίωση</span>
+                {% endif %}
+              </td>
+              <td class="mono">{{ s.reference or '—' }}</td>
+              <td class="muted">{{ s.environment or '—' }}</td>
+              <td>
+                {% if s.seq is not none %}
+                  <button type="button" class="ghost sm"
+                          hx-get="{{ url_for('ergani.submission_modal', seq=s.seq) }}"
+                          hx-target="#modal-host" hx-swap="innerHTML">{ } JSON</button>
+                {% else %}<span class="muted">—</span>{% endif %}
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    {% else %}
+      <div class="empty">Καμία υποβολή στο ΕΡΓΑΝΗ ακόμη.</div>
+    {% endif %}
+  </div>
+</div>

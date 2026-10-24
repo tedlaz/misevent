@@ -11,7 +11,12 @@ import misevent.domain.payroll_engine as pe
 import misevent.integrations.ergani as ergani_mod
 import misevent.rules.config as config
 import misevent.rules.constraints as constraints
-from misevent.domain.events import ContractChanged, EmployeeTerminated, EmploymentDeleted
+from misevent.domain.events import (
+    ContractChanged,
+    EmployeeTerminated,
+    EmploymentDeleted,
+    ErganiSubmissionRecorded,
+)
 
 from ._base import DISMISSAL_REASON, FIXED_TERM_END_REASON, VOLUNTARY_EXIT_REASON
 
@@ -195,7 +200,9 @@ class ContractMixin:
         reason_date=None,
     ):
         """Αλλαγή σύμβασης (αποδοχές / τύπος αμοιβής / πλήρης-μερική /
-        πενθήμερο-εξαήμερο). Υποβάλλει Δήλωση Μεταβολής στο ΕΡΓΑΝΗ.
+        πενθήμερο-εξαήμερο). ΔΕΝ υποβάλλει στο ΕΡΓΑΝΗ: η Δήλωση Μεταβολής
+        μένει ΕΚΚΡΕΜΗΣ (`pending_metavoli`) και στέλνεται ΜΟΝΟ από την οθόνη
+        ΕΡΓΑΝΗ (`submit_metavoli`).
 
         `weekly_system`: 5/6 ή None = αμετάβλητο.
         `reason`: κωδικός αιτίας (`config.CONTRACT_CHANGE_REASONS`) — κενός για
@@ -230,16 +237,100 @@ class ContractMixin:
                 reason_date,
             ),
         )
-        if self.proj.company:
-            self._ergani_submit(
-                "E4_METAVOLI",
-                employee_id,
-                ergani_mod.build_metavoli(
-                    self.proj.company,
-                    self.proj.employments[employee_id],
-                    effective_from,
-                ),
-            )
+
+    # -------------------------------------------- Δηλώσεις Μεταβολής (Ε4)
+    def pending_metavoli(self, employee_id) -> list[tuple[int, object]]:
+        """Οι μεταβολές σύμβασης που ΔΕΝ έχουν δηλωθεί στο ΕΡΓΑΝΗ:
+        [(n, όροι)] — `n` = θέση στο `contract_changes` (subject "E4:<n>").
+
+        Δεν εκκρεμούν όσες έγιναν ΠΡΙΝ την αναγγελία πρόσληψης (τις καλύπτει
+        το WebE3N). ⚠️ ΠΑΛΙΕΣ υποβολές (πριν το `subject`, όταν το Ε4 έφευγε
+        αυτόματα με την αλλαγή) καλύπτουν τις μεταβολές με τη σειρά τους —
+        αλλιώς όλο το ιστορικό θα εμφανιζόταν ξανά ως εκκρεμές."""
+        emp = self.proj.employments.get(employee_id)
+        if emp is None:
+            return []
+        sent = [s for s in self.proj.ergani_submissions
+                if s.employee_id == employee_id and s.doc_type == "E4_METAVOLI"
+                and s.status != "failed"]
+        done = {s.subject for s in sent if s.subject}
+        legacy = sum(1 for s in sent if not s.subject)
+        out = []
+        for n, (terms, announced) in enumerate(emp.contract_changes):
+            if f"E4:{n}" in done:
+                continue
+            if legacy:
+                legacy -= 1
+                continue
+            if announced:
+                out.append((n, terms))
+        return out
+
+    def submit_metavoli(self, employee_id, n: int):
+        """Υποβολή ΜΙΑΣ εκκρεμούς Δήλωσης Μεταβολής (με τους δικούς της όρους)."""
+        if self.proj.company is None:
+            raise ValueError("Δεν έχουν καταχωρηθεί στοιχεία εταιρείας")
+        terms = dict(self.pending_metavoli(employee_id)).get(n)
+        if terms is None:
+            raise ValueError("Η Δήλωση Μεταβολής δεν εκκρεμεί (ήδη υποβλήθηκε;)")
+        return self._ergani_submit(
+            "E4_METAVOLI", employee_id,
+            ergani_mod.build_metavoli(self.proj.company,
+                                      self.proj.employments[employee_id],
+                                      terms.effective_from, terms),
+            subject=f"E4:{n}",
+        )
+
+    # ------------------------------------- Ψηφιακή Αναγγελία Λήξης (Ε5/Ε7)
+    def exit_pending(self, employee_id) -> bool:
+        """Η αποχώρηση δεν έχει δηλωθεί στο ΕΡΓΑΝΗ (ούτε σημειωθεί ως
+        υποβληθείσα εκτός συστήματος — η μόνη οδός για την καταγγελία)."""
+        emp = self.proj.employments.get(employee_id)
+        return bool(emp and emp.termination_date and not any(
+            s.employee_id == employee_id and s.doc_type == "E5_LIXI"
+            and s.status != "failed" for s in self.proj.ergani_submissions))
+
+    def submit_exit(self, employee_id):
+        """Υποβολή της εκκρεμούς Αναγγελίας Λήξης — έντυπο ανά αιτία
+        (σχήματα στο data/ergani_schemas/):
+          - οικειοθελής    -> WebE5N, με τη δήλωση του εργαζομένου (PDF από τα
+                              έγγραφα) ΥΠΟΧΡΕΩΤΙΚΑ όταν η αποστολή είναι πραγματική·
+          - λήξη ορισμένου -> WebE7N (χωρίς συνημμένο)·
+          - καταγγελία     -> ΔΕΝ διατίθεται μέσω API (`record_external_exit_submission`)."""
+        emp = self.proj.employments.get(employee_id)
+        if not self.exit_pending(employee_id):
+            raise ValueError("Η Αναγγελία Λήξης δεν εκκρεμεί")
+        if self.proj.company is None:
+            raise ValueError("Δεν έχουν καταχωρηθεί στοιχεία εταιρείας")
+        reason = emp.termination_reason or VOLUNTARY_EXIT_REASON
+        profile = emp.insurance_profile
+        branch = self.get_branch(getattr(profile, "branch_no", 0) or 0)
+        args = (self.proj.company, emp, profile, emp.termination_date)
+        if reason == VOLUNTARY_EXIT_REASON:
+            doc = self.person_document(emp.person_id, "resignation")
+            if not self.ergani.simulate and not doc:
+                raise ValueError(
+                    "Επισυνάψτε τη δήλωση αποχώρησης με υπογραφή του εργαζομένου "
+                    "(PDF) — το ΕΡΓΑΝΗ την απαιτεί στην οικειοθελή αποχώρηση")
+            return self._ergani_submit("E5_LIXI", employee_id, ergani_mod.build_web_e5n(
+                *args, branch=branch, resignation_pdf=doc["content"] if doc else None),
+                endpoint="WebE5N")
+        if reason == FIXED_TERM_END_REASON:
+            return self._ergani_submit("E5_LIXI", employee_id, ergani_mod.build_web_e7n(
+                *args, branch=branch), endpoint="WebE7N")
+        raise ValueError("Η Αναγγελία Λήξης για καταγγελία ΔΕΝ διατίθεται μέσω API "
+                         "— υποβάλετέ την στο portal του ΕΡΓΑΝΗ και σημειώστε την")
+
+    def record_external_exit_submission(self, employee_id, reference=""):
+        """Η Αναγγελία Λήξης υποβλήθηκε ΕΚΤΟΣ συστήματος (portal — π.χ.
+        καταγγελία). ΚΑΜΙΑ κλήση στο ΕΡΓΑΝΗ· `status="external"` (όπως το
+        `record_external_hire_submission`), ώστε να μη φαίνεται εκκρεμής."""
+        if not self.exit_pending(employee_id):
+            raise ValueError("Η Αναγγελία Λήξης δεν εκκρεμεί")
+        self.store.append(employee_id, ErganiSubmissionRecorded(
+            "E5_LIXI", employee_id, "{}", "external",
+            str(reference or "").strip() or "ΕΚΤΟΣ ΣΥΣΤΗΜΑΤΟΣ",
+            self.ergani.environment))
 
     def delete_employment(self, employment_id, reason=""):
         """ΔΙΑΓΡΑΦΗ περιόδου απασχόλησης που καταχωρήθηκε ΕΚ ΠΑΡΑΔΡΟΜΗΣ.
@@ -422,13 +513,11 @@ class ContractMixin:
 
     def terminate(self, employee_id, termination_date, reason="", with_notice=False,
                   resignation_pdf: bytes | None = None) -> str:
-        """Αποχώρηση/λήξη εργασιακής σχέσης + Ψηφιακή Αναγγελία Λήξης.
-
-        Έντυπο ΕΡΓΑΝΗ ανά αιτία (σχήματα στο data/ergani_schemas/):
-          - οικειοθελής      -> WebE5N, με τη δήλωση του εργαζομένου (PDF)
-                                ΥΠΟΧΡΕΩΤΙΚΑ όταν η αποστολή είναι πραγματική·
-          - λήξη ορισμένου   -> WebE7N (χωρίς συνημμένο)·
-          - καταγγελία       -> ΚΑΜΙΑ αποστολή: δεν διατίθεται μέσω API.
+        """Αποχώρηση/λήξη εργασιακής σχέσης. ΔΕΝ υποβάλλει στο ΕΡΓΑΝΗ: η
+        Ψηφιακή Αναγγελία Λήξης μένει ΕΚΚΡΕΜΗΣ (`exit_pending`) και στέλνεται
+        ΜΟΝΟ από την οθόνη ΕΡΓΑΝΗ (`submit_exit`). Η δήλωση οικειοθελούς
+        αποχώρησης (PDF) αποθηκεύεται στα έγγραφα του προσώπου, ώστε να
+        επισυναφθεί τότε.
         Επιστρέφει σημείωση για τον χρήστη (κενή αν δεν χρειάζεται)."""
         emp = self._check_termination(employee_id, termination_date)
         reason = reason or VOLUNTARY_EXIT_REASON
@@ -438,32 +527,19 @@ class ContractMixin:
                              "ορισμένου χρόνου")
         if resignation_pdf is not None and not resignation_pdf.startswith(b"%PDF"):
             raise ValueError("Η δήλωση αποχώρησης πρέπει να είναι PDF")
-        if (self.proj.company and reason == VOLUNTARY_EXIT_REASON
-                and not self.ergani.simulate and not resignation_pdf):
-            raise ValueError(
-                "Επισυνάψτε τη δήλωση αποχώρησης με υπογραφή του εργαζομένου "
-                "(PDF) — το ΕΡΓΑΝΗ την απαιτεί στην οικειοθελή αποχώρηση")
 
         self.store.append(
             employee_id, EmployeeTerminated(employee_id, termination_date, reason)
         )
+        if resignation_pdf:
+            self.documents.put(emp.person_id, "resignation", "resignation.pdf",
+                               resignation_pdf)
 
         note = ""
-        if self.proj.company:
-            profile = emp.insurance_profile
-            branch = self.get_branch(getattr(profile, "branch_no", 0) or 0)
-            args = (self.proj.company, emp, profile, termination_date)
-            if reason == VOLUNTARY_EXIT_REASON:
-                self._ergani_submit("E5_LIXI", employee_id, ergani_mod.build_web_e5n(
-                    *args, branch=branch, resignation_pdf=resignation_pdf),
-                    endpoint="WebE5N")
-            elif reason == FIXED_TERM_END_REASON:
-                self._ergani_submit("E5_LIXI", employee_id, ergani_mod.build_web_e7n(
-                    *args, branch=branch), endpoint="WebE7N")
-            else:
-                note = ("η Ψηφιακή Αναγγελία Λήξης για καταγγελία ΔΕΝ διατίθεται "
-                        "μέσω API — υποβάλετέ την στο portal του ΕΡΓΑΝΗ εντός 4 "
-                        "εργάσιμων")
+        if reason == DISMISSAL_REASON:
+            note = ("η Ψηφιακή Αναγγελία Λήξης για καταγγελία ΔΕΝ διατίθεται "
+                    "μέσω API — υποβάλετέ την στο portal του ΕΡΓΑΝΗ εντός 4 "
+                    "εργάσιμων")
 
         # ΟΛΟΙ οι υπολογισμοί της εκκαθάρισης γίνονται ΕΔΩ, αυτόματα: Δώρο +
         # Επίδομα Αδείας pro-rata, αποζημίωση μη ληφθείσας αδείας και (σε

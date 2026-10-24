@@ -72,13 +72,12 @@
       {% endif %}
 
       {% if detail.upload %}
-        {# «Εισαγωγή κάρτας περιόδου»: το αρχείο ανεβαίνει με την Ενεργοποίηση #}
-        <form id="ob-upload" class="btnrow" style="margin-top:10px">
-          <label class="muted" style="font-size:12.5px">📎 Αρχείο κάρτας ΕΡΓΑΝΗ {{ detail.period }} (xlsx — μόνο ο μήνας)
-            <input type="file" name="karta" accept=".xlsx"></label>
-        </form>
-        <div class="muted" style="font-size:12px;margin-top:4px">
-          Προαιρετικό αν η κάρτα έχει ήδη εισαχθεί (Παρουσίες / Ζωντανά).</div>
+        {# «Εισαγωγή κάρτας περιόδου»: το αρχείο εισάγεται ΜΟΝΟ στις Παρουσίες #}
+        <div class="btnrow" style="margin-top:10px">
+          <a class="ghost sm" href="{{ url_for('attendance.index',
+                                              y=detail.card_y, m=detail.card_m) }}">
+            📇 Εισαγωγή κάρτας στις Παρουσίες {{ detail.period }}</a>
+        </div>
       {% endif %}
 
       {% if detail.extended %}
@@ -153,14 +152,15 @@
       <button type="button" class="ghost"
               hx-get="{{ url_for('obligations.modal_close') }}"
               hx-target="#modal-host" hx-swap="innerHTML">Κλείσιμο</button>
-      {% if not detail.done %}
+      {% if not detail.done and detail.ergani_only %}
+        {# Αποστολή στο ΕΡΓΑΝΗ: ΜΟΝΟ από την οθόνη ΕΡΓΑΝΗ (labels.ERGANI_ONLY) #}
+        <a class="run" href="{{ url_for('ergani.index') }}">📤 Υποβολή από την οθόνη ΕΡΓΑΝΗ</a>
+      {% elif not detail.done %}
         {# Εκπρόθεσμη: ΕΠΙΤΡΕΠΕΤΑΙ, με κόκκινο κουμπί + προειδοποίηση.
            Μπλοκαρισμένη (reason): παραμένει ανενεργό. #}
         <button class="run {{ 'danger' if detail.late and not detail.reason }}"
                 hx-post="{{ url_for('obligations.run', ob_id=detail.id) }}"
-                hx-target="#ob-panel" hx-swap="outerHTML"
-                {% if detail.upload %}hx-include="#ob-upload" hx-encoding="multipart/form-data"{% endif %}
-                {{ 'disabled' if detail.reason else '' }}>
+                hx-target="#ob-panel" hx-swap="outerHTML"                {{ 'disabled' if detail.reason else '' }}>
           {% if detail.late and not detail.reason %}
             ⚠️ Εκπρόθεσμη ενεργοποίηση
           {% else %}Ενεργοποίηση{% endif %}

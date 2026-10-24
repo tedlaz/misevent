@@ -27,8 +27,10 @@ from .filters import money
 from .labels import (
     DAY_NAMES,
     DUE_SOON_DAYS,
+    ERGANI_ONLY,
     ET_LABELS,
     LEAVE_LABELS,
+    LEAVE_NOW,
     MARITAL_LABELS,
     MONTHS_GEN,
     MONTHS_NOM,
@@ -61,7 +63,7 @@ def blocked_reason(ob):
     if ob.obligation_type == "ATTENDANCE_APPROVAL" and not ob.fulfilled and ob.period_month:
         missing = _schedule_pending_days(ob.period_year, ob.period_month)
         if missing:
-            return ("Αδήλωτο πρόγραμμα στο ΕΡΓΑΝΗ (Πρόγραμμα → ΕΡΓΑΝΗ): "
+            return ("Αδήλωτο πρόγραμμα στο ΕΡΓΑΝΗ (οθόνη ΕΡΓΑΝΗ): "
                     + " · ".join(missing))
     return None
 
@@ -232,13 +234,12 @@ def person_rows():
             key=lambda e: e.hire_date or date.min,
         )
         active = sum(1 for e in emps if e.active)
-        # Ενεργή απασχόληση (αν υπάρχει) — αλλιώς η πιο πρόσφατη. Η «τρέχουσα»
-        # ειδικότητα προκύπτει από αυτήν (ή η τελευταία γνωστή).
         active_emp = next((e for e in emps if e.active), None)
-        current = active_emp or (emps[-1] if emps else None)
-        specialty = ""
-        if current is not None and current.insurance_profile is not None:
-            specialty = current.insurance_profile.specialty_name or ""
+        # Η ειδικότητα ανήκει στην ΠΡΟΣΛΗΨΗ, όχι στο πρόσωπο — εδώ όλες όσες
+        # είχε (για το φίλτρο της οθόνης Εργαζόμενοι).
+        specialties = sorted({e.insurance_profile.specialty_name for e in emps
+                              if e.insurance_profile
+                              and e.insurance_profile.specialty_name})
         out.append(
             {
                 "person": p,
@@ -247,7 +248,7 @@ def person_rows():
                 "last": emps[-1] if emps else None,
                 "active": active,
                 "active_emp": active_emp,
-                "specialty": specialty,
+                "specialties": specialties,
                 "rehirable": active == 0,
                 # Για τα φίλτρα της οθόνης Εργαζόμενοι (persons-filter.js)
                 "status": (active_emp.lifecycle if active_emp
@@ -730,31 +731,20 @@ def attendance_sheet(y: int, m: int) -> dict:
     }
 
 
-def leave_compliance(year: int):
-    """Έλεγχος (τέλους) έτους: ΕΝΕΡΓΟΙ εργαζόμενοι με **μη ληφθείσα** κανονική
-    άδεια (κίνδυνος παρανομίας μη χορήγησης) ή/και **μη υπολογισμένο Επίδομα
-    Αδείας** για το έτος. Read-only — προειδοποίηση, όχι event."""
-    out = []
-    for e in proj.employments.values():
-        if not e.hire_submitted or not e.active:
-            continue
-        ent = svc.annual_leave_entitlement(e.employee_id, year)
-        taken = svc.annual_leave_taken(e.employee_id, year)
-        remaining = ent - taken
-        allowance_done = any(
+def leave_status(e, year: int) -> dict:
+    """Κανονική άδεια του έτους: δικαίωμα, ληφθείσες, υπόλοιπο και αν έχει
+    υπολογιστεί το Επίδομα Αδείας."""
+    ent = svc.annual_leave_entitlement(e.employee_id, year)
+    taken = svc.annual_leave_taken(e.employee_id, year)
+    return {
+        "entitlement": ent,
+        "taken": taken,
+        "remaining": ent - taken,
+        "allowance_done": any(
             a.employee_id == e.employee_id and a.year == year
             for a in proj.allowances
-        )
-        if remaining > 0 or not allowance_done:
-            out.append({
-                "name": e.full_name,
-                "eid": e.employee_id,
-                "entitlement": ent,
-                "taken": taken,
-                "remaining": remaining,
-                "allowance_done": allowance_done,
-            })
-    return sorted(out, key=lambda r: (-r["remaining"], r["name"]))
+        ),
+    }
 
 
 def next_payroll_period():
@@ -1078,16 +1068,25 @@ def allowance_periods(year: int):
         for o in proj.obligations.values()
         if o.obligation_type == "LEAVE_ALLOWANCE" and o.period_year == year
     ]
-    for o in sorted(obs, key=lambda o: o.period_month):
-        m = o.period_month
-        rows = gift_rows("allowance", year, preview=not o.fulfilled, month=m)
+    periods = {o.period_month: o.fulfilled for o in obs}
+    # Δεκέμβριος ΠΡΙΝ γεννηθεί η υποχρέωση (κλείσιμο Νοεμβρίου — scheduler
+    # `_ensure_year_end_allowance`): όσοι δεν πήραν άδεια, ως προεπισκόπηση
+    # με την παραδοχή ότι εργάζονται έως 31/12 — χωρίς κουμπί υπολογισμού.
+    expected = 12 not in periods and bool(svc.allowance_beneficiaries(year, 12))
+    if expected:
+        periods[12] = False
+    for m, fulfilled in sorted(periods.items()):
+        rows = gift_rows("allowance", year, preview=not fulfilled, month=m)
+        if fulfilled and not rows:
+            continue  # έκλεισε ως ορφανή: η «πρώτη άδεια» μετακινήθηκε
         out.append(
             {
                 "month": m,
-                "done": o.fulfilled,
+                "done": fulfilled,
+                "expected": expected and m == 12,
                 "rows": rows,
                 # Η παραδοχή του 1ου/2ου έτους — ΠΡΙΝ πατηθεί ο υπολογισμός
-                "warnings": [] if o.fulfilled else allowance_warnings(year, m),
+                "warnings": [] if fulfilled else allowance_warnings(year, m),
                 "totals": money_totals(
                     rows, ["Μικτά", "ΕΦΚΑ εργαζ.", "ΦΜΥ", "Καθαρά"]
                 ),
@@ -2608,6 +2607,7 @@ def detail_payload(ob_id: str, ref: date):
     d = {
         "id": ob_id,
         "type": t,
+        "ergani_only": t in ERGANI_ONLY,
         "label": OB_LABELS.get(t, t),
         "icon": OB_ICONS.get(t, "📌"),
         "due": ob.due_date,
@@ -2693,6 +2693,7 @@ def detail_payload(ob_id: str, ref: date):
 
     if t == "CARD_IMPORT":
         d["upload"] = not ob.fulfilled
+        d["card_y"], d["card_m"] = y, m
         if not ob.fulfilled:
             d["rows"] = [
                 {"Εργαζόμενος": i["name"],
@@ -2705,8 +2706,10 @@ def detail_payload(ob_id: str, ref: date):
             [f"Εισήχθη και ελέγχθηκε η κάρτα εργασίας {per}."]
             if ob.fulfilled
             else [
-                "Ανέβασε το αρχείο «Κάρτα Εργασίας» του ΕΡΓΑΝΗ (xlsx) της περιόδου "
-                "— αντιστοίχιση με ΑΦΜ· επανεισαγωγή αντικαθιστά.",
+                "Εισαγωγή του αρχείου «Κάρτα Εργασίας» του ΕΡΓΑΝΗ (xlsx) από τις "
+                "Παρουσίες — ο έλεγχος τρέχει αυτόματα· αντιστοίχιση με ΑΦΜ, "
+                "επανεισαγωγή αντικαθιστά. Η Ενεργοποίηση εδώ ξαναελέγχει μετά "
+                "από διορθώσεις.",
                 "Ο έλεγχος απορρίπτει όσο κάποιος εργαζόμενος δεν έχει κανένα "
                 "χτύπημα, έχει χτύπημα χωρίς ταίρι ή χτύπημα σε ημέρα άδειας — "
                 "διορθώνονται στο ΗΜΕΡΟΛΟΓΙΟ του εργαζομένου. Ημέρες χωρίς "
@@ -3012,10 +3015,31 @@ def detail_payload(ob_id: str, ref: date):
                 f"Απολογιστικό σύστημα {per}: οι ημέρες όπου η κάρτα απέκλινε "
                 "από το δηλωμένο (πέρα από ανοχή/ευέλικτη προσέλευση) δηλώνονται "
                 "στο ΕΡΓΑΝΗ με τις πραγματικές ώρες, έως το τέλος του επόμενου μήνα.",
-                "Τίποτα εκκρεμές (π.χ. υποβλήθηκε ήδη από «Πρόγραμμα → ΕΡΓΑΝΗ») — "
-                "η ενεργοποίηση απλώς κλείνει την υποχρέωση."
+                "Τίποτα εκκρεμές (π.χ. υποβλήθηκε ήδη ως ημερήσιο πρόγραμμα) — "
+                "η υποβολή από την οθόνη ΕΡΓΑΝΗ απλώς κλείνει την υποχρέωση."
                 if not d["rows"] else
-                f"Η ενεργοποίηση ΥΠΟΒΑΛΛΕΙ {len(d['rows'])} ημέρες στο ΕΡΓΑΝΗ σε ΕΝΑ batch.",
+                f"Η υποβολή από την οθόνη ΕΡΓΑΝΗ στέλνει {len(d['rows'])} ημέρες "
+                "σε ΕΝΑ batch και κλείνει την υποχρέωση.",
+            ]
+
+    elif t == "LEAVE_DECLARATION":
+        if ob.fulfilled:
+            d["steps"] = [f"Υποβλήθηκε η δήλωση αδειών {per} στο ΕΡΓΑΝΗ — οι "
+                          "δηλωμένες άδειες είναι κλειδωμένες."]
+        else:
+            d["rows"] = [
+                {"Εργαζόμενος": emp_name(eid), "Ημέρα": day.strftime("%d/%m/%Y"),
+                 "Κωδικός ΕΡΓΑΝΗ": code}
+                for eid, days in svc.leave_declaration_proposal(y, m).items()
+                for day, (code, _y, _r) in sorted(days.items())
+            ]
+            d["steps"] = [
+                f"Οι άδειες {per} δηλώνονται στο ΕΡΓΑΝΗ (WTOLeave) απολογιστικά, "
+                "έως το τέλος του επόμενου μήνα — μόνο οι ημέρες προγράμματος.",
+                "Μετά τη δήλωση η άδεια ΔΕΝ ακυρώνεται ούτε τροποποιείται.",
+                f"Η υποβολή από την οθόνη ΕΡΓΑΝΗ στέλνει {len(d['rows'])} ημέρες "
+                "σε ΜΙΑ κλήση και κλείνει την υποχρέωση." if d["rows"] else
+                "Τίποτα αδήλωτο — η υποβολή απλώς κλείνει την υποχρέωση.",
             ]
 
     elif t == "WAGE_ADJUSTMENT":
@@ -3601,6 +3625,91 @@ def live_board(day: date, base: date | None = None, days: int = 3) -> dict:
             "marks": marks, "months": months, "hols": hols, "closed": closed,
             "hours": span // 60, "detail": detail,
             "agg": agg, "rows": rows}
+
+
+def _seg_hhmm(seg) -> str:
+    return f"{_hhmm(seg['start'])}-{_hhmm(seg['end'])}"
+
+
+def _in_time(minutes: int) -> str:
+    """Λεπτά -> «45΄» / «1 ώρα» / «3 ώρες» (στρογγυλεμένο στην ώρα)."""
+    if minutes < 60:
+        return f"{minutes}΄"
+    h = round(minutes / 60)
+    return "1 ώρα" if h == 1 else f"{h} ώρες"
+
+
+def _shift_day_label(d: date, day: date) -> str:
+    if d == day:
+        return "Σήμερα"
+    if d == day + timedelta(days=1):
+        return "Αύριο"
+    return f"{DAY_NAMES[d.weekday()]} {d.strftime('%d/%m')}"
+
+
+def staff_now(day: date, now_min: int, horizon: int = 31) -> list:
+    """Ενεργοί εργαζόμενοι της ημέρας `day`: κατάσταση ΤΩΡΑ (λεπτό `now_min`)
+    και επόμενη βάρδια — για την Επισκόπηση.
+
+    Κατάσταση από το ΠΡΟΓΡΑΜΜΑ (όχι την κάρτα — αυτή τη δείχνουν τα
+    «Ζωντανά»), με προτεραιότητα: άδεια · εργάζεται (μέσα σε τμήμα, μαζί με
+    την ουρά της χθεσινής νυχτερινής) · εργασία σε Χ (τμήμα αργότερα σήμερα)
+    · εργάστηκε (τμήμα που τελείωσε σήμερα) · ανάπαυση.
+    Επόμενη βάρδια = το πρώτο τμήμα που ΞΕΚΙΝΑ μετά το τώρα, σε ημέρα χωρίς
+    άδεια/αργία, έως `horizon` ημέρες μπροστά."""
+    yday = day - timedelta(days=1)
+    rows = []
+    for e in proj.employments.values():
+        if e.lifecycle != "active" or not e.active_on(day):
+            continue
+        leave, leave_type, _ = _leave_on(e, day)
+        # Τμήματα που ΑΓΓΙΖΟΥΝ το σήμερα, σε λεπτά της ημέρας: η ουρά της
+        # χθεσινής νυχτερινής (μετατοπισμένη −24ω) + τα σημερινά (όχι σε αργία)
+        segs = []
+        if e.active_on(yday) and not _leave_on(e, yday)[0]:
+            segs += [{**s, "start": s["start"] - 24 * 60, "end": s["end"] - 24 * 60}
+                     for s in _day_segments(e, yday) if s["end"] > 24 * 60]
+        if not e.holiday_off(day):
+            segs += _day_segments(e, day)
+        on = next((s for s in segs if s["start"] <= now_min < s["end"]), None)
+        later = next((s for s in segs if s["start"] > now_min), None)
+        done = [s for s in segs if s["end"] <= now_min]
+        if leave:
+            state, text = "leave", LEAVE_NOW.get(leave_type, "Σε άδεια")
+        elif on:
+            state = "on"
+            text = "{} ({})".format("Τηλεεργασία" if on["telework"] else "Εργάζεται",
+                                    _seg_hhmm(on))
+        elif later:
+            state, text = "soon", "Εργασία σε " + _in_time(later["start"] - now_min)
+        elif done:
+            state, text = "done", f"Εργάστηκε ({_seg_hhmm(done[-1])})"
+        else:
+            state, text = "rest", "Σε ανάπαυση"
+        nxt, nxt_at = None, ""
+        for i in range(horizon):
+            d = day + timedelta(days=i)
+            if not e.active_on(d) or _leave_on(e, d)[0] or e.holiday_off(d):
+                continue
+            seg = next((s for s in _day_segments(e, d)
+                        if i or s["start"] > now_min), None)
+            if seg:
+                nxt = f"{_shift_day_label(d, day)} {_seg_hhmm(seg)}"
+                nxt_at = f"{d.isoformat()}T{_hhmm(seg['start'])}"  # ταξινόμηση
+                break
+        rows.append({
+            "eid": e.employment_id,
+            "first": e.first_name,
+            "last": e.last_name,
+            "specialty": (e.insurance_profile.specialty_name
+                          if e.insurance_profile else ""),
+            "state": state, "state_text": text, "leave_type": leave_type,
+            "next": nxt,
+            "next_at": nxt_at,
+            **leave_status(e, day.year),
+        })
+    rows.sort(key=lambda r: (r["last"], r["first"]))
+    return rows
 
 
 # --------------------------------------------------- ΨΗΦΙΑΚΗ ΚΑΡΤΑ ΕΡΓΑΣΙΑΣ
