@@ -27,7 +27,10 @@
                       onclick="this.setAttribute('aria-expanded',
                                this.closest('tbody').classList.toggle('open'))">▸</button>
             {% endif %}
-            <b>{{ r.person.full_name }}</b>
+            {# κλικ στο όνομα = αποδοχές & πληρωμές όλων των προσλήψεων #}
+            <a class="lnk" href="#" title="Αποδοχές & πληρωμές"
+               hx-get="{{ url_for('persons.pay_modal', person_id=r.person.person_id) }}"
+               hx-target="#modal-host" hx-swap="innerHTML"><b>{{ r.person.full_name }}</b></a>
             <div class="muted mono" style="font-size:11.5px">ΑΦΜ {{ r.person.afm }}</div>
           </td>
           <td class="muted">{{ r.person.father_name }} / {{ r.person.mother_name }}</td>

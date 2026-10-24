@@ -7,7 +7,15 @@
     <div class="sub">
       {{ 'Ημερομίσθιος' if r.pay_type == 'daily' else 'Μισθωτός' }}
       · {{ '%.2f'|format(r.hourly_rate) }}€/ω
-      · {{ sources.get(r.source, r.source) }}</div>
+      · {{ sources.get(r.source, r.source) }}
+      {# κάλυψη ημερών εργασίας από την κάρτα (§5.11) #}
+      {% if r.card_cover == 'full' %}
+        <span class="tag ok" title="Η κάρτα καλύπτει όλες τις ημέρες εργασίας του μήνα">💳 πλήρης κάρτα</span>
+      {% elif r.card_cover in ('partial', 'holiday') %}
+        {# μόνο αργίες = αναμενόμενο κενό (ουδέτερο), αλλιώς προειδοποίηση #}
+        <span class="tag {{ 'warn' if r.card_cover == 'partial' }}"
+              title="Χωρίς χτύπημα: {{ r.no_punch_hint }} — μετρούν με το πρόγραμμα">💳 λείπουν {{ r.no_punch_days|length }} ημ.</span>
+      {% endif %}</div>
     {# ό,τι θα υποβληθεί με την Έγκριση (και δίνεται στο modal via hx-include) #}
     <input type="hidden" name="eid" value="{{ r.eid }}">
     {% for name, key, cast in inputs %}

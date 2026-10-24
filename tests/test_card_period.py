@@ -99,9 +99,31 @@ def test_card_import_from_attendance(fresh_system):
         punches += karta_import.parse_karta(r.data)
     data = {"karta": (io.BytesIO(karta_import.build_karta(punches)), "karta.xlsx"),
             "y": str(y), "m": str(m)}
-    f = flash(c.post("/attendance/import", data=data,
-                     content_type="multipart/form-data"))
+    covered = "Εισαγωγή κάρτας ✓ εντάξει"
+    assert covered not in c.get(f"/attendance/?y={y}&m={m}").text
+    r = c.post("/attendance/import", data=data, content_type="multipart/form-data")
+    f = flash(r)
     assert not f["err"] and "ελέγχθηκε" in f["msg"], f["msg"]
+    # σημαία: η κάρτα καλύπτει ΟΛΕΣ τις ημέρες εργασίας — συνολικά και ανά άτομο
+    assert covered in r.text and r.text.count("💳 πλήρης κάρτα") == len(emps)
+
+    # Κενό ΜΟΝΟ σε αργία = εντάξει, με το όνομά της· κενό σε εργάσιμη = «λείπουν»
+    from datetime import date
+
+    from webapp import queries as q
+    from webapp.system import svc
+
+    with app.test_request_context("/"):
+        eid = emps[0].employment_id
+        d = dict(svc.attendance_draft(y, m)[eid], source="recorded", card_needed=1)
+        rules = q.config.work_hour_rules_for(date(y, m, 1))
+        hol = q._attendance_row(y, m, eid, {**d, "no_punch_days": [date(y, 5, 1)]},
+                                {}, rules)
+        gap = q._attendance_row(y, m, eid, {**d, "no_punch_days": [
+            date(y, 5, 1), date(y, 5, 4)]}, {}, rules)
+    assert hol["card_cover"] == "holiday" and hol["missing_holidays"] == ["Πρωτομαγιά"]
+    assert hol["no_punch_hint"] == f"01/05/{y} (Πρωτομαγιά)"
+    assert gap["card_cover"] == "partial" and gap["missing_holidays"] == ["Πρωτομαγιά"]
     assert proj.obligations[ob.obligation_id].fulfilled
 
     # η «Έγκριση παρουσιών» δείχνει αναλυτικά ανά εργαζόμενο

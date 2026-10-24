@@ -499,6 +499,26 @@ def test_webapp(fresh_system):
           f"({len(rp.data)} bytes)")
     if not ok:
         fails.append("δεν παράχθηκε το PDF εκκαθάρισης αποχώρησης")
+    # Η γραμμή «Αποζημίωση Αδείας» του καθολικού έχει τις αποδείξεις του μήνα
+    if any(lc.employee_id == eid for lc in proj.leave_compensations):
+        check("καθολικό: εκτυπώσεις αποζημίωσης αδείας",
+              c.get("/payroll/?gy=2026"), "/payroll/print/settlements/leave/zip")
+        check("αποζημίωση αδείας: ανάλυση", c.get(
+            "/payroll/modal/settlement-analysis/leave?y=2026&m=6"), "αποζημίωσης")
+        for part, magic in (("statement", b"%PDF"), ("slips", b"%PDF"),
+                            ("zip", b"PK")):
+            rp = c.get(f"/payroll/print/settlements/leave/{part}?y=2026&m=6")
+            if not (rp.status_code == 200 and rp.data[:len(magic)] == magic):
+                fails.append(f"αποζημίωση αδείας: απέτυχε το {part}")
+        # Εξοφλείται ΜΑΖΙ με τους μισθούς — ΜΙΑ φορά, όσες κι αν γίνουν πληρωμές
+        svc.pay_exit_compensations(2026, 6)
+        svc.pay_exit_compensations(2026, 7)
+        lc_net = next(lc.net for lc in proj.leave_compensations
+                      if lc.employee_id == eid)
+        lc_paid = [p.amount for p in proj.payments
+                   if p.payment_type == "leave_compensation" and p.beneficiary == eid]
+        if lc_paid != [lc_net]:
+            fails.append(f"αποζημίωση αδείας: πληρωμές {lc_paid} αντί [{lc_net}]")
     # Η μισθοδοσία του μήνα αποχώρησης υπολογίστηκε ΜΟΝΟ γι' αυτόν
     june = [p for p in proj.payrolls if (p.period_year, p.period_month) == (2026, 6)]
     ok = len(june) == 1 and june[0].employee_id == eid and june[0].exit_settlement
@@ -530,6 +550,9 @@ def test_webapp(fresh_system):
     print(f"       toast: {r.headers.get('HX-Trigger', '')}")
     if not ok:
         fails.append("η επαναπρόσληψη δεν πρόσθεσε νέα περίοδο")
+    # Αποδοχές & πληρωμές: ΟΛΕΣ οι προσλήψεις, αριθμημένες (#1, #2…)
+    check("αποδοχές εργαζομένου: πολλαπλές προσλήψεις",
+          c.get(f"/persons/{pid}/pay"), f"#{n_after}")
     if len(proj.persons) != 3:
         fails.append("η επαναπρόσληψη δημιούργησε νέο ΠΡΟΣΩΠΟ (δεν έπρεπε)")
     else:

@@ -1301,6 +1301,74 @@ def severance_slip_pdf(employment_id: str) -> bytes:
     return bytes(pdf.output())
 
 
+# Αποζημιώσεις αποχώρησης ανά είδος: (τίτλος, κατάληξη αρχείου ZIP)
+SETTLEMENT_TITLES = {
+    "leave": ("Αποζημίωση μη ληφθείσας Αδείας", "AA"),
+    "severance": ("Αποζημίωση Απόλυσης", "AP"),
+}
+
+
+def _settlement_month(kind: str, year: int, month: int) -> list:
+    """Οι αποζημιώσεις ενός είδους με λήξη μέσα στον μήνα (γραμμή του
+    καθολικού «Σύνολα ανά περίοδο»), παλαιότερη πρώτη."""
+    events = proj.leave_compensations if kind == "leave" else proj.severances
+    evs = [e for e in events if (e.termination_date.year,
+                                 e.termination_date.month) == (year, month)]
+    if not evs:
+        raise ValueError(f"Καμία {SETTLEMENT_TITLES[kind][0]} για {month}/{year}")
+    return sorted(evs, key=lambda e: e.termination_date)
+
+
+def settlement_slips_pdf(kind: str, year: int, month: int) -> bytes:
+    """ΟΛΕΣ οι αποδείξεις αποζημίωσης ενός είδους (`leave`/`severance`) του
+    μήνα — μία σελίδα ανά εργαζόμενο."""
+    page = _leave_comp_slip_page if kind == "leave" else _severance_slip_page
+    evs = _settlement_month(kind, year, month)
+    pdf = ReportPDF(
+        orientation="P",
+        footer_note=f"Αποδείξεις — {SETTLEMENT_TITLES[kind][0]} "
+                    f"{month}/{year} — εκδόθηκε {dmy(today())}",
+    )
+    for ev in evs:
+        page(pdf, ev, proj.employments.get(ev.employee_id))
+    return bytes(pdf.output())
+
+
+def settlement_statement_pdf(kind: str, year: int, month: int) -> bytes:
+    """Κατάσταση αποζημιώσεων ενός είδους του μήνα — μία γραμμή ανά
+    εργαζόμενο με τον κανόνα υπολογισμού, και σύνολο."""
+    _settlement_month(kind, year, month)  # ValueError αν δεν υπάρχει καμία
+    rows = q.settlement_rows(kind, year, month)
+    tot = q.settlement_totals(rows)
+    label = SETTLEMENT_TITLES[kind][0]
+    pdf = ReportPDF(
+        orientation="P",
+        footer_note=f"Κατάσταση — {label} {month}/{year} — "
+                    f"εκδόθηκε {dmy(today())}",
+    )
+    pdf.add_page()
+    pdf.title_band(
+        f"Κατάσταση — {label}",
+        f"{len(rows)} εργαζόμενο{'ς' if len(rows) == 1 else 'ι'} · "
+        "καμία ασφαλιστική κράτηση",
+        f"{month:02d}/{year}",
+        icon="doc",
+    )
+    _exit_summary_row(pdf, ["Εργαζόμενος", "Μικτά", "Εισφορές", "ΦΜΥ",
+                            "ΚΑΘΑΡΑ"], bold=True, color=NAVY, fill=FAINT)
+    for r in rows:
+        _exit_summary_row(
+            pdf,
+            [f"{r['name']} — λήξη {dmy(r['date'])}", eur(r["gross"]),
+             eur(0), eur(r["fmy"]), eur(r["net"])],
+            note=r["note"],
+        )
+    _exit_summary_row(
+        pdf, ["ΣΥΝΟΛΟ", eur(tot["gross"]), eur(0), eur(tot["fmy"]),
+              eur(tot["net"])], bold=True, color=NAVY, fill=FAINT)
+    return bytes(pdf.output())
+
+
 # ------------------- ΣΥΓΚΕΝΤΡΩΤΙΚΟ ΕΚΚΑΘΑΡΙΣΗΣ ΑΠΟΧΩΡΗΣΗΣ (ένα PDF)
 # ΣΤΗΛΕΣ της συγκεντρωτικής πρώτης σελίδας (τίτλος, πλάτος mm, στοίχιση)
 EXIT_COLS = [
@@ -2034,4 +2102,20 @@ def gift_slips_zip(kind: str, year: int,
         for r in rows
     ]
     name = f"{_company_afm()}-{year}-{fm:02d}-{suffix}.zip"
+    return name, _zip(entries)
+
+
+def settlement_slips_zip(kind: str, year: int,
+                         month: int) -> tuple[str, bytes]:
+    """ZIP με μία απόδειξη αποζημίωσης ανά εργαζόμενο του μήνα. Ονόματα PDF:
+    αφμ-έτος-μήνας-{AA|AP}.pdf· zip: αφμΕταιρίας-έτος-μήνας-{AA|AP}.zip."""
+    build = (leave_compensation_slip_pdf if kind == "leave"
+             else severance_slip_pdf)
+    suffix = SETTLEMENT_TITLES[kind][1]
+    entries = [
+        (f"{_emp_afm(ev.employee_id)}-{year}-{month:02d}-{suffix}.pdf",
+         build(ev.employee_id))
+        for ev in _settlement_month(kind, year, month)
+    ]
+    name = f"{_company_afm()}-{year}-{month:02d}-{suffix}.zip"
     return name, _zip(entries)

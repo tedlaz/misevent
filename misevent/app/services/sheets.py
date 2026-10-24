@@ -112,6 +112,10 @@ class SheetsMixin:
             ),
             "source": source,
             "no_punch_days": no_punch,
+            # ημέρες που ΘΕΛΟΥΝ κάρτα (φυσική παρουσία, χωρίς άδεια) — 0 =
+            # τίποτα να καλυφθεί (π.χ. μόνο τηλεεργασία/άδεια όλο τον μήνα)
+            "card_needed": sum(1 for d in planned if d not in leave_days
+                               and not emp.is_telework_only(d)),
             # ημέρες όπου η κάρτα ΑΠΟΚΛΙΝΕΙ πέρα από την ανοχή — ίδια
             # ταξινόμηση με την κατάταξη ωρών και την απολογιστική πρόταση
             "card_days": self.card_pay_days(emp, year, month),

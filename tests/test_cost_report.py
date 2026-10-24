@@ -443,6 +443,24 @@ def test_ledger_has_every_kind(fresh_system):
                    "Εισφορές<br>Εργαζομένου", "Κόστος"):
         assert needle in body, f"λείπει «{needle}» από τα «Σύνολα ανά περίοδο»"
 
+    # Καρτέλα αποδοχών ανά ΕΡΓΑΖΟΜΕΝΟ (πρόσωπο, όλες οι προσλήψεις): οι
+    # καρτέλες όλων αθροίζουν στο καθολικό της εταιρείας, και η πληρωμή μισθών
+    # (αυτόματη με τον υπολογισμό, `auto_settle_payments`) φαίνεται δίπλα στα
+    # καθαρά.
+    with app.test_request_context("/"):
+        cards = {pid: q.employee_pay_card(pid) for pid in proj.persons}
+    per_person = [c for cs in cards.values() for c in cs["years"] if c["year"] == y]
+    assert round(sum(c["totals"]["net"] for c in per_person), 2) == totals["net"]
+    for c_ in per_person:
+        for r in c_["rows"]:
+            if r["kind"] == "payroll" and r["month"] == m:
+                assert r["paid"] == r["net"], "η πληρωμή μισθού δεν αντιστοιχίστηκε"
+    pid = next(pid for pid, cs in cards.items() if cs["years"])
+    body = c.get(f"/persons/{pid}/pay").get_data(as_text=True)
+    assert "Αποδοχές & πληρωμές" in body and "Πληρώθηκε" in body
+    assert f"/persons/{pid}/pay" in c.get("/persons/").get_data(as_text=True), (
+        "το ονοματεπώνυμο δεν ανοίγει την καρτέλα αποδοχών")
+
 
 def test_report_measures(fresh_system):
     """ΤΡΕΙΣ ΟΠΤΙΚΕΣ του ίδιου ποσού: κόστος / μικτά / καθαρά.

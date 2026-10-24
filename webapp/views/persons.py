@@ -276,6 +276,18 @@ def info_modal(person_id):
     )
 
 
+@bp.get("/<person_id>/pay")
+def pay_modal(person_id):
+    """Modal καρτέλας αποδοχών & πληρωμών του εργαζομένου — ΟΛΕΣ οι
+    προσλήψεις του, ανά έτος (read-only)."""
+    person = proj.persons.get(person_id)
+    if person is None:
+        abort(404)
+    card = q.employee_pay_card(person_id)
+    return render_template("partials/_person_pay_modal.html", person=person,
+                           hires=card["hires"], pay_years=card["years"])
+
+
 # ------------------------------------------- Έγγραφα (βάση εγγράφων, όχι events)
 def _documents(person_id) -> list[dict]:
     return [{**d, "added": date.fromisoformat(d["added_at"][:10])}

@@ -10,6 +10,9 @@
       {% if locked %}
         <div class="warnbox">🔒 Η άδεια έχει δηλωθεί στο ΕΡΓΑΝΗ — δεν ακυρώνεται
           ούτε τροποποιείται.</div>
+      {% elif closed %}
+        <div class="warnbox">🔒 Ο μήνας της άδειας έχει κλείσει (μισθοδοσία) — δεν
+          ακυρώνεται.</div>
       {% endif %}
       <div class="mbody">
         <div class="frm cols">
@@ -48,6 +51,13 @@
       <div class="mfoot">
         <button type="button" class="ghost" hx-get="{{ url_for('leaves.modal_close') }}"
                 hx-target="#modal-host" hx-swap="innerHTML">Άκυρο</button>
+        {# Ακύρωση: ΜΟΝΟ αν ο μήνας είναι ανοιχτός και δεν έχει δηλωθεί στο ΕΡΓΑΝΗ #}
+        {% if not locked and not closed %}
+          <button type="button" class="ghost"
+                  hx-post="{{ url_for('leaves.cancel_leave', employment_id=e.employment_id, leave_id=lv.leave_id) }}"
+                  hx-confirm="Ακύρωση της άδειας {{ lv.date_from|date_gr }} – {{ lv.date_to|date_gr }};"
+                  hx-target="#modal-host" hx-swap="innerHTML">🗑️ Ακύρωση άδειας</button>
+        {% endif %}
         {% if not locked %}<button class="run" type="submit">Αποθήκευση</button>{% endif %}
       </div>
     </form>

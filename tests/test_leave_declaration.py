@@ -55,6 +55,11 @@ def test_leave_declaration_flow():
     assert rows[0]["f_date"] == "05/02/2026"
     assert first["f_type"] == "ΑΔΚΑΝ" and first["f_year"] == "2026"
     assert first["f_req_days"] == f"{req:03d}"
+    # Ιστορικό ΕΡΓΑΝΗ: το «Αφορά» βγαίνει από τα ΑΦΜ του payload (μία κλήση
+    # για πολλούς -> κενό employee_id), όχι «ΕΤΑΙΡΕΙΑ»
+    from webapp.views.ergani import _wto_afms
+
+    assert _wto_afms(sent[-1].payload) == [proj.employments[eid].afm]
 
     # Η δηλωμένη άδεια κλειδώνει
     assert svc.leave_declared_to_ergani(eid, lid)

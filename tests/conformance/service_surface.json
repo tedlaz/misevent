@@ -183,6 +183,7 @@
  "parameters_confirmed",
  "parse_kpk_components",
  "pay_efka",
+ "pay_exit_compensations",
  "pay_fmy",
  "pay_gifts",
  "pay_leave_allowance",

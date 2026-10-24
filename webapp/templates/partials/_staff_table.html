@@ -1,0 +1,37 @@
+{# «Προσωπικό» της Επισκόπησης. Ξαναφορτώνεται ΜΟΝΟ του με το `lb-refresh`
+   που στέλνει ο server μετά από κάθε αλλαγή στο «Πρόγραμμα» (άδεια, βάρδια,
+   χτύπημα) — αλλιώς η στήλη «Άδεια» έμενε παλιά ως το reload της σελίδας. #}
+<div id="staff-table" hx-get="{{ url_for('dashboard.staff_table') }}"
+     hx-trigger="lb-refresh from:body" hx-swap="outerHTML">
+  {% if staff %}
+  {# Κλικ στην κεφαλίδα = ταξινόμηση (table-sort.js)· `data-sort` όπου το
+     κείμενο του κελιού δεν ταξινομείται σωστά #}
+  <table class="tbl" data-sortable>
+    <thead><tr>
+      <th>Επώνυμο</th><th>Όνομα</th><th>Ειδικότητα</th>
+      <th>Κατάσταση</th><th>Επόμενη βάρδια</th>
+      <th class="num" title="Δικαίωμα − Ληφθείσες = Υπόλοιπο">Άδεια</th>
+      <th title="Επίδομα Αδείας">Επ.Αδείας</th>
+    </tr></thead>
+    <tbody>
+      {% for s in staff %}
+      <tr>
+        <td><a class="lnk"
+          href="{{ url_for('employments.detail', employment_id=s.eid) }}">{{ s.last }}</a></td>
+        <td>{{ s.first }}</td>
+        <td>{{ s.specialty or '—' }}</td>
+        <td><a class="tag lnk-tag {{ {'on': 'ok', 'leave': 'warn'}.get(s.state, 'off') }}"
+          title="Ημερολόγιο εργαζομένου"
+          href="{{ url_for('employments.calendar_page', eid=s.eid) }}">{{ s.state_text }}</a></td>
+        <td data-sort="{{ s.next_at or '9999' }}">{{ s.next or '—' }}</td>
+        <td class="num" data-sort="{{ s.remaining }}">{{ s.entitlement }}-{{ s.taken }}={% if s.remaining > 0 %}<b>{{ s.remaining }}</b>{% else %}{{ s.remaining }}{% endif %}</td>
+        <td>{% if s.allowance_done %}<span class="tag ok">υπολογισμένο</span>
+          {% else %}<span class="tag warn">εκκρεμεί</span>{% endif %}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+    <div class="empty">Κανένας ενεργός εργαζόμενος.</div>
+  {% endif %}
+</div>

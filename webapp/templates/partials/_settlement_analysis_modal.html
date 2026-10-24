@@ -1,0 +1,47 @@
+{# Modal ΑΝΑΛΥΣΗΣ αποζημιώσεων αποχώρησης ενός μήνα (read-only): κανόνας
+   υπολογισμού και ποσά ανά εργαζόμενο — καμία ασφαλιστική κράτηση. #}
+<div class="modal-backdrop">
+  <div class="modal wide">
+    <div class="mhead">
+      <h3>Ανάλυση — {{ label }}</h3>
+      <span class="muted" style="font-size:12.5px">
+        Ανά εργαζόμενο ({{ rows|length }}) · σύνολο καθαρών
+        <b>{{ totals.net|money }} €</b></span>
+    </div>
+
+    <div class="mbody">
+      <table class="tbl">
+        <thead><tr>
+          <th>Εργαζόμενος</th><th>Λήξη</th><th>Υπολογισμός</th>
+          <th style="text-align:right">Μικτά</th>
+          <th style="text-align:right">Φόρος</th>
+          <th style="text-align:right">Καθαρά</th>
+        </tr></thead>
+        <tbody>
+          {% for r in rows %}
+            <tr>
+              <td>{{ r.name }}</td>
+              <td class="mono">{{ r.date|date_gr }}</td>
+              <td class="muted" style="font-size:12px">{{ r.note }}</td>
+              <td class="num">{{ r.gross|money }}</td>
+              <td class="num">{{ r.fmy|money }}</td>
+              <td class="num"><b>{{ r.net|money }}</b></td>
+            </tr>
+          {% endfor %}
+          <tr class="tot">
+            <td>Σύνολο</td><td></td><td></td>
+            <td class="num">{{ totals.gross|money }}</td>
+            <td class="num">{{ totals.fmy|money }}</td>
+            <td class="num">{{ totals.net|money }}</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="mfoot">
+      <button type="button" class="run"
+              hx-get="{{ url_for('payroll.modal_close') }}"
+              hx-target="#modal-host" hx-swap="innerHTML">Κλείσιμο</button>
+    </div>
+  </div>
+</div>

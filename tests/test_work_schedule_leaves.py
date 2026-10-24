@@ -86,7 +86,11 @@ def test_work_schedule_leaves(fresh_system):
 
     # ΖΩΝΤΑΝΑ (μήνας: μενού τύπου άδειας): κενό σώμα (κλείνει το modal) +
     # εντολή ανανέωσης του grid
-    assert 'id="lb-leave-menu"' in c.get("/").get_data(as_text=True)
+    home = c.get("/").get_data(as_text=True)
+    assert 'id="lb-leave-menu"' in home
+    # το «Προσωπικό» ξαναφορτώνεται ΜΟΝΟ του με κάθε αλλαγή στο Πρόγραμμα
+    assert 'hx-trigger="lb-refresh from:body"' in home
+    staff_before = c.get("/staff").get_data(as_text=True)
     for kind, d0, d1 in (("ANNUAL", 14, 16), ("SICK", 21, 22)):
         r = c.post(
             f"/leaves/{eid}/new",
@@ -97,6 +101,8 @@ def test_work_schedule_leaves(fresh_system):
         assert "lb-refresh" in r.headers["HX-Trigger"]
     assert any(lv.date_from.isoformat() == f"{year}-12-21"
                for lv in proj.employments[eid].active_leaves())
+    # η στήλη «Άδεια» (δικαίωμα−ληφθείσες) άλλαξε με την κανονική άδεια
+    assert c.get("/staff").get_data(as_text=True) != staff_before
     # Διήμερη άδεια = ΜΙΑ συνεχόμενη μπάρα, όχι μία ανά ημέρα
     rows = c.get(f"/live/rows?base={year}-12-15&days=15").get_data(as_text=True)
     assert rows.count("lb-leaveband lv-astheneia") == 1
@@ -111,6 +117,16 @@ def test_work_schedule_leaves(fresh_system):
     assert r.get_data(as_text=True) == "" and "lb-refresh" in r.headers["HX-Trigger"]
     assert any(lv.leave_id == lid and lv.date_to.day == 23
                for lv in proj.employments[eid].active_leaves())
+
+    # ΑΚΥΡΩΣΗ από το ίδιο modal (ανοιχτός μήνας, όχι δηλωμένη στο ΕΡΓΑΝΗ)
+    modal = c.get(f"/leaves/{eid}/{lid}/modal").get_data(as_text=True)
+    assert f"/leaves/{eid}/{lid}/cancel" in modal
+    r = c.post(f"/leaves/{eid}/{lid}/cancel")
+    assert r.get_data(as_text=True) == "" and "lb-refresh" in r.headers["HX-Trigger"]
+    assert all(lv.leave_id != lid for lv in proj.employments[eid].active_leaves())
+    # ξανά η ίδια άδεια για τη συνέχεια του test
+    c.post(f"/leaves/{eid}/new", data={"leave_type": "SICK",
+           "date_from": f"{year}-12-21", "date_to": f"{year}-12-23"})
 
     # ΥΠΟΛΟΙΠΟ ΚΑΝΟΝΙΚΗΣ ΑΔΕΙΑΣ στο τέλος κάθε ημέρας: η άδεια 14–16/12 το
     # μειώνει ακριβώς κατά τις εργάσιμές της· στο έτος μία τιμή ανά μήνα

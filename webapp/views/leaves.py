@@ -1,8 +1,8 @@
 """Άδειες: modals δημιουργίας/επεξεργασίας — τα ανοίγουν τα «Ζωντανά».
 
 Η δημιουργία γίνεται με double click αρχή + τέλος στον μήνα (live-board.js
-στέλνει κατευθείαν POST)· η επεξεργασία με κλικ σε ζώνη άδειας. Η ακύρωση
-ζει στην καρτέλα απασχόλησης."""
+στέλνει κατευθείαν POST)· η επεξεργασία και η ακύρωση με κλικ σε ζώνη
+άδειας (ακύρωση και από την καρτέλα απασχόλησης)."""
 
 
 from flask import Blueprint, abort, render_template, request
@@ -40,6 +40,8 @@ def leave_modal(employment_id, leave_id):
         lv=leave,
         leave_labels=LEAVE_LABELS,
         locked=svc.leave_declared_to_ergani(employment_id, leave_id),
+        # ακύρωση: μόνο σε ανοιχτό μήνα (ίδιος κανόνας με `svc.cancel_leave`)
+        closed=svc.is_period_closed(leave.date_from.year, leave.date_from.month),
     )
 
 
@@ -78,6 +80,22 @@ def create_leave(employment_id):
         form=request.form,
     )
     return modal_error(html, message)
+
+
+@bp.post("/<employment_id>/<leave_id>/cancel")
+def cancel_leave(employment_id, leave_id):
+    """Ακύρωση άδειας από τα «Ζωντανά» — το `svc.cancel_leave` την απορρίπτει
+    σε κλεισμένο μήνα ή αν έχει δηλωθεί στο ΕΡΓΑΝΗ."""
+    _leave_or_404(employment_id, leave_id)
+
+    def command():
+        svc.cancel_leave(employment_id, leave_id)
+        return "Η άδεια ακυρώθηκε"
+
+    ok, message = run_command(command)
+    if ok:
+        return live_done(message)
+    return modal_error(leave_modal(employment_id, leave_id), message)
 
 
 @bp.post("/<employment_id>/<leave_id>")

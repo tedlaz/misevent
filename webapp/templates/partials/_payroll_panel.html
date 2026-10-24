@@ -48,8 +48,8 @@
             <td class="num"><b>{{ r.cost|money }}</b></td>
             <td style="text-align:right">
               {# Κάθε είδος έχει ΤΙΣ ΔΙΚΕΣ ΤΟΥ εκτυπώσεις — οι αποζημιώσεις
-                 είναι ατομικές (ανά εργαζόμενο) και ζουν στις κάρτες πιο
-                 κάτω, γι' αυτό δεν φέρουν εδώ κουμπιά. #}
+                 είναι ατομικές: εδώ όλες οι αποδείξεις του μήνα σε ένα PDF,
+                 ανά εργαζόμενο στις κάρτες πιο κάτω. #}
               {% if r.kind == 'payroll' %}
                 <a class="ghost sm"
                         hx-get="{{ url_for('payroll.analysis_modal',
@@ -82,6 +82,23 @@
                 <a class="ghost sm" target="_blank"
                    href="{{ url_for('payroll.print_gift_slips_zip',
                                     kind=r.kind, gy=gyear, gm=gm) }}">
+                  📦 ZIP</a>
+              {% elif r.kind in ('severance', 'leave') %}
+                <a class="ghost sm"
+                   hx-get="{{ url_for('payroll.settlement_analysis_modal',
+                                      kind=r.kind, y=gyear, m=r.month) }}"
+                   hx-target="#modal-host" hx-swap="innerHTML">🔍 Ανάλυση</a>
+                <a class="ghost sm" target="_blank"
+                   href="{{ url_for('payroll.print_settlement_statement',
+                                    kind=r.kind, y=gyear, m=r.month) }}">
+                  🖨️ PDF</a>
+                <a class="ghost sm" target="_blank"
+                   href="{{ url_for('payroll.print_settlement_slips',
+                                    kind=r.kind, y=gyear, m=r.month) }}">
+                  🧾 Αποδείξεις</a>
+                <a class="ghost sm" target="_blank"
+                   href="{{ url_for('payroll.print_settlement_slips_zip',
+                                    kind=r.kind, y=gyear, m=r.month) }}">
                   📦 ZIP</a>
               {% endif %}
             </td>

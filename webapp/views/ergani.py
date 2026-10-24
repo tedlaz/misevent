@@ -153,7 +153,8 @@ def pending_count() -> int:
 
 # ------------------------------------------------------------ Ιστορικό
 def _wto_afms(payload: str) -> list[str]:
-    """Τα ΑΦΜ των εργαζομένων μιας δήλωσης WTO (με σειρά, χωρίς διπλά)."""
+    """Τα ΑΦΜ των εργαζομένων μιας δήλωσης WTO/WTOLeave (ίδια δομή `WTOS`,
+    με σειρά, χωρίς διπλά)."""
     try:
         decl = json.loads(payload)["WTOS"]["WTO"]
     except (TypeError, ValueError, KeyError):
@@ -191,7 +192,10 @@ def _history() -> list[dict]:
             continue
         at = datetime.fromisoformat(rec["occurred_at"]).astimezone()
         if kind == "ErganiSubmissionRecorded":
-            afms = _wto_afms(ev.payload) if ev.doc_type == "WTO" else []
+            # WTO και WTOLeave: ΜΙΑ κλήση για πολλούς (κενό employee_id) — το
+            # «Αφορά» από τα ΑΦΜ του payload, όχι «ΕΤΑΙΡΕΙΑ»
+            afms = (_wto_afms(ev.payload) if ev.doc_type in ("WTO", "WTOLeave")
+                    else [])
             who = ([names.get(a, a) for a in afms] if afms
                    else [emp_name(eid) if eid else "ΕΤΑΙΡΕΙΑ"])
             row = {

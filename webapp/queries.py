@@ -599,6 +599,7 @@ def _attendance_row(y, m, eid, d, line, wh_rules) -> dict:
         v = line.get(key) if line else None
         return v if v not in (None, "") else default
 
+    hol = holiday_names(y)
     row = {
         "eid": eid,
         "name": d["name"],
@@ -611,6 +612,22 @@ def _attendance_row(y, m, eid, d, line, wh_rules) -> dict:
         # και ημέρες χωρίς χτύπημα (μετρούν με το πρόγραμμα)
         "card_days": d["card_days"],
         "no_punch_days": d["no_punch_days"],
+        # ΚΑΛΥΨΗ ΚΑΡΤΑΣ: οι εισηγμένες παρουσίες καλύπτουν ΟΛΕΣ τις ημέρες
+        # εργασίας (φυσικής παρουσίας) του μήνα; full | holiday (λείπουν
+        # ΜΟΝΟ αργίες — εντάξει) | partial | none | n/a
+        "card_cover": (
+            "n/a" if not d["card_needed"]
+            else "none" if d["source"] != "recorded"
+            else "full" if not d["no_punch_days"]
+            else "holiday" if all(x in hol for x in d["no_punch_days"])
+            else "partial"
+        ),
+        # τα ονόματα των αργιών ανάμεσα στις ημέρες χωρίς χτύπημα
+        "missing_holidays": [hol[x] for x in d["no_punch_days"] if x in hol],
+        # hint του badge: κάθε ημέρα χωρίς χτύπημα, με την αργία της αν είναι
+        "no_punch_hint": ", ".join(
+            config.gr_date(x) + (f" ({hol[x]})" if x in hol else "")
+            for x in d["no_punch_days"]),
         "card_unreported": bool(d["card_days"])
         and proj.schedule_system_on(date(y, m, 1)) == "pre",
     }
@@ -711,6 +728,10 @@ def attendance_sheet(y: int, m: int) -> dict:
     return {
         "rows": sorted(rows, key=lambda r: r["name"]),
         "done": approved is not None,
+        # Σημαία: εισήχθη κάρτα και καλύπτει τις ημέρες εργασίας ΟΛΩΝ (λείπουν
+        # το πολύ αργίες)
+        "card_complete": any(r["card_cover"] in ("full", "holiday") for r in rows)
+        and all(r["card_cover"] in ("full", "holiday", "n/a") for r in rows),
         "inputs": SHEET_INPUTS,
         # Υποβολές ΕΡΓΑΝΗ πρόσληψης που εκκρεμούν — προαπαιτούμενο των παρουσιών.
         # Όσο υπάρχει έστω μία, η έγκριση μπλοκάρεται (και στο command layer).
@@ -1299,6 +1320,8 @@ PAYMENT_KIND_LABELS = {
     "easter_gift": "Δώρο Πάσχα",
     "christmas_gift": "Δώρο Χριστουγέννων",
     "leave_allowance": "Επίδομα Αδείας",
+    "leave_compensation": "Αποζημίωση Αδείας",
+    "severance": "Αποζημίωση Απόλυσης",
 }
 # Ποια είδη πληρωμής πέφτουν σε ποια στήλη
 PAYMENT_COLUMN_OF = {
@@ -1306,6 +1329,8 @@ PAYMENT_COLUMN_OF = {
     "easter_gift": "salary",
     "christmas_gift": "salary",
     "leave_allowance": "salary",
+    "leave_compensation": "salary",
+    "severance": "salary",
     "efka": "efka",
     "teka": "teka",
     "fmy": "fmy",
@@ -1317,6 +1342,9 @@ PAYMENT_OBLIGATION = {
     "easter_gift": "EASTER_GIFT_PAYMENT",
     "christmas_gift": "CHRISTMAS_GIFT_PAYMENT",
     "leave_allowance": "LEAVE_ALLOWANCE_PAYMENT",
+    # οι αποζημιώσεις αποχώρησης εξοφλούνται μαζί με τους μισθούς
+    "leave_compensation": "SALARY_PAYMENT",
+    "severance": "SALARY_PAYMENT",
     "efka": "EFKA_PAYMENT",
     "teka": "TEKA_PAYMENT",
     "fmy": "FMY_PAYMENT",
@@ -1873,7 +1901,8 @@ def _premium_breakdown(a: dict, y: int, m: int) -> list:
     return out
 
 
-def settlement_rows(kind: str):
+def settlement_rows(kind: str, year: int | None = None,
+                    month: int | None = None):
     """Οι υπολογισμένες ΕΚΚΑΘΑΡΙΣΕΙΣ ΑΠΟΧΩΡΗΣΗΣ ανά είδος, νεότερη πρώτη:
 
     - `severance` → **Αποζημίωση απόλυσης** (`SeveranceCalculated`)
@@ -1882,10 +1911,14 @@ def settlement_rows(kind: str):
 
     Και οι δύο υπολογίζονται ΑΥΤΟΜΑΤΑ στην αποχώρηση (§2) — εδώ απλώς
     προβάλλονται συγκεντρωτικά, με το ΑΦΜ/όνομα του εργαζόμενου και τη
-    διαδρομή της απόδειξής του. Read-only, καμία παρενέργεια."""
+    διαδρομή της απόδειξής του. Read-only, καμία παρενέργεια. Με `year` και
+    `month` μόνο όσες έχουν λήξη μέσα σε εκείνον τον μήνα (γραμμή καθολικού)."""
     events = proj.severances if kind == "severance" else proj.leave_compensations
     rows = []
     for ev in sorted(events, key=lambda x: x.termination_date, reverse=True):
+        if year and (ev.termination_date.year,
+                     ev.termination_date.month) != (year, month):
+            continue
         emp = proj.employments.get(ev.employee_id)
         if kind == "severance":
             note = (
@@ -1960,7 +1993,7 @@ LEDGER_KINDS = (
 )
 
 
-def payroll_ledger(year: int):
+def payroll_ledger(year: int, eids=None):
     """ΟΛΕΣ οι υπολογισμένες καταβολές ΕΝΟΣ έτους — μία γραμμή ανά (μήνα,
     είδος): τακτική μισθοδοσία, Δώρα, Επίδομα Αδείας, αποζημιώσεις
     αποχώρησης. Νεότερος μήνας πρώτος.
@@ -1977,7 +2010,10 @@ def payroll_ledger(year: int):
     Δώρα/Επίδομα κρατούν στο event μόνο την κράτηση του εργαζόμενου, άρα το
     εργοδοτικό σκέλος ανασυντίθεται από το `_gift_cost` (ΜΙΑ πηγή με την
     ετήσια αναφορά). Οι αποζημιώσεις δεν φέρουν καμία ασφαλιστική κράτηση,
-    άρα κόστος = μικτά."""
+    άρα κόστος = μικτά.
+
+    Με `eids` μόνο οι καταβολές αυτών των απασχολήσεων (καρτέλα αποδοχών
+    εργαζομένου: όλες οι προσλήψεις του)."""
     labels = dict(LEDGER_KINDS)
     order = {k: i for i, (k, _l) in enumerate(LEDGER_KINDS)}
     rows = {}
@@ -1999,18 +2035,21 @@ def payroll_ledger(year: int):
         r["net"] += net
         r["cost"] += cost
 
+    def mine(ev):
+        return eids is None or ev.employee_id in eids
+
     for p in proj.payrolls:
-        if p.period_year == year:
+        if p.period_year == year and mine(p):
             put(cell(p.period_month, "payroll"), p.gross, p.efka_employee,
                 p.fmy, p.net, p.gross + p.efka_employer)
 
     for g in proj.gifts:
-        if g.year == year:
+        if g.year == year and mine(g):
             put(cell(svc.gift_fmy_period(g)[1], g.gift_type), g.gross,
                 g.efka_employee, g.fmy, g.net, _gift_cost(g))
 
     for a in proj.allowances:
-        if a.year == year:
+        if a.year == year and mine(a):
             month = _allowance_month(proj.employments.get(a.employee_id), year)
             put(cell(month, "allowance"), a.gross, a.efka_employee, a.fmy,
                 a.net, _gift_cost(a))
@@ -2018,7 +2057,7 @@ def payroll_ledger(year: int):
     for kind, events in (("severance", proj.severances),
                          ("leave", proj.leave_compensations)):
         for ev in events:
-            if ev.termination_date.year == year:
+            if ev.termination_date.year == year and mine(ev):
                 put(cell(ev.termination_date.month, kind), ev.gross, 0.0,
                     ev.fmy, ev.net, ev.gross)
 
@@ -2032,6 +2071,72 @@ def payroll_ledger(year: int):
 def ledger_totals(rows):
     """Σύνολα έτους του καθολικού καταβολών."""
     return {k: round(sum(r[k] for r in rows), 2) for k in LEDGER_AMOUNTS}
+
+
+# PaymentMade.payment_type -> είδος γραμμής του καθολικού. Τα Δώρα πληρώνονται
+# με μήνα 0 (ένα ανά έτος)· οι αποζημιώσεις με τους μισθούς (μήνας λήξης).
+PAYMENT_KINDS = {"salary": "payroll", "easter_gift": "easter",
+                 "christmas_gift": "christmas", "leave_allowance": "allowance",
+                 "leave_compensation": "leave", "severance": "severance"}
+
+
+def employee_pay_card(person_id: str):
+    """Καρτέλα αποδοχών ΕΡΓΑΖΟΜΕΝΟΥ (προσώπου — ΟΛΕΣ οι προσλήψεις του, §2):
+    ανά έτος (νεότερο πρώτο) οι γραμμές του καθολικού (`payroll_ledger`) με
+    το ποσό που ΠΛΗΡΩΘΗΚΕ (`PaymentMade`, δικαιούχος η απασχόληση) δίπλα
+    στα καθαρά.
+
+    Οι αποζημιώσεις αποχώρησης πληρώνονται μαζί με τους μισθούς
+    (`pay_exit_compensations`).
+
+    ΠΟΛΛΑΠΛΕΣ ΠΡΟΣΛΗΨΕΙΣ: αριθμούνται #1, #2… κατά ημερομηνία πρόσληψης και
+    το καθολικό βγαίνει ΑΝΑ πρόσληψη — μια λήξη και επαναπρόσληψη μέσα στον
+    ίδιο μήνα δίνει δύο γραμμές, όχι ένα άθροισμα. Επιστρέφει
+    {"hires": [...σύνοψη ανά πρόσληψη], "years": [...ανά έτος]}."""
+    person = proj.persons.get(person_id)
+    emps = sorted((proj.employments[eid] for eid in
+                   (person.employment_ids if person is not None else ())
+                   if eid in proj.employments),
+                  key=lambda e: e.hire_date)
+    hires = [{"n": i, "eid": e.employment_id, "hire_date": e.hire_date,
+              "termination_date": e.termination_date,
+              "gross": 0.0, "net": 0.0, "paid": 0.0}
+             for i, e in enumerate(emps, 1)]
+    by_eid = {h["eid"]: h for h in hires}
+    paid = {}
+    for pm in proj.payments:
+        kind = PAYMENT_KINDS.get(pm.payment_type)
+        if kind and pm.beneficiary in by_eid:
+            k = (pm.beneficiary, kind, pm.period_year, pm.period_month)
+            paid[k] = paid.get(k, 0) + pm.amount
+    years = {p.period_year for p in proj.payrolls if p.employee_id in by_eid}
+    years |= {g.year for g in proj.gifts if g.employee_id in by_eid}
+    years |= {a.year for a in proj.allowances if a.employee_id in by_eid}
+    years |= {ev.termination_date.year
+              for ev in list(proj.severances) + list(proj.leave_compensations)
+              if ev.employee_id in by_eid}
+    order = {k: i for i, (k, _l) in enumerate(LEDGER_KINDS)}
+    out = []
+    for y in sorted(years, reverse=True):
+        rows = []
+        for h in hires:
+            for r in payroll_ledger(y, {h["eid"]}):
+                r["hire"] = h
+                gift = r["kind"] in ("easter", "christmas")
+                r["paid"] = round(paid.get(
+                    (h["eid"], r["kind"], y, 0 if gift else r["month"]), 0), 2)
+                h["gross"] += r["gross"]
+                h["net"] += r["net"]
+                h["paid"] += r["paid"]
+                rows.append(r)
+        rows.sort(key=lambda r: (-r["month"], order[r["kind"]], r["hire"]["n"]))
+        tot = ledger_totals(rows)
+        tot["paid"] = round(sum(r["paid"] for r in rows), 2)
+        out.append({"year": y, "rows": rows, "totals": tot})
+    for h in hires:
+        for k in ("gross", "net", "paid"):
+            h[k] = round(h[k], 2)
+    return {"hires": hires, "years": out}
 
 
 # ------------------------------------------- Ετήσια αναφορά κόστους (γράφημα)
@@ -3414,7 +3519,6 @@ def _month_marks(base: date, end: date, day: date) -> list:
     θα πατούσαν η μία πάνω στην άλλη."""
     marks = []
     cur = date(base.year, base.month, 1)
-    idx = 0
     while cur <= end:
         nxt = (date(cur.year + 1, 1, 1) if cur.month == 12
                else date(cur.year, cur.month + 1, 1))
@@ -3424,12 +3528,14 @@ def _month_marks(base: date, end: date, day: date) -> list:
             "off": (first - base).days * 24 * 60,
             "span": (last - first).days * 24 * 60,
             "today": cur.year == day.year and cur.month == day.month,
-            "alt": idx % 2 == 1,
+            # ζυγός/μονός ΜΗΝΑΣ (όχι θέση στο παράθυρο): η απόχρωση δεν
+            # «αναβοσβήνει» όταν το live-board.js ξαναζητά με νέο base
+            "alt": cur.month % 2 == 0,
             "full": f"{MONTHS_SHORT[cur.month]} {cur.year}",
             "mid": f"{MONTHS_SHORT[cur.month]} {cur.year}",
             "short": MONTHS_SHORT[cur.month],
         })
-        cur, idx = nxt, idx + 1
+        cur = nxt
     return marks
 
 

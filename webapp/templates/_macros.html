@@ -2,7 +2,7 @@
 
 {# Πίνακας από λίστα dicts (τα κλειδιά γίνονται στήλες) + γραμμή συνόλων.
    Τα αριθμητικά κελιά μορφοποιούνται ως ποσά, εκτός των NUM_COLS. #}
-{% macro rows_table(rows, totals={}, plain_cols=['Ημέρες']) %}
+{% macro rows_table(rows, totals={}, plain_cols=['Ημέρες', 'ΚΠΚ']) %}
   {% if rows %}
     {% set cols = rows[0].keys()|list %}
     <table class="tbl">

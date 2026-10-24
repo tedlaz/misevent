@@ -1,4 +1,4 @@
-"""Η μισθοδοσία υπολογίζεται στο ΤΕΛΟΣ του ημερολογιακού μήνα (30/31, 28/29
+"""Κάρτα, παρουσίες και μισθοδοσία: ΤΕΛΟΣ του ημερολογιακού μήνα (30/31, 28/29
 τον Φεβρουάριο) — ΟΧΙ στην τελευταία εργάσιμη (π.χ. 29/05/2026, Παρασκευή)."""
 
 from datetime import date
@@ -16,8 +16,10 @@ from misevent.rules import obligation_types as ot
     (2026, 4, date(2026, 4, 30)),
     (2026, 12, date(2026, 12, 31)),
 ])
-def test_monthly_payroll_due_is_calendar_month_end(y, m, end):
-    assert ot.due_date("MONTHLY_PAYROLL", y, m) == end
+def test_period_close_due_is_calendar_month_end(y, m, end):
+    # μέχρι την τελευταία ημέρα μπορεί να συμβεί μισθολογικό event
+    for code in ("CARD_IMPORT", "ATTENDANCE_APPROVAL", "MONTHLY_PAYROLL"):
+        assert ot.due_date(code, y, m) == end, code
 
 
 def test_other_types_keep_last_working_day():

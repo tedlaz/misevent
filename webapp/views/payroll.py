@@ -239,6 +239,66 @@ def print_settlement(kind, employment_id):
     return pdf_response(build, fn)
 
 
+def _settlement_args(kind):
+    """(έτος, μήνας) μιας γραμμής αποζημίωσης (`leave`/`severance`) του
+    καθολικού — 404 για άγνωστο είδος ή χωρίς ?y=&m=."""
+    y = request.values.get("y", type=int)
+    m = request.values.get("m", type=int)
+    if kind not in ("leave", "severance") or not y or not m:
+        abort(404)
+    return y, m
+
+
+@bp.get("/modal/settlement-analysis/<kind>")
+def settlement_analysis_modal(kind):
+    """Modal ΑΝΑΛΥΣΗΣ αποζημιώσεων ενός μήνα: κανόνας υπολογισμού και ποσά
+    ανά εργαζόμενο."""
+    from ..pdf_reports import SETTLEMENT_TITLES
+
+    y, m = _settlement_args(kind)
+    rows = q.settlement_rows(kind, y, m)
+    if not rows:
+        return "", 404
+    return render_template(
+        "partials/_settlement_analysis_modal.html", rows=rows,
+        totals=q.settlement_totals(rows),
+        label=f"{SETTLEMENT_TITLES[kind][0]} {m}/{y}",
+    )
+
+
+@bp.get("/print/settlements/<kind>/statement")
+def print_settlement_statement(kind):
+    """Κατάσταση αποζημιώσεων ενός μήνα σε PDF (νέα καρτέλα)."""
+    from .. import pdf_reports
+
+    y, m = _settlement_args(kind)
+    return pdf_response(
+        lambda: pdf_reports.settlement_statement_pdf(kind, y, m),
+        f"katastasi_{kind}_{y}-{m:02d}.pdf",
+    )
+
+
+@bp.get("/print/settlements/<kind>/slips")
+def print_settlement_slips(kind):
+    """Όλες οι αποδείξεις αποζημίωσης ενός μήνα σε ένα PDF."""
+    from .. import pdf_reports
+
+    y, m = _settlement_args(kind)
+    return pdf_response(
+        lambda: pdf_reports.settlement_slips_pdf(kind, y, m),
+        f"apodeixeis_{kind}_{y}-{m:02d}.pdf",
+    )
+
+
+@bp.get("/print/settlements/<kind>/zip")
+def print_settlement_slips_zip(kind):
+    """ZIP με μία απόδειξη αποζημίωσης ανά εργαζόμενο του μήνα."""
+    from .. import pdf_reports
+
+    y, m = _settlement_args(kind)
+    return _zip_response(lambda: pdf_reports.settlement_slips_zip(kind, y, m))
+
+
 @bp.get("/print/exit-settlement/<employment_id>")
 def print_exit_settlement(employment_id):
     """ΟΛΕΣ οι αποδείξεις της εκκαθάρισης αποχώρησης σε ΕΝΑ PDF: συγκεντρωτικό

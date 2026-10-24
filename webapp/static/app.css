@@ -1909,6 +1909,17 @@ button.pick>span:first-of-type{flex:1}
 .lboard.z-month .lb-month{display:flex}
 .lboard.z-month .lb-dayspan:not(.lb-month){top:24px}
 .lb-month b{color:var(--ink)}
+.lboard.z-month .lb-month{border-left:2px solid var(--muted)}
+/* ΟΡΙΑ ΜΗΝΩΝ στις γραμμές (εβδομάδα/μήνας): ζυγοί μήνες σκιασμένοι, έντονη
+   γραμμή στην 1η του μήνα */
+.lb-monband{display:none;position:absolute;top:0;bottom:0;z-index:0;pointer-events:none;
+  left:calc(var(--s) * var(--ppm) * 1px);
+  width:calc(var(--d) * var(--ppm) * 1px);
+  border-left:2px solid var(--muted)}
+.lb-monband.alt{background:rgba(40,90,160,.06)}
+.lboard.z-week .lb-monband,
+.lboard.z-month .lb-monband{display:block}
+.lboard.z-month .lb-month.we{background:rgba(40,90,160,.1)}
 /* ΥΠΟΛΟΙΠΟ ΚΑΝΟΝΙΚΗΣ ΑΔΕΙΑΣ: λωρίδα ύψους --lb-acc στο κάτω μέρος κάθε
    γραμμής, ένα κομμάτι ανά ημέρα (έτος: μήνα), ο αριθμός στη ΔΕΞΙΑ άκρη =
    «στο τέλος της ημέρας». Τόνοι όπως η .leave-accrual-month του Προγράμματος */

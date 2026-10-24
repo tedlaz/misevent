@@ -1,0 +1,106 @@
+{# Modal ΑΠΟΔΟΧΩΝ & ΠΛΗΡΩΜΩΝ εργαζομένου (read-only): ΟΛΕΣ οι προσλήψεις του,
+   ανά έτος (νεότερο πρώτο) — ΙΔΙΕΣ γραμμές με τα «Σύνολα ανά περίοδο» της
+   μισθοδοσίας (`q.employee_pay_card`) και δίπλα ό,τι πληρώθηκε. Ανοίγει με
+   κλικ στο ονοματεπώνυμο της λίστας εργαζομένων.
+   ΠΟΛΛΑΠΛΕΣ ΠΡΟΣΛΗΨΕΙΣ: σύνοψη ανά πρόσληψη (#1, #2… κατά ημ. πρόσληψης)
+   στην κορυφή, και στήλη «Πρόσληψη» σε κάθε γραμμή — ΜΟΝΟ όταν είναι >1. #}
+{% set multi = hires|length > 1 %}
+{% macro hire_span(h) -%}
+  {{ h.hire_date|date_gr }} – {{ h.termination_date|date_gr if h.termination_date else 'σήμερα' }}
+{%- endmacro %}
+<div class="modal-backdrop">
+  <div class="modal wide">
+    <div class="mhead">
+      <h3>Αποδοχές & πληρωμές — {{ person.full_name }}</h3>
+      <span class="muted" style="font-size:12.5px">
+        ΑΦΜ {{ person.afm }} ·
+        {% if multi %}{{ hires|length }} προσλήψεις
+        {%- elif hires %}πρόσληψη {{ hire_span(hires[0]) }}{% endif %} ·
+        κάθε καταβολή ανά έτος, με ό,τι πληρώθηκε</span>
+    </div>
+
+    <div class="mbody">
+      {% if multi %}
+        <b class="sec">Προσλήψεις</b>
+        <table class="tbl" style="margin-bottom:14px">
+          <thead><tr>
+            <th>#</th><th>Διάστημα</th>
+            <th style="text-align:right">Μικτά</th>
+            <th style="text-align:right">Καθαρά</th>
+            <th style="text-align:right">Πληρώθηκαν</th>
+            <th></th>
+          </tr></thead>
+          <tbody>
+            {% for h in hires|reverse %}
+              <tr>
+                <td><span class="tag">#{{ h.n }}</span></td>
+                <td class="mono">{{ hire_span(h) }}</td>
+                <td class="num">{{ h.gross|money }}</td>
+                <td class="num"><b>{{ h.net|money }}</b></td>
+                <td class="num">{{ h.paid|money }}</td>
+                <td style="text-align:right"><a class="lnk"
+                  href="{{ url_for('employments.detail', employment_id=h.eid) }}">
+                  Καρτέλα →</a></td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      {% endif %}
+
+      {% for py in pay_years %}
+        <details class="box" {{ 'open' if loop.first }}>
+          <summary>Έτος {{ py.year }}
+            <span class="muted" style="font-weight:400">
+              — μικτά {{ py.totals.gross|money }} € · καθαρά
+              {{ py.totals.net|money }} € · πληρώθηκαν {{ py.totals.paid|money }} €</span>
+          </summary>
+          <table class="tbl">
+            <thead><tr>
+              <th>Περίοδος</th>{% if multi %}<th>Πρόσληψη</th>{% endif %}<th>Τύπος</th>
+              <th style="text-align:right">Μικτά</th>
+              <th style="text-align:right">Εισφορές<br>Εργαζομένου</th>
+              <th style="text-align:right">ΦΜΥ</th>
+              <th style="text-align:right">Καθαρά</th>
+              <th style="text-align:right">Πληρώθηκε</th>
+            </tr></thead>
+            <tbody>
+              {% for r in py.rows %}
+                <tr>
+                  <td class="mono">{{ r.month }}/{{ py.year }}</td>
+                  {% if multi %}
+                    <td><span class="tag" title="{{ hire_span(r.hire) }}">#{{ r.hire.n }}</span></td>
+                  {% endif %}
+                  <td>{{ r.label }}</td>
+                  <td class="num">{{ r.gross|money }}</td>
+                  <td class="num">{{ r.efka_employee|money }}</td>
+                  <td class="num">{{ r.fmy|money }}</td>
+                  <td class="num"><b>{{ r.net|money }}</b></td>
+                  <td class="num">
+                    {%- if r.paid >= r.net %}<span class="tag ok">{{ r.paid|money }}</span>
+                    {%- elif r.paid %}{{ r.paid|money }}
+                    {%- else %}<span class="tag">εκκρεμεί</span>{% endif %}</td>
+                </tr>
+              {% endfor %}
+              <tr class="tot">
+                <td class="mono">Σύνολο {{ py.year }}</td>{% if multi %}<td></td>{% endif %}<td></td>
+                <td class="num">{{ py.totals.gross|money }}</td>
+                <td class="num">{{ py.totals.efka_employee|money }}</td>
+                <td class="num">{{ py.totals.fmy|money }}</td>
+                <td class="num">{{ py.totals.net|money }}</td>
+                <td class="num">{{ py.totals.paid|money }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </details>
+      {% else %}
+        <div class="empty">Καμία υπολογισμένη καταβολή ακόμη.</div>
+      {% endfor %}
+    </div>
+
+    <div class="mfoot">
+      <button type="button" class="ghost"
+              hx-get="{{ url_for('persons.modal_close') }}"
+              hx-target="#modal-host" hx-swap="innerHTML">Κλείσιμο</button>
+    </div>
+  </div>
+</div>

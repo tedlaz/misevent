@@ -97,6 +97,14 @@ def index():
     return render_template("dashboard.html", **_context())
 
 
+@bp.get("/staff")
+def staff_table():
+    """Ο πίνακας «Προσωπικό» μόνος του — τον ξαναζητά το `lb-refresh`."""
+    now = datetime.now()
+    return render_template("partials/_staff_table.html",
+                           staff=q.staff_now(today(), now.hour * 60 + now.minute))
+
+
 @bp.get("/stats")
 def stats():
     return render_template("stats.html", **_stats_context())

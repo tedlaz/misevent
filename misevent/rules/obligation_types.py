@@ -96,12 +96,12 @@ TYPES: dict[str, ObligationType] = {t.code: t for t in [
     # αρτιότητας ΟΛΩΝ (`svc.check_card_period`) — μη-strict προαπαιτούμενο
     # της έγκρισης: χωρίς digital_card δεν γεννιέται, άρα δεν μπλοκάρει.
     _t("CARD_IMPORT", "Εισαγωγή κάρτας περιόδου", "💳",
-       spawn="period_card", due=("eom", 0), command="check_card_period",
+       spawn="period_card", due=("eom_cal", 0), command="check_card_period",
        requires=(("MONTHLY_PAYROLL", "prev"),),
        extension={"allowed": True, "max_days": 10}),
 
     _t("ATTENDANCE_APPROVAL", "Έγκριση παρουσιών", "⏱️",
-       spawn="period", due=("eom", 0), command="approve_attendance",
+       spawn="period", due=("eom_cal", 0), command="approve_attendance",
        requires=(("MONTHLY_PAYROLL", "prev"), ("CARD_IMPORT", "same")),
        extension={"allowed": True, "max_days": 10}),
 

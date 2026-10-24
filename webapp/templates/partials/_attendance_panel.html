@@ -4,7 +4,14 @@
 <div id="attendance-panel">
   <div class="card">
     <h2>Παρουσίες {{ m }}/{{ y }}
-      <span class="norm">— {{ 'εγκεκριμένο' if done else 'προσχέδιο' }}</span></h2>
+      <span class="norm">— {{ 'εγκεκριμένο' if done else 'προσχέδιο' }}</span>
+      {# ΚΕΝΤΡΙΚΗ σημαία: εισήχθη κάρτα και καλύπτει τις ημέρες εργασίας
+         ΟΛΩΝ (λείπουν το πολύ αργίες) #}
+      {% if card_complete %}
+        <span class="tag ok" style="margin-left:8px"
+              title="Οι παρουσίες από την κάρτα καλύπτουν όλες τις ημέρες εργασίας του {{ m }}/{{ y }} για όλους τους εργαζόμενους">
+          💳 Εισαγωγή κάρτας ✓ εντάξει</span>
+      {% endif %}</h2>
 
     <form class="btnrow" style="margin-bottom:14px"
           hx-get="{{ url_for('attendance.index') }}" hx-target="body"
@@ -73,6 +80,7 @@
           </ul>
         </div>
       {% endif %}
+
 
       <form id="sheet-form"
             hx-post="{{ url_for('attendance.approve', y=y, m=m) }}"

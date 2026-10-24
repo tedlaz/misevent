@@ -18,6 +18,25 @@ class PaymentsMixin:
                     p.employee_id,
                     PaymentMade("salary", year, month, p.net, p.employee_id),
                 )
+        self.pay_exit_compensations(year, month)
+
+    def pay_exit_compensations(self, year: int, month: int):
+        """Αποζημιώσεις αποχώρησης (μη ληφθείσας αδείας / απόλυσης) — δεν έχουν
+        δική τους υποχρέωση: εξοφλούνται ΜΑΖΙ με τους μισθούς. Πληρώνεται
+        κάθε ΑΝΕΞΟΦΛΗΤΗ με λήξη έως τον (year, month), με περίοδο τον μήνα
+        αποχώρησης — άρα και όσες υπολογίστηκαν αφού είχαν ήδη πληρωθεί οι
+        μισθοί εκείνου του μήνα εξοφλούνται με την επόμενη πληρωμή μισθών."""
+        paid = {(p.payment_type, p.beneficiary) for p in self.proj.payments}
+        for ptype, events in (("leave_compensation", self.proj.leave_compensations),
+                              ("severance", self.proj.severances)):
+            for ev in events:
+                t = ev.termination_date
+                if (t.year, t.month) <= (year, month) and \
+                        (ptype, ev.employee_id) not in paid:
+                    self.store.append(
+                        ev.employee_id,
+                        PaymentMade(ptype, t.year, t.month, ev.net, ev.employee_id),
+                    )
 
     def pay_gifts(self, gift_type: str, year: int):
         """Καταβολή Δώρου (easter|christmas) στους δικαιούχους — καθαρά ποσά."""

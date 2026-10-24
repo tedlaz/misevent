@@ -346,7 +346,7 @@
     {
       "code": "ATTENDANCE_APPROVAL",
       "due": [
-        "eom",
+        "eom_cal",
         0
       ],
       "extension": {
