@@ -18,7 +18,12 @@ from misevent.domain.events import (
     ErganiSubmissionRecorded,
 )
 
-from ._base import DISMISSAL_REASON, FIXED_TERM_END_REASON, VOLUNTARY_EXIT_REASON
+from ._base import (
+    DISMISSAL_REASON,
+    FIXED_TERM_END_REASON,
+    VOLUNTARY_EXIT_REASON,
+    ergani_is_manual,
+)
 
 
 class ContractMixin:
@@ -143,8 +148,8 @@ class ContractMixin:
                 f"Δεν υπάρχει κατώτατος μισθός για "
                 f"{on_date.strftime('%d/%m/%Y')} — το μητρώο ΓΣΣΕ ξεκινά "
                 f"{earliest.strftime('%d/%m/%Y')}. Αν ο εργαζόμενος έρχεται "
-                "από άλλο πρόγραμμα μισθοδοσίας, σημειώστε «Μεταφορά από άλλο "
-                "πρόγραμμα μισθοδοσίας» και δώστε την ημερομηνία έναρξης — ο "
+                "από άλλο πρόγραμμα μισθοδοσίας, επιλέξτε «Υπάρχων εργαζόμενος» "
+                "και δώστε την έναρξη μισθοδοσίας στο σύστημα — ο "
                 "κατώτατος θα ελεγχθεί τότε, με ωριμασμένες τις τριετίες."
             )
 
@@ -308,7 +313,8 @@ class ContractMixin:
         args = (self.proj.company, emp, profile, emp.termination_date)
         if reason == VOLUNTARY_EXIT_REASON:
             doc = self.person_document(emp.person_id, "resignation")
-            if not self.ergani.simulate and not doc:
+            # χειροκίνητα: η δήλωση επισυνάπτεται στο ίδιο το portal
+            if not self.ergani.simulate and not doc and not ergani_is_manual():
                 raise ValueError(
                     "Επισυνάψτε τη δήλωση αποχώρησης με υπογραφή του εργαζομένου "
                     "(PDF) — το ΕΡΓΑΝΗ την απαιτεί στην οικειοθελή αποχώρηση")
@@ -322,15 +328,16 @@ class ContractMixin:
                          "— υποβάλετέ την στο portal του ΕΡΓΑΝΗ και σημειώστε την")
 
     def record_external_exit_submission(self, employee_id, reference=""):
-        """Η Αναγγελία Λήξης υποβλήθηκε ΕΚΤΟΣ συστήματος (portal — π.χ.
-        καταγγελία). ΚΑΜΙΑ κλήση στο ΕΡΓΑΝΗ· `status="external"` (όπως το
-        `record_external_hire_submission`), ώστε να μη φαίνεται εκκρεμής."""
+        """Η Αναγγελία Λήξης υποβλήθηκε ΧΕΙΡΟΚΙΝΗΤΑ στο portal (η καταγγελία
+        δεν υπάρχει στο API, άρα δεν έχει payload). ΚΑΜΙΑ κλήση στο ΕΡΓΑΝΗ·
+        `status="manual"` με υποχρεωτικό πρωτόκολλο, όπως κάθε χειροκίνητη."""
         if not self.exit_pending(employee_id):
             raise ValueError("Η Αναγγελία Λήξης δεν εκκρεμεί")
+        reference = str(reference or "").strip()
+        if not reference:
+            raise ValueError("Δώστε τον αριθμό πρωτοκόλλου της υποβολής στο portal ΕΡΓΑΝΗ")
         self.store.append(employee_id, ErganiSubmissionRecorded(
-            "E5_LIXI", employee_id, "{}", "external",
-            str(reference or "").strip() or "ΕΚΤΟΣ ΣΥΣΤΗΜΑΤΟΣ",
-            self.ergani.environment))
+            "E5_LIXI", employee_id, "{}", "manual", reference, "portal"))
 
     def delete_employment(self, employment_id, reason=""):
         """ΔΙΑΓΡΑΦΗ περιόδου απασχόλησης που καταχωρήθηκε ΕΚ ΠΑΡΑΔΡΟΜΗΣ.

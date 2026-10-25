@@ -9,7 +9,6 @@ TRANSACTIONS στο event log: ό,τι γράφει ΜΙΑ εντολή (`run_co
 Εκτέλεση: uv run pytest tests/test_transactions.py
 """
 
-import sqlite3
 
 from misevent.domain.events import MiscSettingsChanged
 from misevent.persistence.database import Database
@@ -35,23 +34,6 @@ def test_events_of_one_transaction_share_tx():
     other = Database().store("other")
     other.restore_backup(doc)
     assert _txs(other) == [a, b, None]
-
-
-def test_old_database_gets_tx_column(tmp_path):
-    path = tmp_path / "old.db"
-    conn = sqlite3.connect(path)
-    conn.execute("""CREATE TABLE events (store TEXT NOT NULL, seq INTEGER NOT NULL,
-        event_id TEXT NOT NULL, aggregate_id TEXT NOT NULL, event_type TEXT NOT NULL,
-        occurred_at TEXT NOT NULL, payload TEXT NOT NULL, PRIMARY KEY (store, seq))""")
-    conn.execute("INSERT INTO events VALUES ('s', 1, 'e1', 'MISC', 'MiscSettingsChanged',"
-                 " '2026-01-01T00:00:00+00:00', '{\"fields\": {}}')")
-    conn.commit()
-    conn.close()
-    store = Database(path).store("s")
-    assert _txs(store) == [None]
-    with transaction():
-        store.append("MISC", MiscSettingsChanged({"save_zip": True}))
-    assert _txs(store)[1]
 
 
 def test_audit_groups_one_command_into_one_row(fresh_system):

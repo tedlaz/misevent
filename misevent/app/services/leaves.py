@@ -129,6 +129,8 @@ class LeavesMixin:
         ΟΛΟΙ οι εργαζόμενοι σε ΜΙΑ κλήση WTOLeave. Κλείνει την υποχρέωση·
         χωρίς τίποτα αδήλωτο απλώς την κλείνει. Απόρριψη = καμία κάλυψη."""
         proposal = self.leave_declaration_proposal(year, month)
+        if not proposal:
+            self._ergani_nothing_to_send("WTOLeave")
         res = {"count": sum(map(len, proposal.values())),
                "employees": len(proposal), "reference": ""}
         if proposal:

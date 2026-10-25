@@ -66,7 +66,15 @@
       {# Υποβολές πρόσληψης στο ΕΡΓΑΝΗ — τις ενεργοποιεί ο χρήστης χειροκίνητα #}
       <h3 class="sec">ΕΡΓΑΝΗ πρόσληψης</h3>
       <div class="btnrow">
-        {% if e3_done %}
+        {% if e3_done and external_hire %}
+          {# Υπάρχων εργαζόμενος (μεταφορά): Ε3, σύμβαση και μεταβολές της τα
+             υπέβαλε το προηγούμενο πρόγραμμα — ΔΕΝ ξαναϋποβάλλονται #}
+          <button type="button" class="tag ok lnk-tag"
+            hx-get="{{ url_for('employments.hire_details_form', employment_id=mid) }}"
+            hx-target="#modal-host" hx-swap="innerHTML"
+            title="Υποβλήθηκε από το προηγούμενο πρόγραμμα μισθοδοσίας · πρωτόκολλο: {{ external_hire }}">
+            Αναγγελία ✓ — προηγούμενο πρόγραμμα</button>
+        {% elif e3_done %}
           <button type="button" class="tag ok lnk-tag"
             hx-get="{{ url_for('employments.hire_details_form', employment_id=mid) }}"
             hx-target="#modal-host" hx-swap="innerHTML"

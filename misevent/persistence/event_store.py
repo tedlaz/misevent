@@ -97,6 +97,7 @@ class EventStore:
     ):
         self.db = db
         self.name = store
+        self.sid = db.store_id(store)  # η τιμή της στήλης `store` στα queries
         self._subscribers: list[Callable[[str, DomainEvent], None]] = []
         self.registry = registry if registry is not None else EVENT_TYPES
         self.shared = shared
@@ -125,7 +126,7 @@ class EventStore:
             "(store, seq, event_id, aggregate_id, event_type, occurred_at, payload, tx) "
             "SELECT :store, COALESCE(MAX(seq), 0) + 1, :event_id, :aggregate_id, "
             ":event_type, :occurred_at, :payload, :tx FROM events WHERE store = :store",
-            {**rec, "store": self.name, "tx": _TX.get()},
+            {**rec, "store": self.sid, "tx": _TX.get()},
         )
         self.conn.commit()
         for handler in self._subscribers:
@@ -141,7 +142,7 @@ class EventStore:
         ολοκλήρου στο κοινό store, οπότε δεν πατούν ποτέ εδώ.
         """
         q = "SELECT aggregate_id, event_type, payload FROM events WHERE store = ?"
-        params: list = [self.name]
+        params: list = [self.sid]
         if aggregate_id:
             q += " AND aggregate_id = ?"
             params.append(aggregate_id)
@@ -178,7 +179,7 @@ class EventStore:
             "FROM events WHERE store = ? ORDER BY seq"
         )
         for seq, event_id, agg, etype, occurred_at, payload, tx in self.conn.execute(
-            q, (self.name,)
+            q, (self.sid,)
         ):
             cls = self.registry[etype]
             out.append(
@@ -201,13 +202,13 @@ class EventStore:
     def event_count(self) -> int:
         """Πόσα events έχει ΑΥΤΟ το store."""
         return self.conn.execute(
-            "SELECT COUNT(*) FROM events WHERE store = ?", (self.name,)
+            "SELECT COUNT(*) FROM events WHERE store = ?", (self.sid,)
         ).fetchone()[0]
 
     def count_by_type(self, event_type: str) -> int:
         return self.conn.execute(
             "SELECT COUNT(*) FROM events WHERE store = ? AND event_type = ?",
-            (self.name, event_type),
+            (self.sid, event_type),
         ).fetchone()[0]
 
     def max_seq(self, aggregate_id: str, event_type: str) -> int | None:
@@ -215,7 +216,7 @@ class EventStore:
         row = self.conn.execute(
             "SELECT MAX(seq) FROM events "
             "WHERE store = ? AND aggregate_id = ? AND event_type = ?",
-            (self.name, aggregate_id, event_type),
+            (self.sid, aggregate_id, event_type),
         ).fetchone()
         return row[0] if row else None
 
@@ -229,7 +230,7 @@ class EventStore:
             "WHERE store = ? AND aggregate_id = ? "
             f"AND event_type IN ({_marks(types)}) AND seq > ? ORDER BY seq"
         )
-        return list(self.conn.execute(q, [self.name, aggregate_id, *types, seq]))
+        return list(self.conn.execute(q, [self.sid, aggregate_id, *types, seq]))
 
     def raw_by_type(self, event_type: str) -> list[tuple[str, str]]:
         """(occurred_at, payload_json) για κάθε event του τύπου."""
@@ -237,7 +238,7 @@ class EventStore:
             self.conn.execute(
                 "SELECT occurred_at, payload FROM events "
                 "WHERE store = ? AND event_type = ? ORDER BY seq",
-                (self.name, event_type),
+                (self.sid, event_type),
             )
         )
 
@@ -259,7 +260,7 @@ class EventStore:
                 **({"tx": tx} if tx else {}),
             }
             for seq, event_id, aggregate_id, event_type, occurred_at, payload, tx
-            in self.conn.execute(q, (self.name,))
+            in self.conn.execute(q, (self.sid,))
         ]
 
     @staticmethod
@@ -350,7 +351,7 @@ class EventStore:
         events = self.validate_backup(document)
         try:
             self.conn.execute("BEGIN IMMEDIATE")
-            self.conn.execute("DELETE FROM events WHERE store = ?", (self.name,))
+            self.conn.execute("DELETE FROM events WHERE store = ?", (self.sid,))
             self.conn.executemany(
                 """INSERT INTO events
                    (store, seq, event_id, aggregate_id, event_type, occurred_at, payload, tx)
@@ -359,7 +360,7 @@ class EventStore:
                 [
                     {
                         **rec,
-                        "store": self.name,
+                        "store": self.sid,
                         "payload_json": json.dumps(
                             rec["payload"], ensure_ascii=False, separators=(",", ":")
                         ),
@@ -380,14 +381,14 @@ class EventStore:
         γίνεται από τον caller, αφού ολοκληρωθεί επιτυχώς η συναλλαγή.
         """
         row = self.conn.execute(
-            "SELECT 1 FROM events WHERE store = ? AND seq = ?", (self.name, seq)
+            "SELECT 1 FROM events WHERE store = ? AND seq = ?", (self.sid, seq)
         ).fetchone()
         if row is None:
             raise ValueError("Το επιλεγμένο event δεν υπάρχει πλέον")
         try:
             self.conn.execute("BEGIN IMMEDIATE")
             cur = self.conn.execute(
-                "DELETE FROM events WHERE store = ? AND seq > ?", (self.name, seq)
+                "DELETE FROM events WHERE store = ? AND seq > ?", (self.sid, seq)
             )
             self.conn.commit()
         except Exception:

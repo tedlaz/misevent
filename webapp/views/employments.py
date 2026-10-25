@@ -47,6 +47,7 @@ from ..helpers import (
     form_employment_relationship,
     form_float,
     form_frozen_service_years,
+    form_hire_status_fields,
     form_int,
     form_migration,
     form_oaed_hire_fields,
@@ -218,6 +219,9 @@ def form_ctx(fv):
         "ins": insurance_ctx(fv),
         "carrier_labels": config.CARRIERS,
         "pron_labels": labels.PRON_CHOICES,
+        # 1η μισθοδοσία (έτος, μήνας): μετά από αυτήν δεν εισάγεται υπάρχων
+        # εργαζόμενος — η φόρμα κρύβει την επιλογή (κανόνας: service)
+        "migration_closed": svc.migration_closed_by(),
     }
 
 
@@ -294,6 +298,8 @@ def create():
         # η ανάληψη μισθοδοσίας σε κλεισμένο μήνα απορρίπτεται ούτως ή άλλως
         # από το command layer, αλλά τότε το πρόσωπο θα είχε ήδη γραφτεί.
         migration = form_migration(f)
+        if migration["ergani_hire_done"]:
+            svc.check_migration_open()  # ΠΡΙΝ δημιουργηθεί πρόσωπο (orphan)
         start = constraints.check_payroll_from(
             migration["payroll_from"], form_date(f, "hire_date")
         ) or form_date(f, "hire_date")
@@ -350,8 +356,10 @@ def create():
             **form_migration(f),
             **form_employment_relationship(f),
             **form_oaed_hire_fields(f),
+            **form_hire_status_fields(f),
             **form_digital_card_fields(f),
             **sopts,
+            today=today(),  # μεταφορά: ως χθες καλύπτει το προηγούμενο πρόγραμμα
         )
         # Οι ασφαλιστικές καλύψεις αντλούνται από τη δηλωμένη ειδικότητα:
         # εδώ δίνονται μόνο ο φορέας επικουρικής και η επιλογή πρόνοιας.
@@ -366,14 +374,13 @@ def create():
         verb = "Επαναπροσλήφθηκε" if rehire else "Προσλήφθηκε"
         emp = proj.employments[eid]
         if emp.migrated:
-            # Μεταφορά: το Ε3 μπορεί να έχει ήδη δηλωθεί εκτός συστήματος —
-            # το μήνυμα δεν πρέπει να ζητά ό,τι δεν χρειάζεται.
+            # Μεταφορά: η αναγγελία έχει ήδη γίνει από το προηγούμενο
+            # πρόγραμμα — εκκρεμεί ΜΟΝΟ η ΟΧΕ από εδώ.
             since = emp.payroll_start.strftime("%m/%Y")
-            todo = "ΟΧΕ" if emp.hire_submitted else "Ε3/ΟΧΕ"
             return (
-                f"{verb}: {name} — μεταφορά, η μισθοδοσία ξεκινά {since} "
+                f"{verb}: {name} — υπάρχων εργαζόμενος, η μισθοδοσία ξεκινά {since} "
                 f"(πρόσληψη {emp.hire_date.strftime('%d/%m/%Y')}) · "
-                f"υπόβαλε {todo} στο ΕΡΓΑΝΗ από την καρτέλα"
+                "υπόβαλε την ΟΧΕ στο ΕΡΓΑΝΗ"
             )
         return (
             f"{verb}: {name} — υπόβαλε Ε3/ΟΧΕ στο ΕΡΓΑΝΗ από την καρτέλα "
@@ -426,14 +433,16 @@ def _minimum_compensation(form):
     # ΜΕΤΑΦΟΡΑ: το όριο κρίνεται στην ΑΝΑΛΗΨΗ, με τις τριετίες ωριμασμένες
     # από την πραγματική πρόσληψη — ΙΔΙΟΣ κανόνας με την αποθήκευση, ώστε η
     # ζωντανή ένδειξη να μη διαφέρει από αυτό που θα επιβληθεί.
+    # (χωρίς το `form_migration`: η ζωντανή ένδειξη δεν σκάει όσο η ανάληψη
+    # δεν έχει συμπληρωθεί ακόμα — το σφάλμα ανήκει στην αποθήκευση)
     on_date, service_years = svc.wage_check_basis(
         hire_date,
-        form_migration(form)["payroll_from"],
+        form_optional_date(form, "payroll_from") if form.get("migrated") else None,
         service_years,
         frozen_service_years=frozen_service_years,
     )
     # ΙΔΙΟ μήνυμα με την αποθήκευση όταν η ημερομηνία είναι εκτός μητρώου
-    # ΓΣΣΕ (καθοδηγεί στη «Μεταφορά») — μία πηγή αλήθειας.
+    # ΓΣΣΕ (καθοδηγεί στο «Υπάρχων εργαζόμενος») — μία πηγή αλήθειας.
     svc.check_wage_registry(on_date)
     floor, description = svc.minimum_floor(
         pay_type,
@@ -801,8 +810,15 @@ def _card(employment_id):
             svc.ergani_hire_submitted(employment_id, "WebE3N")
             or svc.ergani_hire_submitted(employment_id, "E3")
         ),
-        # η ΚΑΛΥΨΗ — μια κοινή υποβολή για πολλούς δεν έχει employee_id
-        "wto_done": bool(e.standing_history or e.declared_days),
+        # η ΚΑΛΥΨΗ — μια κοινή υποβολή για πολλούς δεν έχει employee_id. ΟΧΙ
+        # αν εκκρεμεί εβδομαδιαίο: σε μεταφορά το διάστημα έως την πρόσληψη
+        # το καλύπτει το προηγούμενο πρόγραμμα, η ΟΧΕ από εδώ εκκρεμεί ακόμα.
+        "wto_done": not e.pending_weekly
+                    and bool(e.standing_history or e.days_declared_here),
+        "external_hire": next(
+            (s.reference for s in proj.ergani_submissions
+             if getattr(s, "employee_id", None) == employment_id
+             and s.doc_type == "WebE3N" and s.status == "external"), None),
         # Τρέχον κατώτατο όριο (με ωριμασμένες τριετίες/γάμο/λοιπές)
         "min_floor": svc.minimum_floor(
             e.pay_type,
@@ -860,11 +876,17 @@ def _hire_form_values(e):
         "f_replaceprograma_amka": e.oaed_replaced_amka,
         "f_trial_period": e.trial_period,
         "f_trial_date_to": (e.trial_date_to.isoformat() if e.trial_date_to else ""),
+        "f_ar_vivliou_anilikou": e.minor_booklet_number,
+        "was_unemployed": "1" if e.unemployment_card_number else "",
+        "f_code_anergias": e.unemployment_card_number,
         "f_working_card": e.working_card,
         "f_euelikto_wrario_minutes": e.flexible_arrival_minutes,
         "f_dialeimma_entos_wrariou": e.break_within_schedule,
         "f_dialeimma_minutes": e.break_minutes,
         "schedule_mode": e.schedule_mode,
+        # Υπάρχων εργαζόμενος: η προβολή δείχνει το ΙΔΙΟ είδος πρόσληψης
+        "migrated": "1" if e.migrated else "",
+        "payroll_from": e.payroll_start.isoformat() if e.migrated else "",
     }
     values.update({f"day_{code}": e.schedule.get(code, "") for code, _ in DAYS})
     if e.schedule_history:
@@ -1012,6 +1034,16 @@ def _hire_json_preview_from_form(employment_id, form):
         oaed_values,
     ):
         setattr(preview, field_name, value)
+    status = form_hire_status_fields(form)
+    person = proj.persons.get(preview.person_id)
+    preview.minor_booklet_number, preview.unemployment_card_number = (
+        constraints.check_hire_status_fields(
+            status["minor_booklet_number"], status["unemployment_card_number"],
+            minor=(constraints.age_on(getattr(person, "birth_date", None),
+                                      hire_date) or 99) < 18,
+            required=False,  # προεπισκόπηση: το σφάλμα ανήκει στην αποθήκευση
+        )
+    )
     digital_values = form_digital_card_fields(form)
     digital_values = constraints.check_digital_card_fields(
         digital_values["working_card"],
@@ -1619,6 +1651,7 @@ def correct_hire_details(employment_id):
             extra_allowances_pct=form_float(f, "extra_allowances_pct"),
             **form_employment_relationship(f),
             **form_oaed_hire_fields(f),
+            **form_hire_status_fields(f),
             **form_digital_card_fields(f),
             **schedule_opts(f),
         )
@@ -1699,25 +1732,8 @@ def contract(employment_id):
     return _modal_error(employment_id, "contract", msg)
 
 
-# ⚠️ ΚΑΜΙΑ αποστολή στο ΕΡΓΑΝΗ από την καρτέλα: το WebE3N (όπως κάθε έντυπο)
-# στέλνεται ΜΟΝΟ από την οθόνη ΕΡΓΑΝΗ (`views/ergani.py`). Εδώ μένει μόνο η
-# προεπισκόπηση του JSON.
-@bp.get("/<employment_id>/ergani/e3/json")
-def ergani_e3_json(employment_id):
-    """Προεπισκόπηση του ακριβούς WebE3N JSON, χωρίς υποβολή (τα συνημμένα
-    PDF συνοπτικά — όχι MB base64 στην οθόνη)."""
-    try:
-        payload = ergani_mod.redact_files(svc.build_hire_web_e3n(employment_id))
-    except ValueError as exc:
-        return Response(str(exc), status=400, content_type="text/plain; charset=utf-8")
-    body = json.dumps(payload, ensure_ascii=False, indent=2, default=str)
-    return Response(
-        body,
-        content_type="application/json; charset=utf-8",
-        headers={
-            "Content-Disposition": (f'inline; filename="WebE3N-{employment_id}.json"')
-        },
-    )
+# ⚠️ ΚΑΜΙΑ αποστολή στο ΕΡΓΑΝΗ από την καρτέλα: κάθε έντυπο (και η
+# προεπισκόπηση του JSON) ζει στην οθόνη ΕΡΓΑΝΗ (`views/ergani.py`).
 
 
 @bp.post("/<employment_id>/insurance")

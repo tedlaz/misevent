@@ -10,7 +10,8 @@
                     που δεν την έχει ήδη η κεφαλίδα του modal)
      term         = ο όρος αναζήτησης που προσυμπληρώνει επώνυμο/ΑΦΜ
      specialties  = οι δηλωμένες ειδικότητες της εταιρείας
-     allow_migration = να προσφερθεί η «Παλαιά πρόσληψη» (default: ναι) — η
+     migration_closed = 1η μισθοδοσία (έτος, μήνας) ή None (`form_ctx`)
+     allow_migration = να προσφερθεί το «Υπάρχων εργαζόμενος» (default: ναι) — η
                     ΕΠΑΝΑΠΡΟΣΛΗΨΗ το θέτει false: είναι νέα περίοδος που
                     ξεκινά τώρα, ποτέ παλιά πρόσληψη άλλου προγράμματος
 
@@ -29,8 +30,66 @@
     <div class="fs-h"><span class="fs-ic">📄</span>
       <b>Σχέση απασχόλησης</b>
       <span class="fs-hint">διάρκεια της σύμβασης για την πρόσληψη WebE3N</span></div>
+
+    {# ΕΙΔΟΣ ΠΡΟΣΛΗΨΗΣ — νέος εργαζόμενος ή υπάρχων που μεταφέρεται από άλλο
+       πρόγραμμα μισθοδοσίας (εταιρεία με χρήσεις στο παρελθόν). Ο υπάρχων
+       έχει ΗΔΗ αναγγελία/σύμβαση/μεταβολές στο ΕΡΓΑΝΗ: δεν ξαναϋποβάλλονται·
+       η πρόσληψη μετράει για τριετίες/Δώρα/άδεια, αλλά το σύστημα αναλαμβάνει
+       από συγκεκριμένο μήνα. Τα πεδία του εμφανίζονται ΜΟΝΟ όταν επιλεγεί
+       (CSS-only :has(), βλ. app.css). Επαναπρόσληψη: καμία επιλογή — είναι
+       νέα περίοδος που ξεκινά τώρα. #}
+    {% set migrated = fv.get('migrated')|string in ('1', 'True', 'true', 'on') %}
+    {# Μετά την 1η μισθοδοσία ΔΕΝ εισάγεται υπάρχων εργαζόμενος (έπρεπε να
+       είναι μέσα της) — εκτός από την προβολή μιας ήδη μεταφερμένης. #}
+    {% if allow_migration and migration_closed and not migrated %}
+    <p class="muted" style="font-size:12px;margin:0 0 10px">Η εισαγωγή
+      υπάρχοντος εργαζομένου από άλλο πρόγραμμα δεν επιτρέπεται πια: έχει
+      εκδοθεί μισθοδοσία {{ '%02d/%d'|format(migration_closed[1], migration_closed[0]) }}.</p>
+    {% elif allow_migration %}
+    <div class="migr-sec">
+      <div class="hire-kind" role="radiogroup" aria-label="Είδος πρόσληψης">
+        <label class="hk-opt"><input type="radio" name="migrated" value=""
+          {{ 'checked' if not migrated }}>
+          <span><b>Νέα πρόσληψη</b>
+            <small>Ξεκινά τώρα — θα υποβληθούν Αναγγελία (WebE3N) και ΟΧΕ
+              στο ΕΡΓΑΝΗ.</small></span></label>
+        <label class="hk-opt"><input type="radio" name="migrated" value="1"
+          {{ 'checked' if migrated }}>
+          <span><b>Υπάρχων εργαζόμενος</b>
+            <small>Μεταφορά από άλλο πρόγραμμα μισθοδοσίας — η πρόσληψη έχει
+              ήδη γίνει.</small></span></label>
+      </div>
+      <div class="migr-fields">
+        <div class="frm cols">
+          <label>Έναρξη μισθοδοσίας στο σύστημα
+            <input type="date" name="payroll_from"
+              value="{{ fv.get('payroll_from', '') }}"
+              title="1η του μήνα από τον οποίο υπολογίζει ΑΥΤΟ το πρόγραμμα">
+            <span class="muted" style="font-size:11.5px">1η του μήνα. Πριν από
+              αυτήν δεν γεννιούνται περίοδοι/υποχρεώσεις.</span></label>
+          <label>Αρ. πρωτοκόλλου αναγγελίας πρόσληψης
+            <span class="muted">(προαιρετικό)</span>
+            <input name="ergani_hire_reference" class="mono"
+              value="{{ fv.get('ergani_hire_reference', '') }}"></label>
+        </div>
+        <ul class="migr-info">
+          <li>Αναγγελία πρόσληψης, σύμβαση και μεταβολές της: <b>έχουν ήδη
+            υποβληθεί στο ΕΡΓΑΝΗ — δεν ξαναϋποβάλλονται</b>.</li>
+          <li><b>Ημ. πρόσληψης</b> = η αρχική· μετρά για τριετίες, Δώρα,
+            άδεια και αποζημίωση.</li>
+          <li>Αποδοχές, ώρες και ειδικότητα: της <b>ισχύουσας</b> σύμβασης,
+            όχι της αρχικής.</li>
+          <li>Πρόγραμμα εργασίας: <b>θα υποβληθεί ξανά από εδώ (ΟΧΕ)</b>, με
+            ισχύ από την έναρξη μισθοδοσίας — ή από σήμερα, αν έχει περάσει.
+            Τις προηγούμενες ημέρες τις καλύπτει η δήλωση του προηγούμενου
+            προγράμματος.</li>
+        </ul>
+      </div>
+    </div>
+    {% endif %}
+
     <div class="frm cols">
-      <label>Ημ. πρόσληψης
+      <label>Ημ. πρόσληψης <span class="migr-only muted">(αρχική)</span>
         <input type="date" name="hire_date" data-hire-date required
           value="{{ fv.get('hire_date', '') }}"></label>
       {% set current_branch = fv.get('branch_no', 0)|int %}
@@ -65,36 +124,31 @@
           value="{{ fv.get('fixed_term_to', '') }}"
           {{ 'required' if relationship == '1' }}
           {{ 'disabled' if relationship != '1' }}>
-        <span class="muted" style="font-size:11.5px">σε παλαιά πρόσληψη πρέπει
+        <span class="muted" style="font-size:11.5px">σε υπάρχοντα εργαζόμενο πρέπει
           να είναι μετά την έναρξη μισθοδοσίας στο σύστημα</span></label>
     </div>
 
-    {# ΠΑΛΑΙΑ ΠΡΟΣΛΗΨΗ (μεταφορά από άλλο πρόγραμμα μισθοδοσίας) — εταιρεία με
-       χρήσεις στο παρελθόν: η πρόσληψη είναι παλαιά (μετράει για τριετίες/
-       Δώρα/άδεια), αλλά το σύστημα αναλαμβάνει από συγκεκριμένο μήνα και μετά.
-       Τα πεδία ζουν σε δικό τους πλαίσιο/χρώμα και εμφανίζονται ΜΟΝΟ όταν
-       ζητηθεί (CSS-only :has(), βλ. app.css). #}
-    {% if allow_migration %}
-    <div class="migr-sec">
-      <label class="chk wide"><input type="checkbox" name="migrated" value="1"
-        {{ 'checked' if fv.get('migrated') }}>
-        Παλαιά πρόσληψη</label>
-      <div class="frm cols migr-fields">
-        <label>Έναρξη μισθοδοσίας στο σύστημα
-          <input type="date" name="payroll_from"
-            value="{{ fv.get('payroll_from', '') }}"
-            title="1η του μήνα από τον οποίο υπολογίζει ΑΥΤΟ το πρόγραμμα">
-          <span class="muted" style="font-size:11.5px">1η του μήνα. Πριν από
-            αυτήν δεν γεννιούνται περίοδοι/υποχρεώσεις.</span></label>
-        <label class="chk"><input type="checkbox" name="ergani_hire_done"
-          value="1" {{ 'checked' if fv.get('ergani_hire_done') }}>
-          Εχει υποβληθεί στο ΕΡΓΑΝΗ</label>
-        <label>Αρ. πρωτοκόλλου ΕΡΓΑΝΗ <span class="muted">(προαιρετικό)</span>
-          <input name="ergani_hire_reference" class="mono"
-            value="{{ fv.get('ergani_hire_reference', '') }}"></label>
-      </div>
+    {# ΑΝΗΛΙΚΟΣ / ΑΝΕΡΓΟΣ (WebE3N): το βιβλιάριο εμφανίζεται ΜΟΝΟ για
+       ανήλικο την ημ. πρόσληψης (hire-minimum.js, από ημ. γέννησης: πεδίο της
+       φόρμας ή `data-birth-date` του προσώπου)· το δελτίο ΜΟΝΟ με το «Ήταν
+       άνεργος» (CSS-only :has()). Ο ίδιος κανόνας ισχύει στην υπηρεσία
+       (`constraints.check_hire_status_fields`) — ό,τι δεν φαίνεται δεν μετράει. #}
+    {% set birth = (person.birth_date.isoformat()
+                    if person and person.birth_date else '') %}
+    <div class="frm cols hire-status" data-hire-status data-birth-date="{{ birth }}">
+      <label data-minor-field hidden>Αρ. βιβλιαρίου ανηλίκου
+        <input name="f_ar_vivliou_anilikou" maxlength="20"
+          value="{{ fv.get('f_ar_vivliou_anilikou', '') }}">
+        <span class="muted" style="font-size:11.5px">ανήλικος κατά την
+          πρόσληψη — υποχρεωτικό</span></label>
+      <label class="chk"><input type="checkbox" name="was_unemployed" value="1"
+        {{ 'checked' if fv.get('was_unemployed') }}>
+        Ήταν άνεργος (δελτίο ΔΥΠΑ)</label>
+      <label class="unemp-field">Αριθμός δελτίου ανεργίας
+        <input name="f_code_anergias" maxlength="20"
+          value="{{ fv.get('f_code_anergias', '') }}"></label>
     </div>
-    {% endif %}
+
   </div>
 
   {% if person and person_note %}
@@ -241,7 +295,8 @@
        {% endif %}>
     <div class="fs-h"><span class="fs-ic">💶</span>
       <b>Σύμβαση &amp; αποδοχές</b>
-      <span class="fs-hint">ελέγχονται έναντι του κατώτατου ορίου</span></div>
+      <span class="fs-hint"><span class="migr-only"><b>ισχύουσα σύμβαση</b> ·
+        </span>ελέγχονται έναντι του κατώτατου ορίου</span></div>
     <div class="frm cols">
       <label>Τύπος αμοιβής
         <select name="pay_type">

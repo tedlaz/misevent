@@ -18,6 +18,7 @@ from misevent.domain.events import (
     EmploymentScheduleModeSet,
     EmploymentStarted,
     ErganiSubmissionRecorded,
+    ScheduleDaysSubmitted,
     ScheduleDeclaredToErgani,
     WorkScheduleAssigned,
 )
@@ -58,10 +59,13 @@ class EmploymentMixin:
         oaed_replaced_amka="",
         trial_period="0",
         trial_date_to=None,
+        minor_booklet_number="",
+        unemployment_card_number="",
         working_card="1",
         flexible_arrival_minutes="120",
         break_within_schedule="0",
         break_minutes="15",
+        today=None,
     ):
         """Ξεκινά ΠΕΡΙΟΔΟ ΑΠΑΣΧΟΛΗΣΗΣ για υπάρχον πρόσωπο (πρόσληψη ή
         επαναπρόσληψη). Επιστρέφει το νέο employment_id.
@@ -85,7 +89,9 @@ class EmploymentMixin:
         υποχρεώσεις πριν την ανάληψη. `ergani_hire_done=True` σημαδεύει την
         αναγγελία πρόσληψης ως **ήδη υποβληθείσα εκτός συστήματος** (δεν
         ξαναστέλνεται στο ΕΡΓΑΝΗ), με προαιρετικό αρ. πρωτοκόλλου
-        `ergani_hire_reference`."""
+        `ergani_hire_reference`. Με `today` (το «σήμερα» του UI) οι ημέρες
+        προγράμματος από την ανάληψη έως χθες καταγράφονται ως δηλωμένες από
+        το προηγούμενο πρόγραμμα — η ΟΧΕ από εδώ ισχύει από σήμερα."""
         person = self.proj.persons.get(person_id)
         if person is None:
             raise ValueError(
@@ -120,6 +126,8 @@ class EmploymentMixin:
                     "Για ημερήσιο πρόγραμμα δηλώστε πλήθος εβδομάδων 1 έως 10"
                 )
         constraints.check_rehire(person, existing, hire_date)
+        if ergani_hire_done or (payroll_from and payroll_from > hire_date):
+            self.check_migration_open()
         # ΚΛΕΙΔΩΜΑ: κρίνεται από την ΑΝΑΛΗΨΗ, όχι από την πρόσληψη — μια παλιά
         # πρόσληψη που μεταφέρεται δεν αγγίζει καμία κλεισμένη περίοδο.
         self._check_open_period(payroll_from or hire_date, "πρόσληψη")
@@ -152,6 +160,13 @@ class EmploymentMixin:
             trial_period,
             trial_date_to,
             hire_date,
+        )
+        minor_booklet_number, unemployment_card_number = (
+            constraints.check_hire_status_fields(
+                minor_booklet_number, unemployment_card_number,
+                minor=(constraints.age_on(person.birth_date, hire_date) or 99) < 18,
+                required=not ergani_hire_done,
+            )
         )
         (
             working_card,
@@ -217,6 +232,8 @@ class EmploymentMixin:
                 oaed_replaced_amka=oaed_replaced_amka,
                 trial_period=trial_period,
                 trial_date_to=trial_date_to,
+                minor_booklet_number=minor_booklet_number,
+                unemployment_card_number=unemployment_card_number,
                 working_card=working_card,
                 flexible_arrival_minutes=flexible_arrival_minutes,
                 break_within_schedule=break_within_schedule,
@@ -229,15 +246,25 @@ class EmploymentMixin:
         # ➜ Ισχύς από την ΑΝΑΛΗΨΗ: σε μεταφορά δεν έχει νόημα (ούτε δηλώνεται
         #   στο ΕΡΓΑΝΗ) πρόγραμμα αναδρομικά από μια πρόσληψη ετών πριν.
         schedule_from = payroll_from or hire_date
-        self.store.append(
-            employment_id,
-            WorkScheduleAssigned(
-                employment_id,
-                schedule_from,
-                weekly_pattern,
-                schedule_end_date if schedule_mode == "fixed" else None,
-            ),
+        schedule_end = schedule_end_date if schedule_mode == "fixed" else None
+        # ➜ ΜΕΤΑΦΟΡΑ με ανάληψη στο παρελθόν: το ΕΡΓΑΝΗ δεν δέχεται αναδρομική
+        #   ΟΧΕ, και τις ημέρες έως χθες τις έχει ήδη δηλώσει το προηγούμενο
+        #   πρόγραμμα. Το σταθερό σπάει σε [ανάληψη, χθες] (καλύπτεται αμέσως,
+        #   παρακάτω) + [σήμερα, λήξη] (εκκρεμεί η ΟΧΕ από εδώ).
+        covered_until = (
+            today - timedelta(days=1)
+            if ergani_hire_done and today and schedule_from < today
+            else None
         )
+        periods = [(schedule_from, schedule_end)]
+        if (covered_until and schedule_mode == "fixed"
+                and (schedule_end is None or schedule_end >= today)):
+            periods = [(schedule_from, covered_until), (today, schedule_end)]
+        for start, end in periods:
+            self.store.append(
+                employment_id,
+                WorkScheduleAssigned(employment_id, start, weekly_pattern, end),
+            )
         self.store.append(
             employment_id,
             EmploymentScheduleModeSet(employment_id, schedule_mode),
@@ -247,6 +274,7 @@ class EmploymentMixin:
         # την ημ. πρόσληψης για `schedule_weeks` ΠΛΗΡΕΙΣ εβδομάδες (Δευ–Κυρ).
         # Αν η πρόσληψη πέφτει μεσοβδόμαδα, καλύπτεται και το υπόλοιπο της
         # τρέχουσας εβδομάδας ΕΠΙΠΛΕΟΝ των πλήρων (βλ. _daily_from_template).
+        days = {}
         if schedule_mode == "variable":
             days = self._daily_from_template(
                 schedule_from, weekly_pattern, schedule_weeks
@@ -262,6 +290,18 @@ class EmploymentMixin:
             self.record_external_hire_submission(
                 employment_id, reference=ergani_hire_reference
             )
+        # ΚΑΛΥΨΗ από το προηγούμενο πρόγραμμα (βλ. `covered_until`): ΚΑΜΙΑ κλήση
+        # στο ΕΡΓΑΝΗ — ίδια λογική με το external WebE3N. Ημερήσια: batch 0 =
+        # «εκτός συστήματος» (οι πραγματικές υποβολές αριθμούνται από το 1).
+        if covered_until and schedule_mode == "fixed":
+            self.store.append(employment_id, ScheduleDeclaredToErgani(
+                employment_id, weekly_pattern, schedule_from,
+                min(covered_until, schedule_end or covered_until)))
+        elif covered_until:
+            past = {d.isoformat(): h for d, h in days.items() if d <= covered_until}
+            if past:
+                self.store.append(
+                    employment_id, ScheduleDaysSubmitted(employment_id, 0, past))
 
         # Η υποβολή στο ΕΡΓΑΝΗ ΔΕΝ γίνεται αυτόματα στην πρόσληψη (§5.7):
         #   - ΣΤΑΘΕΡΟ  → κουμπί «Υποβολή ΟΧΕ» στην καρτέλα (standing εβδομαδιαίο,
@@ -269,6 +309,27 @@ class EmploymentMixin:
         #   - ΜΕΤΑΒΛΗΤΟ → δήλωση ρητά ανά εβδομάδα από το «Πρόγραμμα».
         # Και τα δύο είναι προαπαιτούμενο της «Έγκρισης Παρουσιών».
         return employment_id
+
+    def migration_closed_by(self):
+        """(έτος, μήνας) της ΠΡΩΤΗΣ υπολογισμένης μισθοδοσίας, ή None.
+
+        Μετά από αυτήν δεν εισάγεται υπάρχων εργαζόμενος (μεταφορά από άλλο
+        πρόγραμμα): η μισθοδοσία εκδόθηκε, άρα έπρεπε να τον περιλαμβάνει.
+        Read-only — το διαβάζει και η φόρμα πρόσληψης για να κρύψει την επιλογή."""
+        return min(((p.period_year, p.period_month) for p in self.proj.payrolls),
+                   default=None)
+
+    def check_migration_open(self):
+        """Απορρίπτει εισαγωγή υπάρχοντος εργαζομένου μετά την 1η μισθοδοσία."""
+        first = self.migration_closed_by()
+        if first is not None:
+            raise ValueError(
+                "Η εισαγωγή υπάρχοντος εργαζομένου (μεταφορά από άλλο πρόγραμμα) "
+                "επιτρέπεται μόνο πριν από την πρώτη μισθοδοσία — έχει ήδη "
+                f"εκδοθεί μισθοδοσία {first[1]:02d}/{first[0]}, που θα έπρεπε "
+                "να περιλαμβάνει όλους τους ενεργούς εργαζομένους. Καταχωρήστε "
+                "τον ως νέα πρόσληψη."
+            )
 
     def record_external_hire_submission(self, employment_id, reference=""):
         """Σημαδεύει την αναγγελία πρόσληψης ως **ήδη υποβληθείσα ΕΚΤΟΣ του
@@ -319,6 +380,8 @@ class EmploymentMixin:
         oaed_replaced_amka="",
         trial_period="0",
         trial_date_to=None,
+        minor_booklet_number="",
+        unemployment_card_number="",
         working_card="1",
         flexible_arrival_minutes="120",
         break_within_schedule="0",
@@ -397,6 +460,15 @@ class EmploymentMixin:
             trial_date_to,
             hire_date,
         )
+        person = self.proj.persons.get(emp.person_id)
+        minor_booklet_number, unemployment_card_number = (
+            constraints.check_hire_status_fields(
+                minor_booklet_number, unemployment_card_number,
+                minor=(constraints.age_on(getattr(person, "birth_date", None),
+                                          hire_date) or 99) < 18,
+                required=True,
+            )
+        )
         (
             working_card,
             flexible_arrival_minutes,
@@ -457,6 +529,8 @@ class EmploymentMixin:
                 oaed_replaced_amka=oaed_replaced_amka,
                 trial_period=trial_period,
                 trial_date_to=trial_date_to,
+                minor_booklet_number=minor_booklet_number,
+                unemployment_card_number=unemployment_card_number,
                 working_card=working_card,
                 flexible_arrival_minutes=flexible_arrival_minutes,
                 break_within_schedule=break_within_schedule,
@@ -580,9 +654,7 @@ class EmploymentMixin:
         if p.nationality_code and not ergani_parameters.is_eu_nationality(
                 p.nationality_code):
             kinds.append("foreign_file")
-        born, hired = p.birth_date, emp.hire_date
-        if born and hired and (hired.year - born.year
-                               - ((hired.month, hired.day) < (born.month, born.day))) < 18:
+        if (constraints.age_on(p.birth_date, emp.hire_date) or 99) < 18:
             kinds.append("young_file")
         return kinds
 

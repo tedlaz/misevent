@@ -2,7 +2,9 @@
 Η ΜΙΑ ΒΑΣΗ — πολλά λογικά stores σε έναν πίνακα.
 
 Κάθε χώρος (χρήστες, κοινές παράμετροι, κάθε εταιρεία) είναι ένα `store`:
-μια τιμή στη στήλη `store` του πίνακα `events`. Η απομόνωση είναι ΛΟΓΙΚΗ —
+μια γραμμή του πίνακα `stores`, και το ακέραιο id της είναι η στήλη `store`
+του `events` (όχι το όνομα: το «company:<uuid>» θα επαναλαμβανόταν σε κάθε
+event και σε κάθε index). Η απομόνωση είναι ΛΟΓΙΚΗ —
 γι' αυτό ΚΑΝΕΝΑ query δεν επιτρέπεται χωρίς `WHERE store = ?`, και γι' αυτό
 το connection δεν διαρρέει ποτέ έξω από το `EventStore`.
 
@@ -30,8 +32,14 @@ def company_store(company_id: str) -> str:
 
 
 _SCHEMA = (
+    """CREATE TABLE IF NOT EXISTS stores (
+        id   INTEGER PRIMARY KEY,
+        name TEXT NOT NULL UNIQUE
+    )""",
+    # ΟΧΙ `WITHOUT ROWID`: μετρημένο, βγαίνει ΜΕΓΑΛΥΤΕΡΟ (τα payloads είναι
+    # πολύ μεγάλα για clustered B-tree) παρά το διπλό index του PK.
     """CREATE TABLE IF NOT EXISTS events (
-        store        TEXT NOT NULL,
+        store        INTEGER NOT NULL REFERENCES stores(id),
         seq          INTEGER NOT NULL,
         event_id     TEXT NOT NULL,
         aggregate_id TEXT NOT NULL,
@@ -41,7 +49,6 @@ _SCHEMA = (
         tx           TEXT,
         PRIMARY KEY (store, seq)
     )""",
-    "CREATE UNIQUE INDEX IF NOT EXISTS idx_events_id ON events(store, event_id)",
     "CREATE INDEX IF NOT EXISTS idx_events_agg ON events(store, aggregate_id)",
     "CREATE INDEX IF NOT EXISTS idx_events_type ON events(store, event_type)",
 )
@@ -54,15 +61,6 @@ def _without_wal(data: bytes) -> bytes:
     if data[18:20] == b"":
         return data[:18] + b"" + data[20:]
     return data
-
-
-def _add_tx_column(conn) -> bool:
-    """Migration: η στήλη `tx` (transaction της εντολής που έγραψε το event,
-    βλ. `event_store.transaction`) σε βάσεις πριν από αυτήν. True αν υπήρχε."""
-    if any(r[1] == "tx" for r in conn.execute("PRAGMA table_info(events)")):
-        return True
-    conn.execute("ALTER TABLE events ADD COLUMN tx TEXT")
-    return False
 
 
 class Database:
@@ -79,8 +77,15 @@ class Database:
             self.conn.execute("PRAGMA journal_mode=WAL")
         for statement in _SCHEMA:
             self.conn.execute(statement)
-        _add_tx_column(self.conn)
         self.conn.commit()
+
+    def store_id(self, name: str) -> int:
+        """Το id του store στη στήλη `events.store` (δημιουργείται αν λείπει)."""
+        self.conn.execute("INSERT OR IGNORE INTO stores (name) VALUES (?)", (name,))
+        self.conn.commit()
+        return self.conn.execute(
+            "SELECT id FROM stores WHERE name = ?", (name,)
+        ).fetchone()[0]
 
     def store(self, name: str, registry: dict | None = None, shared=None):
         """Το `EventStore` ενός λογικού χώρου μέσα σε αυτή τη βάση."""
@@ -109,11 +114,12 @@ class Database:
         src = sqlite3.connect(MEMORY)
         try:
             src.deserialize(_without_wal(data))
-            # backup πριν από τη στήλη `tx` -> NULL (μία γραμμή ανά event στο audit)
-            tx = "tx" if _add_tx_column(src) else "NULL"
+            # Με ΟΝΟΜΑ store, όχι id: τα ids του backup δεν είναι τα δικά μας,
+            # και τα ζωντανά `EventStore` κρατούν ήδη τα δικά μας.
             rows = src.execute(
-                "SELECT store, seq, event_id, aggregate_id, event_type, occurred_at, "
-                f"payload, {tx} FROM events"
+                "SELECT s.name, e.seq, e.event_id, e.aggregate_id, e.event_type, "
+                "e.occurred_at, e.payload, e.tx FROM events e "
+                "JOIN stores s ON s.id = e.store"
             ).fetchall()
         except sqlite3.Error:
             raise ValueError("Το αρχείο δεν είναι backup βάσης του misevent") from None
@@ -121,6 +127,10 @@ class Database:
             src.close()
         if not any(r[0] == SYSTEM_STORE for r in rows):
             raise ValueError("Το backup δεν περιέχει χρήστες/εταιρείες")
+        # Πριν από τη συναλλαγή: το `store_id` κάνει commit (κενό store αν
+        # αποτύχει η επαναφορά — αβλαβές).
+        ids = {name: self.store_id(name) for name in {r[0] for r in rows}}
+        rows = [(ids[r[0]], *r[1:]) for r in rows]
         try:
             self.conn.execute("BEGIN IMMEDIATE")
             self.conn.execute("DELETE FROM events")

@@ -88,7 +88,7 @@ def test_fixed_term_end_sends_web_e7n_only_for_fixed_term():
     assert _sent(proj) == [("E5_LIXI", "AnaggeliesE7N")]
 
 
-def test_dismissal_is_not_sent_and_is_marked_external():
+def test_dismissal_is_not_sent_and_is_recorded_as_manual():
     svc, proj, _ = make_svc()
     eid = hire(svc, proj, 0)
     note = svc.terminate(eid, TERM, "ΚΑΤΑΓΓΕΛΙΑ_ΣΥΜΒΑΣΗΣ")
@@ -97,9 +97,12 @@ def test_dismissal_is_not_sent_and_is_marked_external():
     assert svc.exit_pending(eid)
     with pytest.raises(ValueError, match="portal"):
         svc.submit_exit(eid)
+    with pytest.raises(ValueError, match="πρωτοκόλλου"):
+        svc.record_external_exit_submission(eid, "  ")
     svc.record_external_exit_submission(eid, "ΑΠ-77")
     assert not svc.exit_pending(eid)
-    assert proj.ergani_submissions[-1].status == "external"
+    last = proj.ergani_submissions[-1]
+    assert (last.status, last.reference, last.environment) == ("manual", "ΑΠ-77", "portal")
 
 
 def test_contract_change_metavoli_is_pending_with_its_own_terms():

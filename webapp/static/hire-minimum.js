@@ -22,6 +22,22 @@
     });
   }
 
+  // Βιβλιάριο ανηλίκου: ΜΟΝΟ για ανήλικο την ημ. πρόσληψης. Ημ. γέννησης
+  // από το πεδίο της φόρμας (νέο πρόσωπο) ή από το data-birth-date (υπάρχον).
+  function syncMinorFields(form) {
+    const box = form?.querySelector("[data-hire-status]");
+    if (!box) return;
+    const born = form.querySelector('[name="birth_date"]')?.value || box.dataset.birthDate;
+    const hired = form.querySelector('[name="hire_date"]')?.value;
+    let minor = false;
+    if (born && hired) {
+      const [by, bm, bd] = born.split("-").map(Number);
+      const [hy, hm, hd] = hired.split("-").map(Number);
+      minor = hy - by - ((hm < bm || (hm === bm && hd < bd)) ? 1 : 0) < 18;
+    }
+    box.querySelectorAll("[data-minor-field]").forEach(f => { f.hidden = !minor; });
+  }
+
   const money = value => Number(value).toLocaleString("el-GR", {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2
@@ -92,7 +108,7 @@
     root.querySelectorAll?.("[data-minimum-compensation]")
       .forEach(section => schedule(section, 0));
     const form = root instanceof HTMLFormElement ? root : root.querySelector?.("form");
-    if (form) syncFrozenFields(form);
+    if (form) { syncFrozenFields(form); syncMinorFields(form); }
   }
 
   function sectionFor(control) {
@@ -106,6 +122,9 @@
     if (event.target.name === "hire_date") {
       syncFrozenFields(event.target.form);
     }
+    if (event.target.name === "hire_date" || event.target.name === "birth_date") {
+      syncMinorFields(event.target.form);
+    }
     if (!relevant.has(event.target.name)) return;
     const section = sectionFor(event.target);
     if (section && !section.dataset.minimumSyncing) schedule(section);
@@ -113,6 +132,9 @@
   document.addEventListener("change", event => {
     if (event.target.name === "hire_date") {
       syncFrozenFields(event.target.form);
+    }
+    if (event.target.name === "hire_date" || event.target.name === "birth_date") {
+      syncMinorFields(event.target.form);
     }
     if (!relevant.has(event.target.name)) return;
     const section = sectionFor(event.target);

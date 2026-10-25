@@ -398,6 +398,8 @@ class EmploymentState:
     oaed_replacement: str = ""
     oaed_replaced_afm: str = ""
     oaed_replaced_amka: str = ""
+    minor_booklet_number: str = ""  # WebE3N f_ar_vivliou_anilikou
+    unemployment_card_number: str = ""  # WebE3N f_code_anergias
     trial_period: str = "0"
     trial_date_to: date | None = None
     working_card: str = "1"
@@ -431,6 +433,9 @@ class EmploymentState:
     # Μια ημέρα με τιμή ίδια με το τρέχον πρόγραμμα = «υποβεβλημένη»· διαφορετική
     # = «τροποποιημένη» (εκκρεμεί νέα υποβολή).
     declared_days: dict = field(default_factory=dict)  # date -> ωράριο
+    # Έχει δηλωθεί ημερήσιο από ΑΥΤΟ το σύστημα (batch >= 1)· το batch 0 είναι
+    # η κάλυψη του προηγούμενου προγράμματος σε μεταφορά (`start_employment`).
+    days_declared_here: bool = False
     # Σύστημα εβδομαδιαίας εργασίας ΑΠΟ ΤΗ ΣΥΜΒΑΣΗ (5/6).
     contract_weekly_system: int = 5
     insurance_profile: InsuranceProfileAssigned | None = None
@@ -1568,6 +1573,8 @@ class Projections:
                 "oaed_replaced_amka",
                 "trial_period",
                 "trial_date_to",
+                "minor_booklet_number",
+                "unemployment_card_number",
                 "working_card",
                 "flexible_arrival_minutes",
                 "break_within_schedule",
@@ -1606,6 +1613,8 @@ class Projections:
                 "oaed_replaced_amka",
                 "trial_period",
                 "trial_date_to",
+                "minor_booklet_number",
+                "unemployment_card_number",
                 "working_card",
                 "flexible_arrival_minutes",
                 "break_within_schedule",
@@ -1755,6 +1764,7 @@ class Projections:
             emp = self.employments[event.employee_id]
             for iso, hours in event.days.items():
                 emp.declared_days[date.fromisoformat(iso)] = hours or ""
+            emp.days_declared_here |= event.batch_no > 0
             batch = self.schedule_batches.setdefault(
                 event.batch_no, {"count": 0, "employees": set()}
             )

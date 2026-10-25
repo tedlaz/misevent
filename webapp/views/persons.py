@@ -25,6 +25,7 @@ from ..helpers import (
     form_employment_relationship,
     form_float,
     form_frozen_service_years,
+    form_hire_status_fields,
     form_int,
     form_migration,
     form_oaed_hire_fields,
@@ -500,8 +501,10 @@ def employ(person_id):
             **form_migration(f),
             **form_employment_relationship(f),
             **form_oaed_hire_fields(f),
+            **form_hire_status_fields(f),
             **form_digital_card_fields(f),
             **schedule_opts(f),
+            today=clock.today(),  # μεταφορά: ως χθες καλύπτει το προηγούμενο πρόγραμμα
         )
         # Οι καλύψεις αντλούνται από τη δηλωμένη ειδικότητα: εδώ δίνονται μόνο
         # ο φορέας επικουρικής και η επιλογή πρόνοιας.

@@ -450,8 +450,13 @@ class SchedulesMixin:
             raise ValueError(f"Εγκρίνετε πρώτα τις παρουσίες {month}/{year}")
         proposal = self.retro_schedule_proposal(year, month)
         for eid, days in proposal.items():
-            self.store.append(eid, DailyScheduleAssigned(
-                eid, {d.isoformat(): new for d, (_old, new) in days.items()}))
+            # ΜΟΝΟ ό,τι αλλάζει: η προετοιμασία ξανατρέχει (έγκριση παρουσιών,
+            # προεπισκόπηση/υποβολή ΕΡΓΑΝΗ) και δεν πρέπει να γεμίζει το log
+            emp = self.proj.employments[eid]
+            changed = {d.isoformat(): new for d, (_old, new) in days.items()
+                       if emp.daily_schedule.get(d) != new}
+            if changed:
+                self.store.append(eid, DailyScheduleAssigned(eid, changed))
         return proposal
 
     def submit_retro_schedule(self, year: int, month: int) -> dict:
@@ -471,6 +476,8 @@ class SchedulesMixin:
             raise ValueError("Λείπει ο λόγος απουσίας (λιγότερες ώρες από το "
                              "πρόγραμμα) — ΗΜΕΡΟΛΟΓΙΟ → ημέρα: " + " · ".join(missing))
         proposal = self._prepare_retro_schedule(year, month)
+        if not proposal:
+            self._ergani_nothing_to_send("WTO")
         res = {"count": sum(len(v) for v in proposal.values()),
                "employees": len(proposal), "batch_no": 0}
         if proposal:

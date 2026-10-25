@@ -125,24 +125,26 @@ def test_start_employment_rejects_fixed_term_ending_before_payroll_start():
         )
 
 
-def test_old_hire_fields_live_in_their_own_box():
-    """«Παλαιά πρόσληψη»: δικό της πλαίσιο, και τα πεδία ορισμένου χρόνου
-    ΠΑΝΩ από αυτό (αμέσως κάτω από τον επιλογέα της σχέσης)."""
+def test_hire_kind_is_chosen_first_and_migration_has_its_own_box():
+    """Είδος πρόσληψης ΠΡΩΤΟ (νέα / υπάρχων εργαζόμενος), και τα πεδία της
+    μεταφοράς σε δικό τους πλαίσιο. Το «Εχει υποβληθεί στο ΕΡΓΑΝΗ» δεν είναι
+    πια επιλογή: ο υπάρχων εργαζόμενος έχει ΠΑΝΤΑ ήδη αναγγελία."""
     app = create_app()
     with app.test_request_context("/"):
         html = render_template(
             "partials/_general_tab.html", fv={}, ident=False, person=None,
             person_note=False, specialties=[],
         )
-    assert "Παλαιά πρόσληψη" in html
-    assert "Μεταφορά από άλλο πρόγραμμα" not in html
-    assert "Εχει υποβληθεί στο ΕΡΓΑΝΗ" in html
-    assert html.index("data-fixed-term-fields") < html.index('class="migr-sec"')
+    assert "Νέα πρόσληψη" in html and "Υπάρχων εργαζόμενος" in html
+    assert "Εχει υποβληθεί στο ΕΡΓΑΝΗ" not in html
+    assert 'name="ergani_hire_done"' not in html
+    assert html.index('class="migr-sec"') < html.index('name="hire_date"')
     assert html.index('class="migr-sec"') < html.index('name="payroll_from"')
+    assert html.index('name="payroll_from"') < html.index("data-fixed-term-fields")
 
 
 def test_rehire_form_hides_the_old_hire_box_and_saves_as_draft():
-    """Επαναπρόσληψη: καμία «Παλαιά πρόσληψη» (νέα περίοδος που ξεκινά τώρα)
+    """Επαναπρόσληψη: κανένα «Υπάρχων εργαζόμενος» (νέα περίοδος που ξεκινά τώρα)
     και το κουμπί αποθηκεύει πρόχειρα — δεν υποβάλλει στο ΕΡΓΑΝΗ."""
     person = SimpleNamespace(
         person_id="P1", full_name="ΔΟΚΙΜΗ ΜΑΡΙΑ", afm="111222336",
@@ -159,9 +161,9 @@ def test_rehire_form_hides_the_old_hire_box_and_saves_as_draft():
             p=SimpleNamespace(**{**person.__dict__, "employment_ids": []}),
             form={}, specialties=[],
         )
-    assert "Παλαιά πρόσληψη" not in rehire
+    assert "Υπάρχων εργαζόμενος" not in rehire
     assert 'name="payroll_from"' not in rehire
-    assert "Παλαιά πρόσληψη" in first          # 1η πρόσληψη: παραμένει
+    assert "Υπάρχων εργαζόμενος" in first      # 1η πρόσληψη: παραμένει
     for html in (rehire, first):
         assert "Προσωρινή αποθήκευση" in html
         assert "→ ΕΡΓΑΝΗ" not in html
@@ -289,3 +291,100 @@ def test_fixed_term_correction_does_not_block_next_web_e3n_event(tmp_path):
 
     assert result["status"] == "simulated"
     assert service.ergani_hire_submitted(employment_id, "WebE3N")
+
+
+def test_form_migration_existing_employee_needs_payroll_start_and_is_announced():
+    """Υπάρχων εργαζόμενος: η αναγγελία έχει ΠΑΝΤΑ ήδη γίνει (όχι επιλογή) και
+    χωρίς ανάληψη δεν περνά σιωπηλά ως νέα πρόσληψη."""
+    from webapp.helpers import form_migration
+
+    assert form_migration({"migrated": ""})["ergani_hire_done"] is False
+    with pytest.raises(ValueError, match="Έναρξη μισθοδοσίας"):
+        form_migration({"migrated": "1", "payroll_from": ""})
+    got = form_migration({"migrated": "1", "payroll_from": "2026-01-01",
+                          "ergani_hire_reference": "123"})
+    assert got == {"payroll_from": date(2026, 1, 1), "ergani_hire_done": True,
+                   "ergani_hire_reference": "123"}
+
+
+def _migrated(schedule_mode="fixed"):
+    """Υπάρχων εργαζόμενος: πρόσληψη 2024, ανάληψη 1/1/2026, «σήμερα» 21/1."""
+    service, projection, person_id = _service()
+    service.confirm_default_parameters()
+    service.register_company(ame="1234567890", afm="999888771", legal_name="ΔΟΚΙΜΗ ΑΕ")
+    service.define_branch(0)
+    eid = service.start_employment(
+        person_id, date(2024, 5, 15), monthly_gross=1500, weekly_pattern=WEEK,
+        payroll_from=date(2026, 1, 1), ergani_hire_done=True,
+        schedule_mode=schedule_mode, schedule_weeks=4, today=date(2026, 1, 21),
+    )
+    return service, projection.employments[eid]
+
+
+def test_migrated_fixed_schedule_before_today_is_covered_and_ocx_pends_from_today():
+    service, emp = _migrated()
+    assert emp.hire_submitted
+    assert all(emp.day_status(date(2026, 1, d)) != "pending" for d in range(1, 21))
+    assert emp.day_status(date(2026, 1, 21)) == "pending"
+    # ΜΙΑ εκκρεμής ΟΧΕ, από «σήμερα» — όχι αναδρομικά από την ανάληψη
+    assert [p[0] for p in emp.pending_weekly] == [date(2026, 1, 21)]
+    service.submit_weekly_schedules({emp.employment_id: [date(2026, 1, 21)]})
+    assert not emp.pending_weekly
+    assert not service.month_schedule_pending(emp, 2026, 1)
+
+
+def test_migrated_variable_schedule_before_today_is_covered():
+    _service_, emp = _migrated("variable")
+    assert all(emp.day_status(date(2026, 1, d)) != "pending" for d in range(1, 21))
+    assert emp.day_status(date(2026, 1, 21)) == "pending"
+    assert not emp.days_declared_here   # η κάλυψη ΔΕΝ είναι δική μας ΟΧΕ
+
+
+def test_existing_employee_cannot_be_imported_after_the_first_payroll():
+    """Η 1η μισθοδοσία έπρεπε να περιλαμβάνει ΟΛΟΥΣ τους ενεργούς — μετά από
+    αυτήν υπάρχων εργαζόμενος (μεταφορά) απορρίπτεται· νέα πρόσληψη περνά."""
+    from misevent.domain.events import MonthlyPayrollCalculated
+
+    service, projection, person_id = _service()
+    assert service.migration_closed_by() is None
+    service.store.append("E0", MonthlyPayrollCalculated("E0", 2026, 2, 0, 0, 0, 0, 0, 0))
+    assert service.migration_closed_by() == (2026, 2)
+    for kwargs in ({"payroll_from": date(2026, 3, 1)}, {"ergani_hire_done": True}):
+        with pytest.raises(ValueError, match="πριν από την πρώτη μισθοδοσία"):
+            service.start_employment(person_id, date(2024, 5, 15), monthly_gross=1500,
+                                     weekly_pattern=WEEK, **kwargs)
+    assert service.start_employment(person_id, date(2026, 3, 2), monthly_gross=1500,
+                                    weekly_pattern=WEEK)
+
+
+def test_hire_form_hides_existing_employee_after_the_first_payroll():
+    app = create_app()
+    with app.test_request_context("/"):
+        closed = render_template(
+            "partials/_general_tab.html", fv={}, ident=False, person=None,
+            person_note=False, specialties=[], migration_closed=(2026, 2),
+        )
+        shown = render_template(   # ήδη μεταφερμένη: η προβολή τη δείχνει
+            "partials/_general_tab.html", fv={"migrated": "1"}, ident=False,
+            person=None, person_note=False, specialties=[],
+            migration_closed=(2026, 2),
+        )
+    assert 'name="payroll_from"' not in closed and "02/2026" in closed
+    assert "Υπάρχων εργαζόμενος" in shown
+
+
+def test_hire_form_has_minor_booklet_and_unemployment_card_fields():
+    """Το βιβλιάριο είναι κρυμμένο ώσπου το JS να κρίνει ανήλικο (από την ημ.
+    γέννησης — του προσώπου σε επαναπρόσληψη)· το δελτίο ζει δίπλα στο
+    «Ήταν άνεργος»."""
+    app = create_app()
+    person = SimpleNamespace(birth_date=date(2009, 6, 1), full_name="Χ", afm="",
+                             amka="", children=0)
+    with app.test_request_context("/"):
+        html = render_template(
+            "partials/_general_tab.html", fv={}, ident=False, person=person,
+            person_note=False, specialties=[],
+        )
+    assert 'name="f_ar_vivliou_anilikou"' in html and "data-minor-field hidden" in html
+    assert 'data-birth-date="2009-06-01"' in html
+    assert 'name="was_unemployed"' in html and 'name="f_code_anergias"' in html

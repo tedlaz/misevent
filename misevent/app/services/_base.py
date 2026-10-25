@@ -4,6 +4,8 @@ helpers που χρησιμοποιούν πολλά mixins.
 """
 
 import json
+from contextlib import contextmanager
+from contextvars import ContextVar
 from datetime import date
 from typing import NamedTuple
 
@@ -21,6 +23,50 @@ PERSON_DOCUMENT_KINDS = {
     "resignation": "Δήλωση αποχώρησης",
 }
 MAX_DOCUMENT_BYTES = 10 * 1024 * 1024
+
+# ΤΡΟΠΟΣ ΥΠΟΒΟΛΗΣ ΕΡΓΑΝΗ της τρέχουσας εντολής (ίδιο μοτίβο με το
+# `event_store.transaction`). None = REST API· ("preview",) = μόνο το payload·
+# ("manual", πρωτόκολλο) = ο χρήστης το υπέβαλε ο ίδιος στο portal. Ζει ΜΟΝΟ
+# στο `_ergani_submit`, ώστε κάθε έντυπο να έχει και τους τρεις τρόπους χωρίς
+# δικό του κώδικα — και η χειροκίνητη υποβολή ΙΔΙΕΣ συνέπειες με το API.
+_ERGANI_MODE: ContextVar[tuple | None] = ContextVar("misevent_ergani_mode", default=None)
+
+
+class ErganiPreview(Exception):
+    """Το payload που ΘΑ υποβαλλόταν (`ergani_preview`) — σηκώνεται ΠΡΙΝ από
+    κάθε εγγραφή, οπότε η εντολή δεν αφήνει κανένα ίχνος."""
+
+    def __init__(self, doc_type: str, endpoint: str, payload: dict):
+        super().__init__(doc_type)
+        self.doc_type, self.endpoint, self.payload = doc_type, endpoint, payload
+
+
+@contextmanager
+def ergani_preview():
+    """Η εντολή χτίζει το έντυπο και σταματά με `ErganiPreview`."""
+    token = _ERGANI_MODE.set(("preview",))
+    try:
+        yield
+    finally:
+        _ERGANI_MODE.reset(token)
+
+
+@contextmanager
+def ergani_manual(reference: str):
+    """Η εντολή καταγράφει το έντυπο ως υποβληθέν ΧΕΙΡΟΚΙΝΗΤΑ στο portal
+    (με τον αρ. πρωτοκόλλου του χρήστη) — καμία κλήση στο API."""
+    reference = str(reference or "").strip()
+    if not reference:
+        raise ValueError("Δώστε τον αριθμό πρωτοκόλλου της υποβολής στο portal ΕΡΓΑΝΗ")
+    token = _ERGANI_MODE.set(("manual", reference))
+    try:
+        yield
+    finally:
+        _ERGANI_MODE.reset(token)
+
+
+def ergani_is_manual() -> bool:
+    return (_ERGANI_MODE.get() or ("",))[0] == "manual"
 
 
 # γεννά αποζημίωση απόλυσης στην εκκαθάριση της αποχώρησης.
@@ -96,16 +142,35 @@ class ServiceBase:
         self.documents = documents or DocumentStore().scope(getattr(store, "name", ""))
 
     # ------------------------------------------------------------ ΕΡΓΑΝΗ
+    def _ergani_nothing_to_send(self, doc_type: str):
+        """Εντολή ΕΡΓΑΝΗ χωρίς τίποτα να στείλει (π.χ. απολογιστικό χωρίς
+        ημέρες) σε προεπισκόπηση: σταματά ΕΔΩ, πριν γράψει το «ολοκληρώθηκε
+        χωρίς υποβολή» — η προεπισκόπηση δεν αφήνει ποτέ ίχνος."""
+        if (_ERGANI_MODE.get() or ("",))[0] == "preview":
+            raise ErganiPreview(doc_type, "", None)
+
     def _ergani_submit(self, doc_type: str, employee_id: str, payload: dict,
                        endpoint: str = "", subject: str = ""):
         """Υποβολή στο ΕΡΓΑΝΗ + καταγραφή ως event. Αποτυχία δικτύου
         καταγράφεται ως failed χωρίς να μπλοκάρει την τοπική ενέργεια.
         Το event κρατά το payload με τα συνημμένα PDF ΣΥΝΟΠΤΙΚΑ (μέγεθος +
-        sha256) — το ίδιο το αρχείο ζει στη βάση εγγράφων."""
-        try:
-            res = self.ergani.submit(doc_type, payload, endpoint)
-        except ergani_mod.ErganiError as exc:
-            res = {"status": "failed", "reference": str(exc)}
+        sha256) — το ίδιο το αρχείο ζει στη βάση εγγράφων.
+
+        Τρόπος (`_ERGANI_MODE`): preview = `ErganiPreview` πριν από κάθε
+        εγγραφή· manual = καμία κλήση, `status="manual"` με το πρωτόκολλο του
+        χρήστη — όλα τα υπόλοιπα (κάλυψη, υποχρεώσεις) ακριβώς όπως στο API."""
+        mode = _ERGANI_MODE.get()
+        environment = self.ergani.environment
+        if mode and mode[0] == "preview":
+            raise ErganiPreview(doc_type, endpoint, ergani_mod.redact_files(payload))
+        if mode and mode[0] == "manual":
+            res = {"status": "manual", "reference": mode[1]}
+            environment = "portal"
+        else:
+            try:
+                res = self.ergani.submit(doc_type, payload, endpoint)
+            except ergani_mod.ErganiError as exc:
+                res = {"status": "failed", "reference": str(exc)}
         res["payload"] = json.dumps(
             ergani_mod.redact_files(payload), ensure_ascii=False, default=str)
         self.store.append(
@@ -116,7 +181,7 @@ class ServiceBase:
                 res["payload"],
                 res["status"],
                 res["reference"],
-                self.ergani.environment,
+                environment,
                 subject,
             ),
         )

@@ -153,6 +153,10 @@ class EmploymentStarted(DomainEvent):
     oaed_replaced_amka: str = ""
     trial_period: str = "0"
     trial_date_to: date | None = None
+    # WebE3N: αρ. βιβλιαρίου ανηλίκου (ανήλικος στην πρόσληψη) και αρ.
+    # δελτίου ανεργίας ΔΥΠΑ (ήταν άνεργος) — κενά όταν δεν ισχύουν
+    minor_booklet_number: str = ""
+    unemployment_card_number: str = ""
     working_card: str = "1"
     flexible_arrival_minutes: str = "120"
     break_within_schedule: str = "0"
@@ -188,6 +192,10 @@ class EmploymentHireDetailsCorrected(DomainEvent):
     oaed_replaced_amka: str = ""
     trial_period: str = "0"
     trial_date_to: date | None = None
+    # WebE3N: αρ. βιβλιαρίου ανηλίκου (ανήλικος στην πρόσληψη) και αρ.
+    # δελτίου ανεργίας ΔΥΠΑ (ήταν άνεργος) — κενά όταν δεν ισχύουν
+    minor_booklet_number: str = ""
+    unemployment_card_number: str = ""
     working_card: str = "1"
     flexible_arrival_minutes: str = "120"
     break_within_schedule: str = "0"

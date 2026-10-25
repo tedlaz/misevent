@@ -24,7 +24,10 @@ from ._base import (
     LONG_SERVICE_SAME_EMPLOYER_YEARS,
     VOLUNTARY_EXIT_REASON,
     ApdEarnings,
+    ErganiPreview,
     ServiceBase,
+    ergani_manual,
+    ergani_preview,
 )
 from .apd import ApdMixin
 from .attendance import AttendanceMixin
@@ -50,6 +53,9 @@ __all__ = [
     "VOLUNTARY_EXIT_REASON",
     "LONG_SERVICE_ANY_EMPLOYER_YEARS",
     "LONG_SERVICE_SAME_EMPLOYER_YEARS",
+    "ErganiPreview",
+    "ergani_manual",
+    "ergani_preview",
 ]
 
 

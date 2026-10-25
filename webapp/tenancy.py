@@ -30,6 +30,7 @@ subscribers ΚΑΙ σε αυτό. Έτσι μια νέα ΓΣΣΕ γράφετα
 θα χρειαστεί πολιτική αποφόρτωσης.
 """
 
+import atexit
 import os
 import threading
 from pathlib import Path
@@ -131,6 +132,12 @@ class Registry:
 
         self.auth_svc.bootstrap_admin()
         self._ensure_default_company()
+        # Καθαρό κλείσιμο -> η SQLite σβήνει τα -wal/-shm δίπλα στις βάσεις.
+        atexit.register(self.close)
+
+    def close(self):
+        self.db.close()
+        self.documents.close()
 
     def reload(self):
         """Πλήρες replay ΟΛΟΥ του συστήματος μετά από restore της βάσης.

@@ -95,6 +95,17 @@ main{max-width:1240px;margin:0 auto;padding:20px 24px;display:flex;
 .jt-raw{white-space:pre-wrap;word-break:break-word;margin:0;padding:12px;
   background:var(--paper);border:1px solid var(--line);border-radius:8px;
   font-family:var(--mono);font-size:12px;line-height:1.5}
+/* ΠΡΟΕΠΙΣΚΟΠΗΣΗ/ΧΕΙΡΟΚΙΝΗΤΗ ΥΠΟΒΟΛΗ ΕΡΓΑΝΗ (_ergani_submit_modal.html):
+   tabs «Πεδία | JSON» ανά υποβολή — CSS-only, χωρίς ids (πολλά στο ίδιο modal). */
+.etabs .ep{display:none}
+.etabs:has(input[value="f"]:checked) .ep-f,
+.etabs:has(input[value="j"]:checked) .ep-j{display:block}
+.etabs .tabbar label:has(input:checked){color:var(--ink);background:var(--card);
+  border-color:var(--line);border-bottom:1px solid var(--card)}
+table.erg-fields tr.grp td{font-size:11.5px;font-weight:700;color:var(--muted);
+  background:var(--paper)}
+.erg-manual{display:flex;flex-wrap:wrap;gap:8px 12px;align-items:end}
+.erg-manual label{display:flex;flex-direction:column;font-size:12.5px;gap:3px}
 /* ΤΑΞΙΝΟΜΗΣΙΜΟΣ ΠΙΝΑΚΑΣ (table-sort.js): βέλος στη στήλη ταξινόμησης */
 table[data-sortable] th:not([data-nosort]){cursor:pointer;user-select:none}
 table[data-sortable] th:not([data-nosort]):hover{color:var(--ink)}
@@ -734,21 +745,35 @@ canvas{max-height:230px}
    πακέτο να μη στέλνεται καν (ένα κρυφό select εξακολουθεί να υποβάλλεται). */
 .pron-sec:not(:has(input[name="pron_differentiated"]:checked)) .pron-diff,
 .pron-sec:has(input[name="pron_differentiated"]:checked) .pron-uniform{display:none}
-/* «Παλαιά πρόσληψη» (μεταφορά από άλλο πρόγραμμα μισθοδοσίας): τα πεδία
-   ανάληψης εμφανίζονται ΜΟΝΟ όταν ζητηθεί — ίδιο CSS-only μοτίβο. Ο κανόνας
-   επαναλαμβάνεται στο `employments.form_migration` (ό,τι δεν βλέπει ο χρήστης
+/* ΕΙΔΟΣ ΠΡΟΣΛΗΨΗΣ: νέα πρόσληψη ή υπάρχων εργαζόμενος (μεταφορά από άλλο
+   πρόγραμμα μισθοδοσίας). Τα πεδία της μεταφοράς και οι ετικέτες `.migr-only`
+   εμφανίζονται ΜΟΝΟ με το «Υπάρχων» — CSS-only :has(). Ο κανόνας
+   επαναλαμβάνεται στο `helpers.form_migration` (ό,τι δεν βλέπει ο χρήστης
    δεν μετράει). */
-.migr-sec:not(:has(input[name="migrated"]:checked)) .migr-fields{display:none}
-/* Ξεχωριστό πλαίσιο/χρώμα ΜΕΣΑ στη «Σχέση απασχόλησης»: τα τρία πεδία της
-   παλαιάς πρόσληψης διαβάζονται ως δική τους ενότητα. Ορίζει --fc/--fc-bg,
-   οπότε τα focus states του `.fsec .frm` παίρνουν αυτόματα το χρώμα του. */
-.migr-sec{--fc:#B25E00;--fc-bg:#FBEEDF}
+.migr-sec:not(:has(input[name="migrated"][value="1"]:checked)) .migr-fields,
+form:not(:has(input[name="migrated"][value="1"]:checked)) .migr-only{display:none}
+/* Ξεχωριστό χρώμα για τη μεταφορά. Ορίζει --fc/--fc-bg, οπότε τα focus
+   states του `.fsec .frm` παίρνουν αυτόματα το χρώμα του. */
+.migr-sec{--fc:#B25E00;--fc-bg:#FBEEDF;margin-bottom:10px}
+.hire-kind{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));
+  gap:8px}
+.hk-opt{display:flex;gap:9px;align-items:flex-start;cursor:pointer;
+  padding:9px 11px;border:1px solid var(--line);border-radius:10px}
+.hk-opt input{margin-top:3px}
+.hk-opt span{display:flex;flex-direction:column;gap:2px}
+.hk-opt small{color:var(--mut);font-size:12px;line-height:1.35}
+.hk-opt:has(input:checked){border-color:var(--accent);
+  box-shadow:inset 0 0 0 1px var(--accent)}
+.hk-opt:has(input[value="1"]:checked){border-color:var(--fc);
+  box-shadow:inset 0 0 0 1px var(--fc);background:var(--fc-bg)}
 .migr-sec .migr-fields{margin-top:8px;padding:11px 12px 12px;
   border:1px solid var(--fc);border-left:4px solid var(--fc);
   border-radius:10px;background:var(--fc-bg);
   animation:rise .25s var(--ease) backwards}
-.migr-sec:has(input[name="migrated"]:checked) > .chk{color:var(--fc);
-  font-weight:600}
+.migr-info{margin:10px 0 0;padding-left:18px;font-size:12.5px;line-height:1.45}
+.migr-info li{margin:2px 0}
+/* Αριθμός δελτίου ανεργίας: ΜΟΝΟ με το «Ήταν άνεργος» (helpers.form_hire_status_fields). */
+.hire-status:not(:has(input[name="was_unemployed"]:checked)) .unemp-field{display:none}
 /* Κλειδωμένη πληροφορία (ό,τι δεν είναι επιλογή του χρήστη): η βαθμίδα ενός
    ΤΕΚΑ ΚΠΚ, ο μοναδικός φορέας μιας ειδικότητας, η υποχρεωτική πρόνοια. */
 .lockbox{border:1px dashed var(--line);border-radius:8px;padding:8px 10px;

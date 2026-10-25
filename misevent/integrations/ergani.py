@@ -36,6 +36,8 @@ import hashlib
 import json
 import uuid
 from datetime import UTC, date, datetime
+from functools import lru_cache
+from pathlib import Path
 
 # Το περιβάλλον (και τα στοιχεία σύνδεσης) ορίζεται ΑΝΑ ΕΤΑΙΡΕΙΑ από
 # διαχειριστή — βλ. webapp/ergani_credentials.py. Προεπιλογή: simulate.
@@ -149,6 +151,44 @@ FILE_FIELDS = ("f_file", "f_file_symbash", "f_foreign_file", "f_young_file")
 
 def _b64(content: bytes | None) -> str:
     return base64.b64encode(content).decode("ascii") if content else ""
+
+
+SCHEMAS_DIR = Path(__file__).resolve().parents[2] / "data" / "ergani_schemas"
+
+
+@lru_cache(maxsize=1)
+def field_titles() -> dict:
+    """{πεδίο: ελληνικός τίτλος} από το `propertiesInfo` των σχημάτων που
+    επιστρέφει το ίδιο το ΕΡΓΑΝΗ — για τη χειροκίνητη πληκτρολόγηση στο portal."""
+    titles = {}
+    for path in sorted(SCHEMAS_DIR.glob("*.json")):
+        doc = json.loads(path.read_text(encoding="utf-8"))
+        # (το WorkTimeType.json είναι λίστα κωδικών, όχι σχήμα εντύπου)
+        info = doc.get("propertiesInfo") if isinstance(doc, dict) else None
+        for prop in info or ():
+            if prop.get("name") and prop.get("title"):
+                titles.setdefault(prop["name"], prop["title"])
+    return titles
+
+
+def payload_rows(payload, group: str = "") -> list[tuple[str, str, str, str]]:
+    """Ισοπεδώνει ένα payload σε γραμμές (ομάδα, πεδίο, τίτλος, τιμή).
+    Λίστες -> ομάδες «#1, #2…» (π.χ. εργαζόμενοι/ημέρες της ΟΧΕ)· τίτλος
+    κενός όταν το πεδίο δεν υπάρχει σε σχήμα (π.χ. Ε4)."""
+    rows = []
+    if isinstance(payload, dict):
+        for key, value in payload.items():
+            if isinstance(value, (dict, list)):
+                rows += payload_rows(value, f"{group} › {key}" if group else key)
+            else:
+                rows.append((group, key, field_titles().get(key, ""),
+                             "" if value is None else str(value)))
+    elif isinstance(payload, list):
+        for i, item in enumerate(payload, 1):
+            rows += payload_rows(item, f"{group} #{i}")
+    else:
+        rows.append((group, "", "", str(payload)))
+    return rows
 
 
 def redact_files(payload: dict) -> dict:
@@ -277,8 +317,8 @@ def _identity_block(company, emp, profile, branch) -> dict:
         "f_doy": str(getattr(emp, "doy", "") or ""),
         "f_amika": emp.ama,
         "f_amka": emp.amka,
-        "f_code_anergias": "",
-        "f_ar_vivliou_anilikou": "",
+        "f_code_anergias": str(getattr(emp, "unemployment_card_number", "") or ""),
+        "f_ar_vivliou_anilikou": str(getattr(emp, "minor_booklet_number", "") or ""),
         "f_epipedo_morfosis": str(getattr(emp, "education_level", "") or ""),
     }
 

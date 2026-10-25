@@ -121,7 +121,7 @@ def test_rehire_modal_prefills_the_service_fields(monkeypatch):
 
 def test_hire_details_form_keeps_the_rehire_mode(monkeypatch):
     """«Επεξεργασία φόρμας πρόσληψης» σε επαναπρόσληψη: ίδιο mode με τη φόρμα
-    που τη δημιούργησε — τίτλος «Επαναπρόσληψη», καμία «Παλαιά πρόσληψη»."""
+    που τη δημιούργησε — τίτλος «Επαναπρόσληψη», κανένα «Υπάρχων εργαζόμενος»."""
     from webapp import create_app
     from webapp.views import employments as employment_views
 
@@ -152,9 +152,9 @@ def test_hire_details_form_keeps_the_rehire_mode(monkeypatch):
     original = client.get(f"/employments/{first}/hire-form").get_data(as_text=True)
 
     assert "Επαναπρόσληψη" in rehired
-    assert "Παλαιά πρόσληψη" not in rehired
+    assert "Υπάρχων εργαζόμενος" not in rehired
     assert "Επαναπρόσληψη" not in original
-    assert "Παλαιά πρόσληψη" in original
+    assert "Υπάρχων εργαζόμενος" in original
 
 
 test_previous_service_years_adds_the_time_worked()

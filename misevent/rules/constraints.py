@@ -456,6 +456,32 @@ def check_employment_relationship(value="0", fixed_term_from=None,
     return relationship, fixed_term_from, fixed_term_to
 
 
+def age_on(birth_date, on) -> int | None:
+    """Συμπληρωμένα έτη ηλικίας την ημέρα `on` (None χωρίς ημερομηνίες)."""
+    if birth_date is None or on is None:
+        return None
+    return on.year - birth_date.year - ((on.month, on.day) < (birth_date.month, birth_date.day))
+
+
+def check_hire_status_fields(minor_booklet_number="", unemployment_card_number="",
+                             *, minor=False, required=True):
+    """WebE3N: αρ. βιβλιαρίου ανηλίκου και αρ. δελτίου ανεργίας (έως 20).
+
+    Το βιβλιάριο ισχύει ΜΟΝΟ για ανήλικο στην πρόσληψη (αλλιώς σβήνεται, ώστε
+    ένα ξεχασμένο πεδίο να μη φτάσει στο ΕΡΓΑΝΗ) και τότε είναι υποχρεωτικό —
+    εκτός αν η αναγγελία ΔΕΝ θα υποβληθεί από εδώ (`required=False`,
+    υπάρχων εργαζόμενος από άλλο πρόγραμμα)."""
+    booklet = str(minor_booklet_number or "").strip() if minor else ""
+    card = str(unemployment_card_number or "").strip()
+    if minor and required and not booklet:
+        raise ValueError("Ο εργαζόμενος είναι ανήλικος κατά την πρόσληψη — "
+                         "απαιτείται ο «Αρ. βιβλιαρίου ανηλίκου»")
+    if len(booklet) > 20 or len(card) > 20:
+        raise ValueError("Ο αρ. βιβλιαρίου ανηλίκου και ο αρ. δελτίου ανεργίας "
+                         "έχουν έως 20 χαρακτήρες")
+    return booklet, card
+
+
 def check_oaed_hire_fields(
     oaed_placement="0", oaed_program="", oaed_replacement="0",
     oaed_replaced_afm="", oaed_replaced_amka="", trial_period="0",

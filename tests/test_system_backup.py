@@ -43,7 +43,8 @@ def test_system_backup_roundtrip(fresh_system):
 
     bad = sqlite3.connect(":memory:")
     bad.deserialize(_events_db(snapshot))
-    bad.execute("UPDATE events SET event_type = 'Άγνωστο' WHERE store = 'system'")
+    bad.execute("UPDATE events SET event_type = 'Άγνωστο' "
+                "WHERE store = (SELECT id FROM stores WHERE name = 'system')")
     bad.commit()
     r = client.post("/backup/restore",
                     data={"backup": (BytesIO(bad.serialize()), "bad.db")})
@@ -128,3 +129,20 @@ def test_safety_backups_page(fresh_system):
     assert client.get("/backup/safety/..%2F..%2Fsecret.key").status_code == 404
     assert client.get("/backup/safety/nope/before-restore-x.db").status_code == 404
     assert client.post("/backup/safety/system/secret.key/delete").status_code == 404
+
+
+def test_restore_snapshot_remaps_store_ids():
+    """Τα ids του `stores` στο backup ΔΕΝ είναι τα δικά μας: η επαναφορά
+    πηγαίνει με το όνομα του store, αλλιώς τα events αλλάζουν εταιρεία."""
+    from misevent.domain.events import MiscSettingsChanged
+    from misevent.persistence.database import SYSTEM_STORE, Database
+
+    src = Database()
+    src.store(SYSTEM_STORE).append("MISC", MiscSettingsChanged({"who": "system"}))
+    src.store("company:a").append("MISC", MiscSettingsChanged({"who": "a"}))
+
+    dst = Database()  # άλλη σειρά δημιουργίας -> άλλα ids
+    a, system = dst.store("company:a"), dst.store(SYSTEM_STORE)
+    assert dst.restore_snapshot(src.snapshot()) == 2
+    assert [e.fields for _, e in a.load()] == [{"who": "a"}]
+    assert [e.fields for _, e in system.load()] == [{"who": "system"}]

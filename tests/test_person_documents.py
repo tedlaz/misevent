@@ -53,7 +53,7 @@ def test_store_isolation_replace_and_delete():
         db.restore_snapshot(b"not a db")
 
 
-def _hired(birth_date, nationality_code):
+def _hired(birth_date, nationality_code, **hire):
     store = Database().store("test")
     proj = Projections()
     store.subscribe(proj.handle)
@@ -70,8 +70,9 @@ def _hired(birth_date, nationality_code):
         identity_type=ergani_parameters.identity_types()[0]["code"],
         identity_number="ΑΒ123456",
     )
+    hire.setdefault("minor_booklet_number", "ΒΑ-123")  # αγνοείται για ενήλικο
     eid = svc.start_employment(pid, date(2026, 1, 1), monthly_gross=1500,
-                               weekly_pattern=WEEK, draft=True)
+                               weekly_pattern=WEEK, draft=True, **hire)
     svc.assign_insurance_profile(
         eid, coverages=({"fund": "efka_main", "kad": "0000",
                          "specialty_code": "000000", "kpk": "0101"},),
@@ -112,6 +113,27 @@ def test_minor_sends_booklet_eu_citizen_no_foreign_file():
     svc.attach_document(pid, "young_file", PDF)
     form = _form(svc.build_hire_web_e3n(eid))
     assert form["f_foreign_file"] == "" and base64.b64decode(form["f_young_file"]) == PDF
+    assert form["f_ar_vivliou_anilikou"] == "ΒΑ-123"
+
+
+def test_minor_needs_booklet_number_and_adult_never_sends_one():
+    with pytest.raises(ValueError, match="βιβλιαρίου ανηλίκου"):
+        _hired(date(2009, 6, 1), "048", minor_booklet_number="")
+    svc, _, _pid, eid = _hired(date(1990, 6, 1), "048",
+                               unemployment_card_number="ΔΑ-77")
+    form = _form(svc.build_hire_web_e3n(eid))
+    assert form["f_ar_vivliou_anilikou"] == ""          # ενήλικος: σβήνεται
+    assert form["f_code_anergias"] == "ΔΑ-77"
+
+
+def test_unemployment_card_counts_only_when_was_unemployed():
+    from webapp.helpers import form_hire_status_fields
+
+    assert form_hire_status_fields({"f_code_anergias": "Χ"})["unemployment_card_number"] == ""
+    with pytest.raises(ValueError, match="δελτίου ανεργίας"):
+        form_hire_status_fields({"was_unemployed": "1", "f_code_anergias": " "})
+    got = form_hire_status_fields({"was_unemployed": "1", "f_code_anergias": "ΔΑ-1"})
+    assert got["unemployment_card_number"] == "ΔΑ-1"
 
 
 def test_system_backup_carries_documents(fresh_system):

@@ -1,7 +1,8 @@
 {# Οθόνη ΕΡΓΑΝΗ — η ΜΟΝΗ αποστολή στο ΕΡΓΑΝΗ (views/ergani.py). Πάνω οι
    ΕΚΚΡΕΜΟΤΗΤΕΣ ανά είδος εντύπου, από κάτω το ιστορικό. Κάθε ενέργεια
    ξαναχτίζει ΟΛΟ το panel (#ergani-panel), ώστε εκκρεμότητες και ιστορικό
-   να συμφωνούν πάντα. #}
+   να συμφωνούν πάντα. Κάθε εκκρεμότητα: «📤 Υποβολή» (REST API) ή «✍️
+   Χειροκίνητα» (modal με τα πεδία για το portal + καταχώριση πρωτοκόλλου). #}
 <div id="ergani-panel">
   {% set total = hires|length + retros|length + metavoles|length + exits|length
                  + rows|length + weekly|length %}
@@ -38,8 +39,14 @@
                   {% else %}—{% endif %}</td>
               <td class="btnrow" style="justify-content:flex-end">
                 {% if r.ready %}
-                  <a class="ghost sm" target="_blank"
-                     href="{{ url_for('employments.ergani_e3_json', employment_id=r.e.employment_id) }}">JSON</a>
+                  <button type="button" class="ghost sm"
+                          hx-get="{{ url_for('ergani.preview_e3', employment_id=r.e.employment_id, tab='json') }}"
+                          hx-target="#modal-host" hx-swap="innerHTML">JSON</button>
+                  <button type="button" class="ghost sm"
+                          hx-get="{{ url_for('ergani.preview_e3', employment_id=r.e.employment_id) }}"
+                          hx-target="#modal-host" hx-swap="innerHTML"
+                          title="Υποβολή στο portal ΕΡΓΑΝΗ με πληκτρολόγηση — καταχώριση του πρωτοκόλλου εδώ">
+                    ✍️ Χειροκίνητα</button>
                   <button class="run sm"
                           hx-post="{{ url_for('ergani.submit_e3', employment_id=r.e.employment_id) }}"
                           hx-target="#ergani-panel" hx-swap="outerHTML"
@@ -115,6 +122,11 @@
         {% endif %}
         <div class="acts" style="display:flex;gap:8px;margin-top:12px">
           <button class="run" type="submit">📤 Υποβολή επιλεγμένου προγράμματος στο ΕΡΓΑΝΗ</button>
+          <button class="ghost" type="submit"
+                  hx-post="{{ url_for('ergani.preview_schedules') }}"
+                  hx-target="#modal-host" hx-swap="innerHTML"
+                  title="Τα πεδία για το portal ΕΡΓΑΝΗ + καταχώριση πρωτοκόλλου">
+            ✍️ Χειροκίνητα…</button>
           {% if rows %}
           <button class="ghost" type="submit"
                   hx-post="{{ url_for('ergani.revert_schedules') }}"
@@ -141,6 +153,10 @@
                   {% elif r.late %}<span class="tag warn">εκπρόθεσμη</span>
                   {% else %}<span class="tag ok">διαθέσιμη</span>{% endif %}</td>
               <td class="btnrow" style="justify-content:flex-end">
+                <button type="button" class="ghost sm"
+                        hx-get="{{ url_for('ergani.preview_retro', ob_id=r.ob.obligation_id) }}"
+                        hx-target="#modal-host" hx-swap="innerHTML"
+                        {{ 'disabled' if r.reason }}>✍️ Χειροκίνητα</button>
                 <button class="run sm {{ 'danger' if r.late and not r.reason }}"
                         hx-post="{{ url_for('ergani.submit_retro', ob_id=r.ob.obligation_id) }}"
                         hx-target="#ergani-panel" hx-swap="outerHTML"
@@ -169,6 +185,9 @@
               <td>{{ r.t.wage|money }}€ {{ 'ημερομίσθιο' if r.t.pay_type == 'daily' else 'μισθός' }}
                 · {{ '%g'|format(r.t.weekly_hours) }} ώρ./εβδ.</td>
               <td class="btnrow" style="justify-content:flex-end">
+                <button type="button" class="ghost sm"
+                        hx-get="{{ url_for('ergani.preview_e4', employment_id=r.e.employment_id, n=r.n) }}"
+                        hx-target="#modal-host" hx-swap="innerHTML">✍️ Χειροκίνητα</button>
                 <button class="run sm"
                         hx-post="{{ url_for('ergani.submit_e4', employment_id=r.e.employment_id, n=r.n) }}"
                         hx-target="#ergani-panel" hx-swap="outerHTML">📤 Υποβολή Ε4</button>
@@ -208,6 +227,9 @@
                                title="Δήλωση αποχώρησης με υπογραφή (PDF ή φωτογραφίες)">
                       {% endif %}
                     {% endif %}
+                    <button type="button" class="ghost sm"
+                            hx-get="{{ url_for('ergani.preview_e5', employment_id=r.e.employment_id) }}"
+                            hx-target="#modal-host" hx-swap="innerHTML">✍️ Χειροκίνητα</button>
                     <button class="run sm" type="submit">📤 Υποβολή {{ 'WebE5N' if r.voluntary else 'WebE7N' }}</button>
                   </form>
                 {% else %}
@@ -215,9 +237,9 @@
                         hx-post="{{ url_for('ergani.external_e5', employment_id=r.e.employment_id) }}"
                         hx-target="#ergani-panel" hx-swap="outerHTML">
                     <span class="muted" style="font-size:12px">δεν διατίθεται μέσω API — portal ΕΡΓΑΝΗ</span>
-                    <input name="reference" placeholder="Αρ. πρωτοκόλλου" style="max-width:150px"
+                    <input name="reference" placeholder="Αρ. πρωτοκόλλου" style="max-width:150px" required
                            aria-label="Αρ. πρωτοκόλλου {{ r.e.full_name }}">
-                    <button class="ghost sm" type="submit">✓ Υποβλήθηκε στο portal</button>
+                    <button class="ghost sm" type="submit">✍️ Υποβλήθηκε στο portal</button>
                   </form>
                 {% endif %}
               </td>
@@ -274,8 +296,11 @@
                     Αποτυχία</span>
                 {% elif s.status == 'submitted' %}
                   <span class="tag ok">Υποβλήθηκε</span>
+                {% elif s.status == 'manual' %}
+                  <span class="tag ok" title="Πληκτρολογήθηκε στο portal ΕΡΓΑΝΗ από τον χρήστη">
+                    Χειροκίνητα (portal)</span>
                 {% elif s.status == 'external' %}
-                  <span class="tag off">Εκτός συστήματος</span>
+                  <span class="tag off" title="Από το προηγούμενο πρόγραμμα μισθοδοσίας">Εκτός συστήματος</span>
                 {% else %}
                   <span class="tag">Προσομοίωση</span>
                 {% endif %}

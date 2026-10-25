@@ -101,18 +101,28 @@ def form_optional_date(form, field):
 def form_migration(form) -> dict:
     """ΜΕΤΑΦΟΡΑ ΑΠΟ ΑΛΛΟ ΠΡΟΓΡΑΜΜΑ ΜΙΣΘΟΔΟΣΙΑΣ (πεδία `.migr-fields`).
 
-    Χωρίς το checkbox «Μεταφορά» τα πεδία είναι ΚΡΥΜΜΕΝΑ — και ό,τι δεν βλέπει
+    Χωρίς την επιλογή «Υπάρχων εργαζόμενος» τα πεδία είναι ΚΡΥΜΜΕΝΑ — και ό,τι δεν βλέπει
     ο χρήστης δεν μετράει: ένα κρυμμένο input εξακολουθεί να υποβάλλεται, οπότε
-    μια παλιά τιμή θα ενεργοποιούσε σιωπηλά τη μεταφορά."""
+    μια παλιά τιμή θα ενεργοποιούσε σιωπηλά τη μεταφορά.
+
+    Υπάρχων εργαζόμενος = η αναγγελία πρόσληψης (και η σύμβαση με τις
+    μεταβολές της) έχει ΗΔΗ υποβληθεί από το προηγούμενο πρόγραμμα: δεν είναι
+    επιλογή. Χωρίς ανάληψη η εγγραφή θα περνούσε σιωπηλά ως ΝΕΑ πρόσληψη."""
     if not form.get("migrated"):
         return {
             "payroll_from": None,
             "ergani_hire_done": False,
             "ergani_hire_reference": "",
         }
+    payroll_from = form_optional_date(form, "payroll_from")
+    if payroll_from is None:
+        raise ValueError(
+            "Υπάρχων εργαζόμενος: δηλώστε την «Έναρξη μισθοδοσίας στο σύστημα» "
+            "(1η του μήνα από τον οποίο αναλαμβάνει αυτό το πρόγραμμα)"
+        )
     return {
-        "payroll_from": form_optional_date(form, "payroll_from"),
-        "ergani_hire_done": bool(form.get("ergani_hire_done")),
+        "payroll_from": payroll_from,
+        "ergani_hire_done": True,
         "ergani_hire_reference": form.get("ergani_hire_reference", ""),
     }
 
@@ -136,6 +146,19 @@ def form_oaed_hire_fields(form) -> dict:
         "oaed_replaced_amka": form.get("f_replaceprograma_amka", ""),
         "trial_period": form.get("f_trial_period", "0"),
         "trial_date_to": form_optional_date(form, "f_trial_date_to"),
+    }
+
+
+def form_hire_status_fields(form) -> dict:
+    """Αρ. βιβλιαρίου ανηλίκου + δελτίου ανεργίας. Το δελτίο μετράει ΜΟΝΟ με
+    το «Ήταν άνεργος» (κρυμμένο πεδίο = δεν μετράει) και τότε είναι
+    υποχρεωτικό· το βιβλιάριο το κρίνει η υπηρεσία (ανήλικος στην πρόσληψη)."""
+    card = form.get("f_code_anergias", "").strip() if form.get("was_unemployed") else ""
+    if form.get("was_unemployed") and not card:
+        raise ValueError("Ήταν άνεργος: δώστε τον «Αριθμό δελτίου ανεργίας»")
+    return {
+        "minor_booklet_number": form.get("f_ar_vivliou_anilikou", ""),
+        "unemployment_card_number": card,
     }
 
 

@@ -1,0 +1,77 @@
+{# ΠΡΟΕΠΙΣΚΟΠΗΣΗ / ΧΕΙΡΟΚΙΝΗΤΗ ΥΠΟΒΟΛΗ ΕΡΓΑΝΗ (views/ergani.py · `_preview`).
+   Το ΙΔΙΟ payload που θα έστελνε το REST API (`ergani_preview`), ως πίνακας
+   «πεδίο → τιμή» με τους τίτλους των σχημάτων του ΕΡΓΑΝΗ, και ως JSON. Από
+   κάτω η καταχώριση του αρ. πρωτοκόλλου όταν ο χρήστης το υπέβαλε ο ίδιος στο
+   portal: ποστάρει στην ΙΔΙΑ εντολή υποβολής (`ergani_manual`), άρα ίδιες
+   συνέπειες με το API. Ένα `part` ανά υποβολή στο portal (το πρόγραμμα μπορεί
+   να έχει εβδομαδιαίο ΚΑΙ ημερήσιο). Κλείνει ΜΟΝΟ με κουμπί (μοτίβο §9). #}
+<div class="modal-backdrop">
+  <div class="modal wide">
+    <div class="mhead">
+      <h3>{{ title }}</h3>
+      <span class="muted" style="font-size:12.5px">{{ who }}</span>
+    </div>
+    <div class="mbody">
+      {% for part in parts %}
+        {% set k = loop.index %}
+        {% if parts|length > 1 %}<h4 class="sec">{{ part.label }}</h4>{% endif %}
+        {% if part.empty %}
+          <p class="muted">Δεν υπάρχει περιεχόμενο προς αποστολή — η καταχώριση
+            απλώς ολοκληρώνει την υποχρέωση.</p>
+        {% else %}
+          <div class="etabs">
+            <div class="tabbar">
+              <label><input type="radio" name="etab-{{ k }}" value="f" class="tabradio"
+                {{ 'checked' if tab != 'json' }}>Πεδία</label>
+              <label><input type="radio" name="etab-{{ k }}" value="j" class="tabradio"
+                {{ 'checked' if tab == 'json' }}>JSON</label>
+            </div>
+            <div class="ep ep-f">
+              <table class="tbl erg-fields">
+                <thead><tr><th>Πεδίο</th><th>Τιμή</th><th></th></tr></thead>
+                <tbody>
+                  {% set ns = namespace(group=None) %}
+                  {% for group, name, label, value in part.rows %}
+                    {% if group != ns.group %}
+                      {% set ns.group = group %}
+                      {% if group %}<tr class="grp"><td colspan="3">{{ group }}</td></tr>{% endif %}
+                    {% endif %}
+                    <tr>
+                      <td>{{ label or name }}
+                        {% if label %}<div class="mono muted" style="font-size:11px">{{ name }}</div>{% endif %}</td>
+                      <td class="mono">{{ value or '—' }}</td>
+                      <td>{% if value %}<button type="button" class="ghost sm" title="Αντιγραφή"
+                        onclick="navigator.clipboard && navigator.clipboard.writeText(this.dataset.v).then(() => { this.textContent = '✓'; })"
+                        data-v="{{ value }}">📋</button>{% endif %}</td>
+                    </tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            </div>
+            <div class="ep ep-j">
+              <pre class="jt-raw" id="ergani-raw-{{ k }}">{{ part.raw }}</pre>
+              <button type="button" class="ghost sm" style="margin-top:6px"
+                onclick="navigator.clipboard && navigator.clipboard.writeText(document.getElementById('ergani-raw-{{ k }}').textContent).then(() => { this.textContent = '✓ Αντιγράφηκε'; })">
+                📋 Αντιγραφή JSON</button>
+            </div>
+          </div>
+        {% endif %}
+      {% endfor %}
+    </div>
+    <form class="mfoot erg-manual" hx-post="{{ post_url }}"
+          hx-target="#ergani-panel" hx-swap="outerHTML">
+      {% for name, value in hidden %}
+        <input type="hidden" name="{{ name }}" value="{{ value }}">
+      {% endfor %}
+      <span class="muted" style="font-size:12.5px">✍️ Υποβλήθηκε χειροκίνητα στο portal ΕΡΓΑΝΗ;</span>
+      {% for part in parts %}
+        <label>Αρ. πρωτοκόλλου{% if parts|length > 1 %} — {{ part.label }}{% endif %}
+          <input name="{{ part.field }}" required class="mono" autocomplete="off"></label>
+      {% endfor %}
+      <button class="run" type="submit">✓ Καταχώριση</button>
+      <button type="button" class="ghost"
+              hx-get="{{ url_for('ergani.modal_close') }}"
+              hx-target="#modal-host" hx-swap="innerHTML">Κλείσιμο</button>
+    </form>
+  </div>
+</div>

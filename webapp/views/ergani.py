@@ -12,15 +12,28 @@
 το περιεχόμενο του προγράμματος από `ScheduleDeclaredToErgani`/`ScheduleDaysSubmitted`).
 
 Οι εντολές που ΚΑΤΑΓΡΑΦΟΥΝ (αλλαγή σύμβασης, αποχώρηση, πρόγραμμα) ΔΕΝ
-στέλνουν — αφήνουν εκκρεμότητα που εμφανίζεται εδώ."""
+στέλνουν — αφήνουν εκκρεμότητα που εμφανίζεται εδώ.
+
+ΔΥΟ ΤΡΟΠΟΙ ΥΠΟΒΟΛΗΣ, ανά εκκρεμότητα: «📤 Υποβολή» (REST API) ή «✍️
+Χειροκίνητα» (ο χρήστης το πληκτρολογεί στο portal και καταχωρεί εδώ το
+πρωτόκολλο). Η προεπισκόπηση (`_preview`, `ergani_preview`) και η χειροκίνητη
+καταχώριση (`_mode` -> `ergani_manual`) τρέχουν τις ΙΔΙΕΣ εντολές με το API —
+καμία λογική εντύπου δεν γράφεται εδώ."""
 
 import base64
 import json
+from contextlib import nullcontext
 from datetime import date, datetime, timedelta
 
-from flask import Blueprint, abort, render_template, request
+from flask import Blueprint, abort, render_template, request, url_for
 
-from misevent.app.services import DISMISSAL_REASON
+from misevent.app.services import (
+    DISMISSAL_REASON,
+    ErganiPreview,
+    ergani_manual,
+    ergani_preview,
+)
+from misevent.integrations import ergani as ergani_mod
 from misevent.rules import constraints
 
 from .. import amka_pdf
@@ -29,7 +42,7 @@ from ..clock import today
 from ..helpers import flash_to, run_command
 from ..labels import DAY_NAMES, ERGANI_LABELS, ERGANI_ONLY, TERMINATION_REASONS
 from ..queries import blocked_reason, dep_label, emp_name
-from ..system import proj, store, svc
+from ..system import lock, proj, store, svc
 from .work_schedules import _staff, _week_label
 
 bp = Blueprint("ergani", __name__, url_prefix="/ergani")
@@ -242,7 +255,108 @@ def _panel():
 
 def _respond(command):
     ok, message = run_command(command)
-    return flash_to(_panel(), message, err=not ok)
+    # Επιτυχία από το modal χειροκίνητης υποβολής -> κλείνει (OOB)
+    html = _panel() + ('<div id="modal-host" hx-swap-oob="innerHTML"></div>' if ok else "")
+    return flash_to(html, message, err=not ok)
+
+
+def _mode(field: str = "reference"):
+    """Τρόπος υποβολής του αιτήματος: με πεδίο πρωτοκόλλου στη φόρμα (modal
+    «✍️ Χειροκίνητα») η εντολή καταγράφεται ως ΧΕΙΡΟΚΙΝΗΤΗ — αλλιώς REST API."""
+    if field in request.form:
+        return ergani_manual(request.form.get(field, ""))
+    return nullcontext()
+
+
+# ------------------------------------- Προεπισκόπηση / χειροκίνητη υποβολή
+def _capture(command) -> dict:
+    """Τρέχει την εντολή σε ΠΡΟΕΠΙΣΚΟΠΗΣΗ: το έντυπο που ΘΑ έστελνε, χωρίς
+    καμία εγγραφή (`ErganiPreview` πριν από κάθε event)."""
+    try:
+        with lock, ergani_preview():
+            command()
+    except ErganiPreview as hit:
+        if hit.payload is None:
+            return {"empty": True}
+        return {
+            "empty": False,
+            "rows": ergani_mod.payload_rows(hit.payload),
+            "raw": json.dumps(hit.payload, ensure_ascii=False, indent=2, default=str),
+        }
+    raise ValueError("Η εντολή δεν παρήγαγε έντυπο ΕΡΓΑΝΗ")
+
+
+def _preview(title, who, parts, post_url, hidden=()):
+    """Modal προεπισκόπησης: `parts` = [(ετικέτα, εντολή, πεδίο πρωτοκόλλου)]
+    — ένα ανά υποβολή στο portal. Σφάλμα της εντολής -> toast, όχι modal."""
+    try:
+        rendered = [{"label": label, "field": field, **_capture(command)}
+                    for label, command, field in parts]
+    except (ValueError, KeyError) as exc:
+        return flash_to("", str(exc), err=True)
+    return render_template(
+        "partials/_ergani_submit_modal.html", title=title, who=who,
+        parts=rendered, post_url=post_url, hidden=hidden,
+        tab=request.args.get("tab", "fields"),
+    )
+
+
+@bp.get("/preview/e3/<employment_id>")
+def preview_e3(employment_id):
+    return _preview(
+        "Αναγγελία Πρόσληψης — WebE3N", emp_name(employment_id),
+        [("WebE3N", lambda: svc.submit_hire_e3(employment_id), "reference")],
+        url_for("ergani.submit_e3", employment_id=employment_id))
+
+
+@bp.get("/preview/e4/<employment_id>/<int:n>")
+def preview_e4(employment_id, n):
+    return _preview(
+        "Δήλωση Μεταβολής — Ε4", emp_name(employment_id),
+        [("Ε4", lambda: svc.submit_metavoli(employment_id, n), "reference")],
+        url_for("ergani.submit_e4", employment_id=employment_id, n=n))
+
+
+@bp.get("/preview/e5/<employment_id>")
+def preview_e5(employment_id):
+    return _preview(
+        "Αναγγελία Λήξης", emp_name(employment_id),
+        [("Λήξη", lambda: svc.submit_exit(employment_id), "reference")],
+        url_for("ergani.submit_e5", employment_id=employment_id))
+
+
+@bp.get("/preview/retro/<ob_id>")
+def preview_retro(ob_id):
+    ob = proj.obligations.get(ob_id)
+    if ob is None:
+        abort(404)
+    return _preview(
+        dep_label(ob), "ΕΤΑΙΡΕΙΑ",
+        [(dep_label(ob), lambda: trigger(ob_id, via_ergani=True), "reference")],
+        url_for("ergani.submit_retro", ob_id=ob_id))
+
+
+@bp.post("/preview/schedules")
+def preview_schedules():
+    """Η επιλογή της φόρμας προγράμματος: εβδομαδιαίο και ημερήσιο είναι ΔΥΟ
+    υποβολές στο portal, με δικό τους πρωτόκολλο η καθεμία."""
+    try:
+        weekly, daily = _selection("weekly"), _selection("week")
+    except ValueError as exc:
+        return flash_to("", str(exc), err=True)
+    if not (weekly or daily):
+        return flash_to("", "Δεν επιλέχθηκαν εκκρεμείς υποβολές προγράμματος", err=True)
+    parts = []
+    if weekly:
+        parts.append(("Εβδομαδιαίο (WTOWeek)",
+                      lambda: svc.submit_weekly_schedules(weekly), "weekly_reference"))
+    if daily:
+        parts.append(("Ημερήσιο (WTODaily)",
+                      lambda: svc.submit_schedule_days(daily), "daily_reference"))
+    hidden = [(f, v) for f in ("weekly", "week") for v in request.form.getlist(f)]
+    names = sorted({emp_name(e) for e in (*weekly, *daily)})
+    return _preview("Οργάνωση Χρόνου Εργασίας — ΟΧΕ", ", ".join(names), parts,
+                    url_for("ergani.submit_schedules"), hidden)
 
 
 # ------------------------------------------------------------- Routes
@@ -282,7 +396,8 @@ def modal_close():
 def submit_e3(employment_id):
     def command():
         missing = svc.missing_hire_documents(employment_id)
-        res = svc.submit_hire_e3(employment_id)
+        with _mode():
+            res = svc.submit_hire_e3(employment_id)
         msg = (f"{emp_name(employment_id)}: Αναγγελία Πρόσληψης WebE3N "
                f"({res['status']})")
         return msg + (f" ⚠ χωρίς: {', '.join(missing)}" if missing else "")
@@ -318,9 +433,11 @@ def submit_schedules():
             raise ValueError("Δεν επιλέχθηκαν εκκρεμείς υποβολές προγράμματος")
         parts = []
         if weekly:
-            parts.append(f"{svc.submit_weekly_schedules(weekly)} εβδομαδιαία")
+            with _mode("weekly_reference"):
+                parts.append(f"{svc.submit_weekly_schedules(weekly)} εβδομαδιαία")
         if daily:
-            res = svc.submit_schedule_days(daily)
+            with _mode("daily_reference"):
+                res = svc.submit_schedule_days(daily)
             parts.append(f"υποβολή #{res['batch_no']}: {res['count']} ημερήσια")
         return "Υποβλήθηκαν στο ΕΡΓΑΝΗ: " + " · ".join(parts)
     return _respond(command)
@@ -344,13 +461,17 @@ def revert_schedules():
 @bp.post("/retro/<ob_id>")
 def submit_retro(ob_id):
     """Το απολογιστικό: η εντολή της υποχρέωσης (την κλείνει κιόλας)."""
-    return _respond(lambda: trigger(ob_id, via_ergani=True))
+    def command():
+        with _mode():
+            return trigger(ob_id, via_ergani=True)
+    return _respond(command)
 
 
 @bp.post("/e4/<employment_id>/<int:n>")
 def submit_e4(employment_id, n):
     def command():
-        res = svc.submit_metavoli(employment_id, n)
+        with _mode():
+            res = svc.submit_metavoli(employment_id, n)
         return f"{emp_name(employment_id)}: Δήλωση Μεταβολής ({res['status']})"
     return _respond(command)
 
@@ -367,7 +488,8 @@ def submit_e5(employment_id):
             svc.attach_document(proj.employments[employment_id].person_id,
                                 "resignation", amka_pdf.to_pdf(files),
                                 "resignation.pdf")
-        res = svc.submit_exit(employment_id)
+        with _mode():
+            res = svc.submit_exit(employment_id)
         return f"{emp_name(employment_id)}: Αναγγελία Λήξης ({res['status']})"
     return _respond(command)
 
