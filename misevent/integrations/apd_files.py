@@ -439,3 +439,161 @@ class APDFileBuilder:
 
     def zip_name(self) -> str:
         return zip_name(self.fund, self.year, self.month)
+
+
+# ------------------------------------------------------------- Ανάγνωση
+# Το ΑΝΤΙΣΤΡΟΦΟ του builder (Οδηγός «Εισαγωγή από ΑΠΔ»): ίδιες θέσεις με
+# τα _rec1/_rec2/_rec3 — αν αλλάξει η προδιαγραφή, αλλάζουν ΜΑΖΙ (το
+# round-trip test του tests/test_apd_import.py σπάει αλλιώς).
+@dataclass(frozen=True)
+class ApdFile:
+    fund: str  # "efka" | "teka" (από το μήκος της εγγραφής 3)
+    employer: EmployerInfo
+    year: int
+    month: int
+    # [(ασφαλισμένος, [εγγραφές τύπου 3])] με τη σειρά του αρχείου
+    insured: list
+
+
+class _Cut:
+    """Διαδοχικό κόψιμο εγγραφής σταθερού μήκους."""
+
+    def __init__(self, line: str, lineno: int):
+        self.line, self.lineno, self.pos = line, lineno, 1  # [0] = τύπος
+
+    def s(self, n: int) -> str:
+        v = self.line[self.pos : self.pos + n]
+        self.pos += n
+        return v.strip()
+
+    def n(self, n: int, field: str) -> int:
+        v = self.s(n)
+        if not v.isdigit():
+            raise APDFormatError(
+                f"Γραμμή {self.lineno}: το πεδίο «{field}» δεν είναι αριθμός («{v}»)"
+            )
+        return int(v)
+
+    def amt(self, n: int, field: str) -> float:
+        return self.n(n, field) / 100
+
+    def d(self, field: str) -> date | None:
+        v = self.s(8)
+        if not v or v == "00000000":
+            return None
+        try:
+            return date(int(v[4:]), int(v[2:4]), int(v[:2]))
+        except ValueError:
+            raise APDFormatError(
+                f"Γραμμή {self.lineno}: μη έγκυρη ημερομηνία «{v}» στο «{field}»"
+            ) from None
+
+
+def _apd_text(data: bytes) -> str:
+    if data[:2] == b"PK":  # ZIP όπως κατεβαίνει/υποβάλλεται
+        try:
+            with zipfile.ZipFile(BytesIO(data)) as z:
+                names = z.namelist()
+                if not names:
+                    raise APDFormatError("Το ZIP είναι κενό")
+                data = z.read(names[0])
+        except zipfile.BadZipFile:
+            raise APDFormatError("Χαλασμένο αρχείο ZIP") from None
+    return data.decode(ENCODING, errors="strict")
+
+
+def parse_apd(data: bytes) -> ApdFile:
+    """Διαβάζει αρχείο ΑΠΔ (CSL01 ή ZIP του) ΕΦΚΑ ή ΤΕΚΑ.
+
+    Ελέγχει μήκη/τύπους εγγραφών, αριθμητικά πεδία, ημερομηνίες και ότι το
+    Σύνολο Καταβλητέων της κεφαλίδας (No 18) = άθροισμα των εγγραφών 3."""
+    try:
+        text = _apd_text(data)
+    except UnicodeDecodeError:
+        raise APDFormatError("Το αρχείο δεν είναι ΑΠΔ (κωδικοποίηση)") from None
+    lines = [ln for ln in text.splitlines() if ln.strip()]
+    if not lines or not lines[0].startswith("1"):
+        raise APDFormatError("Το αρχείο δεν ξεκινά με εγγραφή τύπου 1 (κεφαλίδα ΑΠΔ)")
+    if lines[-1].strip() != "EOF":
+        raise APDFormatError("Λείπει η τελική εγγραφή EOF — ελλιπές αρχείο")
+
+    lens3 = {v: k for k, v in APDFileBuilder.REC3_LEN.items()}
+    fund = None
+    employer = year = month = None
+    payable_header = payable_rows = 0.0
+    insured: list = []
+    for i, line in enumerate(lines[:-1], start=1):
+        kind = line[0]
+        expected = {
+            "1": APDFileBuilder.REC1_LEN,
+            "2": APDFileBuilder.REC2_LEN,
+            "4": APDFileBuilder.REC4_LEN,
+        }.get(kind)
+        if kind == "3":
+            if len(line) not in lens3:
+                raise APDFormatError(
+                    f"Γραμμή {i}: εγγραφή 3 μήκους {len(line)} (αναμένεται 162 ΕΦΚΑ ή 148 ΤΕΚΑ)"
+                )
+            if fund and lens3[len(line)] != fund:
+                raise APDFormatError(f"Γραμμή {i}: ανάμικτες εγγραφές ΕΦΚΑ και ΤΕΚΑ")
+            fund = lens3[len(line)]
+        elif expected is None:
+            raise APDFormatError(f"Γραμμή {i}: άγνωστος τύπος εγγραφής «{kind}»")
+        elif len(line) != expected:
+            raise APDFormatError(
+                f"Γραμμή {i}: εγγραφή {kind} μήκους {len(line)} (αναμένεται {expected})"
+            )
+        c = _Cut(line, i)
+        if kind == "1":
+            if i != 1:
+                raise APDFormatError(f"Γραμμή {i}: δεύτερη κεφαλίδα (τύπος 1)")
+            c.s(2)  # τύπος δήλωσης
+            office_code, office_name = c.s(10), c.s(50)
+            legal, first, father = c.s(80), c.s(30), c.s(30)
+            ame, afm = c.s(10), c.s(9)
+            street, street_no, tk, city = c.s(50), c.s(10), c.s(5), c.s(30)
+            month, year = c.n(2, "Μήνας"), c.n(4, "Έτος")
+            c.n(8, "Σύνολο ημερών")
+            c.amt(12, "Σύνολο αποδοχών")
+            payable_header = c.amt(12, "Σύνολο καταβλητέων")
+            employer = EmployerInfo(ame, afm, legal, first, father, street,
+                                    street_no, tk, city, office_code, office_name)
+        elif kind == "2":
+            ama, amka = c.s(9), c.s(11)
+            ln, fn, fa, mo = c.s(50), c.s(30), c.s(30), c.s(30)
+            born = c.d("Ημ. γέννησης")
+            insured.append((InsuredInfo(ama, amka, ln, fn, fa, mo, born, c.s(9)), []))
+        elif kind == "3":
+            if not insured:
+                raise APDFormatError(f"Γραμμή {i}: εγγραφή 3 χωρίς ασφαλισμένο")
+            branch, kad = c.n(4, "Παράρτημα"), c.s(4)
+            full, allwd = c.s(1) == "1", c.s(1) == "1"
+            sundays, spec, special, kpk = c.n(1, "Κυριακές"), c.s(6), c.s(2), c.s(4)
+            pm, py = c.n(2, "Μήνας περιόδου"), c.n(4, "Έτος περιόδου")
+            d_from, d_to = c.d("Από"), c.d("Έως")
+            etype, days = c.s(3), c.n(3, "Ημέρες")
+            dw, gross = c.amt(10, "Ημερομίσθιο"), c.amt(10, "Αποδοχές")
+            ce, cr = c.amt(10, "Εισφ. ασφαλισμένου"), c.amt(10, "Εισφ. εργοδότη")
+            c.amt(11, "Συνολικές εισφορές")
+            se, sr = c.amt(10, "Επιδ. ασφαλισμένου"), c.amt(10, "Επιδ. εργοδότη")
+            payable_rows += c.amt(11, "Καταβλητέες")
+            c.amt(10, "Σύνολο επιδοτήσεων")
+            lawyer, aux, sick = 0.0, "", ""
+            if fund == "efka":
+                lawyer, aux, sick = c.amt(10, "Γραμμάτιο"), c.s(2), c.s(2)
+            daily = c.s(1) == "1"
+            weekly = c.n(1, "Σύστημα εβδ. εργασίας")
+            insured[-1][1].append(InsuranceRow(
+                branch, kad, full, allwd, sundays, spec, special, kpk, pm, py,
+                d_from, d_to, etype, days, dw, gross, ce, cr, se, sr,
+                lawyer_advance=lawyer, aux_fund_code=aux, sickness_fund_code=sick,
+                is_daily_paid=daily, weekly_system=weekly, art39_par9=c.s(2),
+            ))
+    if not insured:
+        raise APDFormatError("Η ΑΠΔ δεν περιέχει ασφαλισμένους")
+    if round(payable_header - payable_rows, 2) != 0:
+        raise APDFormatError(
+            f"Το Σύνολο Καταβλητέων της κεφαλίδας ({payable_header:.2f}) δεν "
+            f"συμφωνεί με το άθροισμα των εγγραφών ({payable_rows:.2f})"
+        )
+    return ApdFile(fund or "efka", employer, year, month, insured)

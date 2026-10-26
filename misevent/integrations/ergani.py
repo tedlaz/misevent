@@ -361,16 +361,8 @@ def build_web_e3n(
         "f_proslipsitime": first_day_start,
         "f_apoxwrisitime": first_day_end,
         "f_week_hours": _decimal_gr(emp.weekly_hours, 1),
-        "f_eidikothta": str(
-            getattr(profile, "ergani_specialty_code", "")
-            or getattr(profile, "specialty_code", "")
-            or ""
-        ),
-        "f_eidikothta_anal": str(
-            getattr(profile, "ergani_specialty_description", "")
-            or getattr(profile, "specialty_name", "")
-            or ""
-        ),
+        "f_eidikothta": _specialty(profile),
+        "f_eidikothta_anal": str(getattr(profile, "ergani_specialty_description", "") or ""),
         # ΣΥΝΟΛΙΚΗ προϋπηρεσία: τριετίες + παγωμένος χρόνος 2012-2023 (το
         # ΕΡΓΑΝΗ θέλει τον χρόνο εργασίας, όχι μόνο ό,τι μετρά στις τριετίες)
         "f_proipiresia": str(
@@ -600,8 +592,17 @@ def _exit_common(emp, schedule) -> dict:
 
 
 def _specialty(profile) -> str:
-    return str(getattr(profile, "ergani_specialty_code", "")
-               or getattr(profile, "specialty_code", "") or "")
+    """Ο κωδικός ειδικότητας ΕΡΓΑΝΗ. ΚΑΜΙΑ υποκατάσταση από τον κωδικό
+    ΟΣΥΚ της ΑΠΔ: είναι ΑΛΛΟ μητρώο — το ΕΡΓΑΝΗ θα τον δεχόταν (1–6 ψηφία)
+    και θα δηλωνόταν σιωπηλά λάθος ειδικότητα."""
+    code = str(getattr(profile, "ergani_specialty_code", "") or "")
+    if not code:
+        name = getattr(profile, "specialty_name", "") or "της απασχόλησης"
+        raise ValueError(
+            f"Η ειδικότητα «{name}» δεν έχει κωδικό ειδικότητας ΕΡΓΑΝΗ — "
+            "συμπληρώστε τον στην Εταιρεία → Ειδικότητες"
+        )
+    return code
 
 
 def build_web_e5n(company, emp, profile, termination_date: date, branch=None,

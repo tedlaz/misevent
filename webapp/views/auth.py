@@ -32,7 +32,8 @@ PUBLIC_ENDPOINTS = {
     "auth.invite_post",
     "auth.reset",
     "auth.reset_post",
-    "backup.first_run",  # μόνο σε πρώτη εκκίνηση — ελέγχει μόνο του το `is_fresh`
+    "auth.setup",  # ΜΟΝΟ χωρίς χρήστες — ελέγχει μόνο του το `needs_setup`
+    "auth.setup_post",
     "static",
 }
 
@@ -54,18 +55,53 @@ def login_user(user):
     session.permanent = True
 
 
-# ------------------------------------------------------------------ σύνδεση
-def _login_page(**context):
-    """Σε πρώτη εκκίνηση η σελίδα προσφέρει και restore από backup."""
+def _home(user):
+    """Μετά τη σύνδεση: ο οδηγός «Ξεκινώντας» όσο καμία εταιρεία δεν έχει
+    δεδομένα — μόνο σε όποιον μπορεί να διαλέξει κάτι εκεί (διαχειριστής ή
+    δικαίωμα δημιουργίας εταιρειών) — αλλιώς η επισκόπηση."""
+    if not (user.is_admin or user.can_create_companies):
+        return url_for("dashboard.index")
     with lock:
         fresh = registry.is_fresh()
-    return render_template("login.html", fresh=fresh, **context)
+    return url_for("welcome.index") if fresh else url_for("dashboard.index")
+
+
+# --------------------------------------------------------- αρχική ρύθμιση
+# Νέα εγκατάσταση = ΚΑΝΕΝΑΣ χρήστης: ο πρώτος (διαχειριστής) ορίζεται εδώ με
+# δικό του email/κωδικό. Κανένας προεπιλεγμένος λογαριασμός.
+@bp.get("/setup")
+def setup():
+    if not registry.needs_setup():
+        return redirect(url_for("auth.login"))
+    return render_template("setup.html")
+
+
+@bp.post("/setup")
+def setup_post():
+    email = request.form.get("email", "")
+    try:
+        with lock:
+            user_id = auth_svc.setup_first_admin(
+                email, request.form.get("password", ""), request.form.get("repeat", ""))
+    except ValueError as exc:
+        if not registry.needs_setup():
+            return redirect(url_for("auth.login"))
+        return render_template("setup.html", email=email, error=str(exc)), 400
+    login_user(auth.users[user_id])
+    return redirect(url_for("welcome.index"))
+
+
+# ------------------------------------------------------------------ σύνδεση
+def _login_page(**context):
+    return render_template("login.html", **context)
 
 
 @bp.get("/login")
 def login():
+    if registry.needs_setup():
+        return redirect(url_for("auth.setup"))
     if current_user():
-        return redirect(url_for("dashboard.index"))
+        return redirect(_home(current_user()))
     return _login_page(
         email=request.args.get("email", ""),
         restored=request.args.get("restored"),
@@ -83,7 +119,7 @@ def login_post():
     login_user(user)
     if user.must_change_password:
         return redirect(url_for("auth.password"))
-    return redirect(request.form.get("next") or url_for("dashboard.index"))
+    return redirect(request.form.get("next") or _home(user))
 
 
 @bp.post("/logout")

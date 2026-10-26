@@ -308,7 +308,7 @@ class ContractMixin:
         if self.proj.company is None:
             raise ValueError("Δεν έχουν καταχωρηθεί στοιχεία εταιρείας")
         reason = emp.termination_reason or VOLUNTARY_EXIT_REASON
-        profile = emp.insurance_profile
+        profile = self.ergani_profile(emp.insurance_profile)
         branch = self.get_branch(getattr(profile, "branch_no", 0) or 0)
         args = (self.proj.company, emp, profile, emp.termination_date)
         if reason == VOLUNTARY_EXIT_REASON:

@@ -2,6 +2,7 @@
 ΑΠΔ — και ΕΙΔΙΚΟΤΗΤΕΣ (θέσεις εργασίας) με την ασφαλιστική τριάδα ΕΦΚΑ/ΤΕΚΑ.
 Η πρόσληψη διαλέγει από τις ειδικότητες που δηλώνονται εδώ."""
 
+import re
 from datetime import timedelta
 from io import BytesIO
 
@@ -355,15 +356,23 @@ def ergani_specialty_search():
     """Autocomplete του μεγάλου πίνακα ``eidikotites`` χωρίς πλήρες render."""
     # Το request προέρχεται από όποιο από τα δύο πεδία πληκτρολογεί ο
     # χρήστης: αναζήτηση είτε με code είτε με λέξεις της description.
+    pfx = _ergani_pfx()
     q = (
-        request.args.get("ergani_specialty_code", "").strip()
-        or request.args.get("ergani_specialty_description", "").strip()
+        request.args.get(f"{pfx}ergani_specialty_code", "").strip()
+        or request.args.get(f"{pfx}ergani_specialty_description", "").strip()
     )
     return render_template(
         "partials/_ergani_specialty_results.html",
         rows=ergani_parameters.search_specialties(q),
         searched=bool(q),
+        pfx=pfx,
     )
+
+
+def _ergani_pfx() -> str:
+    """Πρόθεμα πεδίων (πολλά ζεύγη στην ίδια σελίδα) — μόνο [a-z0-9_]."""
+    pfx = request.args.get("pfx", "")
+    return pfx if re.fullmatch(r"[a-z0-9_]{0,20}", pfx) else ""
 
 
 @bp.get("/specialties/ergani/pick")
@@ -375,6 +384,7 @@ def ergani_specialty_pick():
         code=row.get("code", ""),
         description=row.get("description", ""),
         oob=True,
+        pfx=_ergani_pfx(),
     )
 
 

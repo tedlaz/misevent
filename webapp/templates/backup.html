@@ -1,12 +1,14 @@
 {% extends "base.html" %}
 {% block title %}Backup{% endblock %}
 {% block heading %}Backup / Restore{% endblock %}
-{% block subheading %}ολόκληρο το σύστημα: όλες οι εταιρείες, οι χρήστες και οι κοινές παράμετροι{% endblock %}
+{% block subheading %}ολόκληρο το σύστημα ή μία εταιρεία{% endblock %}
 
 {% block content %}
 <div class="card">
   {% if error %}
     <div class="audit-result err">{{ error }}</div>
+  {% elif restored %}
+    <div class="audit-result ok">Έγινε restore της εταιρείας <b>{{ restored }}</b> και πλήρες replay.</div>
   {% endif %}
 
   <div class="backup-actions">
@@ -26,8 +28,45 @@
     </form>
   </div>
   <div class="muted backup-note">
-    Για backup/restore μίας μόνο εταιρείας: Ρυθμίσεις → Audit log.
     Το restore δεν ανακαλεί εξωτερικές υποβολές ή πληρωμές.
+  </div>
+</div>
+
+<div class="card">
+  <h2>Ανά εταιρεία
+    <span class="norm">— .zip με τα events και τα έγγραφά της· οι υπόλοιπες εταιρείες δεν αγγίζονται</span></h2>
+  <table>
+    <thead><tr><th>Εταιρεία</th><th></th></tr></thead>
+    <tbody>
+    {% for cid, name in companies %}
+      <tr>
+        <td>{{ name }}</td>
+        <td class="btnrow">
+          <a class="ghost" href="{{ url_for('backup.company_download', company_id=cid) }}">⬇ Λήψη backup</a>
+          <form method="post" enctype="multipart/form-data"
+                action="{{ url_for('backup.company_restore', company_id=cid) }}"
+                onsubmit='return confirm({{ ("Να αντικατασταθούν ΟΛΑ τα δεδομένα της εταιρείας «" ~ name ~ "» από αυτό το backup; Θα κρατηθεί αυτόματα αντίγραφο της τρέχουσας κατάστασής της.")|tojson }});'>
+            <input type="file" name="backup" accept=".zip,.json" required>
+            <button class="run danger" type="submit">⬆ Restore</button>
+          </form>
+        </td>
+      </tr>
+    {% endfor %}
+      <tr>
+        <td><i>Νέα εταιρεία</i> <span class="muted">— από backup εταιρείας που δεν υπάρχει εδώ</span></td>
+        <td class="btnrow">
+          <form method="post" enctype="multipart/form-data"
+                action="{{ url_for('backup.company_new') }}">
+            <input type="file" name="backup" accept=".zip,.json" required>
+            <button class="run" type="submit">⬆ Restore ως νέα</button>
+          </form>
+        </td>
+      </tr>
+    </tbody>
+  </table>
+  <div class="muted backup-note">
+    Δεκτά και τα .json του Audit log (μόνο events). Οι κωδικοί ΕΡΓΑΝΗ δεν
+    περιλαμβάνονται — ξαναδηλώνονται στην Εταιρεία· ταξιδεύουν μόνο με το πλήρες backup.
   </div>
 </div>
 
@@ -45,12 +84,10 @@
         <td class="mono">{{ '%.1f'|format(f.size / 1024) }} KB</td>
         <td class="btnrow">
           <a class="ghost" href="{{ url_for('backup.safety_download', scope=f.scope, name=f.name) }}">⬇ Λήψη</a>
-          {% if f.system %}
           <form method="post" action="{{ url_for('backup.safety_restore', scope=f.scope, name=f.name) }}"
-                onsubmit="return confirm('Να αντικατασταθούν ΟΛΑ τα δεδομένα από αυτό το αντίγραφο; Θα κρατηθεί αντίγραφο της τρέχουσας κατάστασης και θα χρειαστεί νέα σύνδεση.');">
+                onsubmit='return confirm({{ ("Να αντικατασταθούν ΟΛΑ τα δεδομένα από αυτό το αντίγραφο; Θα κρατηθεί αντίγραφο της τρέχουσας κατάστασης και θα χρειαστεί νέα σύνδεση." if f.system else "Να αντικατασταθούν τα δεδομένα της εταιρείας «" ~ f.label ~ "» από αυτό το αντίγραφο; Θα κρατηθεί αντίγραφο της τρέχουσας κατάστασής της.")|tojson }});'>
             <button class="ghost" type="submit">⬆ Επαναφορά</button>
           </form>
-          {% endif %}
           <form method="post" action="{{ url_for('backup.safety_delete', scope=f.scope, name=f.name) }}"
                 onsubmit="return confirm('Να διαγραφεί οριστικά αυτό το αντίγραφο;');">
             <button class="run danger" type="submit">🗑 Διαγραφή</button>
@@ -60,8 +97,6 @@
     {% endfor %}
     </tbody>
   </table>
-  <div class="muted backup-note">Τα αντίγραφα μιας εταιρείας (.json) επαναφέρονται
-    από το Audit log της εταιρείας: Λήψη εδώ → «Restore events» εκεί.</div>
   {% else %}
   <div class="muted">Κανένα αυτόματο αντίγραφο.</div>
   {% endif %}

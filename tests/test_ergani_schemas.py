@@ -112,7 +112,8 @@ def _person(**over):
 
 COMPANY = SimpleNamespace(ame="1234567890", afm="123456789", legal_name="ACME")
 PROFILE = SimpleNamespace(branch_no=0, kad="1234", specialty_code="123456",
-                          specialty_name="Χ", kpk="101", auxiliary_scheme="efka")
+                          specialty_name="Χ", kpk="101", auxiliary_scheme="efka",
+                          ergani_specialty_code="4321", ergani_specialty_description="ΠΩΛΗΤΕΣ",)
 BRANCH = SimpleNamespace(sepe_code="13010", oaed_code="101233", kad_code="2521",
                          kallikratis_code="92210101")
 

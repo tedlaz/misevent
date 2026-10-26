@@ -17,7 +17,7 @@ from calendar import monthrange
 from copy import copy
 from datetime import date, datetime, timedelta
 from types import SimpleNamespace
-from urllib.parse import urlparse
+from urllib.parse import quote, urlparse
 
 from flask import Blueprint, Response, abort, jsonify, render_template, request, url_for
 
@@ -1113,8 +1113,9 @@ def _calendar_day(e, d: date, over: dict | None = None) -> list:
         return [("leave", "", LEAVE_LABELS.get(leave.leave_type.value,
                                                leave.leave_type.value))]
     hours = e.day_schedule(d)
-    out = [("plan", re.sub(r"\s*-\s*", "-", hours),
-            "ΕΡΓΑΣΙΑ" if hours else "ΑΝΑΠΑΥΣΗ/ΡΕΠΟ")]
+    tele = bool(hours) and any(g["telework"] for g in constraints.parse_day_schedule(hours))
+    out = [("plan tele" if tele else "plan", re.sub(r"\s*-\s*", "-", hours),
+            "ΤΗΛΕΕΡΓΑΣΙΑ" if tele else "ΕΡΓΑΣΙΑ" if hours else "ΑΝΑΠΑΥΣΗ/ΡΕΠΟ")]
     # ταίρι από το ΠΡΟΓΡΑΜΜΑ (όχι πραγματικό χτύπημα): δείχνεται κενό
     from_schedule = {p["id"] for x in (d - timedelta(days=1), d, d + timedelta(days=1))
                      for p in e.punches_on(x) if p.get("source") == "schedule"}
@@ -1225,10 +1226,14 @@ def ideal_punches(e, first: date) -> list:
 
 
 def karta_response(punches: list, filename: str) -> Response:
+    # Ελληνικά στο όνομα (επωνυμία): `filename*` κατά RFC 5987 + ASCII εφεδρικό
+    # για παλιούς clients — ωμό μη-ASCII header δεν περνά (latin-1).
+    ascii_name = filename.encode("ascii", "ignore").decode() or "karta.xlsx"
     return Response(
         karta_import.build_karta(punches),
         content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+        headers={"Content-Disposition": f'attachment; filename="{ascii_name}"; '
+                                        f"filename*=UTF-8''{quote(filename)}"},
     )
 
 
@@ -1243,11 +1248,27 @@ def calendar_page():
                            m=request.args.get("m", ""))
 
 
-def _on_calendar_page() -> bool:
-    """Το αίτημα htmx ήρθε από την οθόνη «Ημερολόγιο» (όχι από την καρτέλα:
-    εκεί δεν υπάρχει #employment-card για να αντικατασταθεί)."""
+def _on_calendar_page(employment_id: str) -> bool:
+    """Το αίτημα htmx ΔΕΝ ήρθε από την καρτέλα του εργαζομένου (οθόνη
+    «Ημερολόγιο», modal ημερολογίου των Παρουσιών…): εκεί δεν υπάρχει
+    #employment-card για να αντικατασταθεί."""
     path = urlparse(request.headers.get("HX-Current-URL", "")).path
-    return path == url_for("employments.calendar_page")
+    return path != url_for("employments.detail", employment_id=employment_id)
+
+
+@bp.get("/<employment_id>/calendar/modal")
+def calendar_modal(employment_id):
+    """Το ημερολόγιο σε modal (κλικ στο όνομα στις Παρουσίες), στον μήνα `m`."""
+    e = proj.employments.get(employment_id)
+    if e is None:
+        abort(404)
+    return render_template("partials/_calendar_modal.html", e=e,
+                           m=request.args.get("m", ""))
+
+
+@bp.get("/calendar/modal/close")
+def calendar_modal_close():
+    return ""
 
 
 @bp.get("/<employment_id>/calendar")
@@ -1386,6 +1407,7 @@ def calendar_day(employment_id):
 def _day_modal(employment_id: str, d: date, form=None) -> str:
     e = proj.employments.get(employment_id) or abort(404)
     ref = today()
+    closed_end = svc.closed_period_end()
     return render_template(
         "partials/_emp_day_history_modal.html", e=e, d=d, form=form or {},
         history=_day_history(employment_id, d), items=_calendar_day(e, d),
@@ -1394,7 +1416,9 @@ def _day_modal(employment_id: str, d: date, form=None) -> str:
                 "off": "εκτός απασχόλησης"}[e.day_status(d)],
         # ίδιοι κανόνες με το «Ημερήσιο» / τα Ζωντανά· χτύπημα κάρτας μόνο
         # σε ημέρα που έχει ξεκινήσει (η κάρτα καταγράφει ό,τι ΣΥΝΕΒΗ)
-        can_plan=e.active_on(d) and (d > ref or _retro_open(d, ref)),
+        # κλεισμένη μισθοδοσία = παγωμένο πρόγραμμα (command layer)
+        can_plan=e.active_on(d) and (d > ref or _retro_open(d, ref))
+        and not (closed_end and d <= closed_end),
         can_punch=e.active_on(d) and d <= ref,
         # διελεύσεις & βάρδιες της ημέρας (✕ ακύρωση, ⤓ ορφανό από πρόγραμμα)
         card=q.card_day(d, employment_id),
@@ -1403,7 +1427,7 @@ def _day_modal(employment_id: str, d: date, form=None) -> str:
                       (svc.retro_absence_gaps(e, d)
                        if proj.schedule_system_on(d) == "retro" else [])],
         absence_reasons=ergani_params.absence_reasons(),
-        on_calendar_page=_on_calendar_page(),
+        on_calendar_page=_on_calendar_page(employment_id),
         **_punch_suggestion(e, d),
     )
 
@@ -1831,12 +1855,14 @@ def schedule_daily(employment_id):
                 "οθόνη ΕΡΓΑΝΗ")
 
     ok, msg = run_command(cmd)
-    if ok and f.get("cal"):
-        # από την οθόνη «Ημερολόγιο»: ανανεώνεται μόνο το modal + ημερολόγιο
+    if f.get("cal"):
+        # από την οθόνη «Ημερολόγιο»: ανανεώνεται μόνο το modal + ημερολόγιο.
+        # Και το ΣΦΑΛΜΑ εδώ — εκεί δεν υπάρχει #daily-modal για retarget.
         resp = flash_to(_day_modal(employment_id, date.fromisoformat(f["week"])),
-                        msg, err=False)
-        resp.headers["HX-Trigger"] = json.dumps(
-            {"flash": {"msg": msg, "err": False}, "ecal-refresh": True})
+                        msg, err=not ok)
+        if ok:
+            resp.headers["HX-Trigger"] = json.dumps(
+                {"flash": {"msg": msg, "err": False}, "ecal-refresh": True})
         return resp
     if ok:
         return flash_to(_with_package(employment_id, f.get("week")), msg, err=False)

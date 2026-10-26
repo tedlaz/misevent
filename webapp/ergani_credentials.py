@@ -85,6 +85,10 @@ class SecretStore:
                 (store, environment, username, token or b"",
                  datetime.now(UTC).isoformat(timespec="seconds")))
 
+    def delete(self, store: str):
+        with self.conn:
+            self.conn.execute("DELETE FROM ergani_credentials WHERE store = ?", (store,))
+
     def client(self, store: str) -> ergani_mod.ErganiClient:
         """Ο client ΕΡΓΑΝΗ της εταιρείας, κατά τις ρυθμίσεις της."""
         row = self.conn.execute(

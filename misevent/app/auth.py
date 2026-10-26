@@ -32,6 +32,7 @@ from misevent.domain.auth_events import (
     CompanyArchived,
     CompanyProvisioned,
     CompanyRenamed,
+    CompanyUnarchived,
     InvitationAccepted,
     InvitationIssued,
     InvitationRevoked,
@@ -45,11 +46,6 @@ from misevent.domain.auth_events import (
     UserReactivated,
     UserRegistered,
 )
-
-# Αρχικός λογαριασμός — δημιουργείται ΜΟΝΟ σε κενό σύστημα και ο κωδικός
-# του είναι υποχρεωτικά προσωρινός (must_change).
-BOOTSTRAP_EMAIL = "admin@admin.app"
-BOOTSTRAP_PASSWORD = "changeme"
 
 INVITE_VALID_DAYS = 7
 RESET_VALID_DAYS = 2
@@ -258,6 +254,8 @@ class AuthProjections:
             self.companies[e.company_id].name = e.name
         elif isinstance(e, CompanyArchived) and e.company_id in self.companies:
             self.companies[e.company_id].archived = True
+        elif isinstance(e, CompanyUnarchived) and e.company_id in self.companies:
+            self.companies[e.company_id].archived = False
 
     def rebuild(self, store):
         self.__init__()
@@ -368,17 +366,13 @@ class AuthService:
         )
         return user_id
 
-    def bootstrap_admin(self) -> str | None:
-        """Αρχικός διαχειριστής σε ΚΕΝΟ σύστημα. Ο κωδικός είναι προσωρινός:
-        η πρώτη σύνδεση επιβάλλει αλλαγή."""
+    def setup_first_admin(self, email: str, password: str, repeat: str) -> str:
+        """ΠΡΩΤΗ εκκίνηση: ο χρήστης ορίζει ο ίδιος τον διαχειριστή — κανένας
+        προεπιλεγμένος λογαριασμός/κωδικός. ΜΟΝΟ σε σύστημα χωρίς χρήστες:
+        μετά, νέοι χρήστες μπαίνουν μόνο με πρόσκληση."""
         if self.proj.users:
-            return None
-        return self.register_user(
-            BOOTSTRAP_EMAIL,
-            BOOTSTRAP_PASSWORD,
-            is_admin=True,
-            must_change=True,
-        )
+            raise ValueError("Η αρχική ρύθμιση έχει ήδη γίνει — συνδεθείτε")
+        return self.register_user(email, password, is_admin=True, password_repeat=repeat)
 
     def authenticate(self, email: str, password: str) -> User:
         """Επιστρέφει τον χρήστη ή πετά ValueError. Το μήνυμα είναι σκόπιμα
@@ -638,18 +632,30 @@ class AuthService:
         return "Η ονομασία ενημερώθηκε"
 
     def archive_company(self, company_id: str, by: str = "") -> str:
-        if company_id not in self.proj.companies:
+        """«Διαγραφή» = απόσυρση: τα δεδομένα μένουν και επαναφέρονται."""
+        ref = self.proj.companies.get(company_id)
+        if ref is None or ref.archived:
             raise ValueError("Η εταιρεία δεν βρέθηκε")
+        if len(self.proj.active_companies()) == 1:
+            raise ValueError("Πρέπει να παραμείνει τουλάχιστον μία εταιρεία")
         self.store.append(company_id, CompanyArchived(company_id=company_id, by=by))
         return "Η εταιρεία αποσύρθηκε από τη λίστα"
+
+    def unarchive_company(self, company_id: str, by: str = "") -> str:
+        ref = self.proj.companies.get(company_id)
+        if ref is None or not ref.archived:
+            raise ValueError("Η εταιρεία δεν είναι αποσυρμένη")
+        if any(c.name.lower() == ref.name.lower() for c in self.proj.active_companies()):
+            raise ValueError(f"Υπάρχει ήδη ενεργή εταιρεία με την ονομασία «{ref.name}» "
+                             "— μετονόμασέ την πρώτα")
+        self.store.append(company_id, CompanyUnarchived(company_id=company_id, by=by))
+        return "Η εταιρεία επανήλθε στη λίστα"
 
 
 __all__ = [
     "AUTH_EVENT_TYPES",
     "AuthProjections",
     "AuthService",
-    "BOOTSTRAP_EMAIL",
-    "BOOTSTRAP_PASSWORD",
     "CompanyRef",
     "Invitation",
     "User",

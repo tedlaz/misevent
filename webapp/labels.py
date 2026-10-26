@@ -150,9 +150,13 @@ TERMINATION_REASONS = [
 ]
 
 # ------------------------------------------------------------- ΠΛΟΗΓΗΣΗ
-# Η αρχική μένει ΕΞΩ από τις ομάδες: δεν «ανήκει» κάπου και πρέπει να είναι
+# Η αρχική, οι Παρουσίες και η Μισθοδοσία μένουν ΕΞΩ από τις ομάδες: πρέπει να είναι
 # πάντα ένα κλικ μακριά, ό,τι κι αν είναι ανοιχτό.
-NAV_HOME = ("dashboard.index", "📊", "Επισκόπηση")
+NAV_TOP = [
+    ("dashboard.index", "📊", "Επισκόπηση"),
+    ("attendance.index", "⏱️", "Παρουσίες"),
+    ("payroll.index", "🧮", "Μισθοδοσία"),
+]
 
 # Ομάδες του sidebar: (κλειδί, ετικέτα, εικονίδιο, [σελίδες]).
 # Κάθε σελίδα: (endpoint, εικονίδιο, ετικέτα, admin_only).
@@ -168,11 +172,9 @@ NAV_HOME = ("dashboard.index", "📊", "Επισκόπηση")
 NAV_GROUPS = [
     ("staff", "Προσωπικό", "👥", [
         ("persons.index", "👥", "Εργαζόμενοι", False),
-        ("attendance.index", "⏱️", "Παρουσίες", False),
         ("employments.calendar_page", "📆", "Ημερολόγιο", False),
     ]),
     ("pay", "Αμοιβές", "🧮", [
-        ("payroll.index", "🧮", "Μισθοδοσία", False),
         ("payments.index", "💶", "Πληρωμές", False),
         ("dashboard.stats", "📈", "Στατιστικά", False),
     ]),
@@ -183,7 +185,6 @@ NAV_GROUPS = [
     ]),
     ("setup", "Ρυθμίσεις", "⚙️", [
         ("company.index", "🏢", "Εταιρεία", False),
-        ("audit.index", "📜", "Audit log", False),
     ]),
     # Σελίδες πάνω από την ενεργή εταιρεία (SYSTEM_ENDPOINTS). Οι
     # «Παράμετροι» είναι ΚΟΙΝΕΣ για όλες τις εταιρείες (νομοθετικές
@@ -191,6 +192,7 @@ NAV_GROUPS = [
     # εταιρείας.
     ("system", "Σύστημα", "🗂️", [
         ("companies.index", "🗂️", "Εταιρείες", False),
+        ("apd_import.index", "📥", "Εισαγωγή από ΑΠΔ", False),
         ("settings.index", "⚙️", "Παράμετροι", True),
         ("users.index", "🔑", "Χρήστες", True),
         ("backup.index", "💾", "Backup", True),

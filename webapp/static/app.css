@@ -178,6 +178,8 @@ button.run,a.run{font:inherit;font-weight:600;border:0;border-radius:9px;
 button.run:disabled{background:var(--done-bg);color:var(--done);
   cursor:not-allowed}
 button.run.danger{background:var(--prob)}
+/* Native popover επιβεβαίωσης (π.χ. διαγραφή εταιρείας) — χωρίς JS */
+.confirm-pop{text-align:left;max-width:min(460px,calc(100vw - 32px))}
 /* Προειδοποίηση εκπρόθεσμης — επιτρέπεται η υποβολή, με ρίσκο προστίμου */
 .warnbox{background:var(--prob-bg);border:1px solid var(--prob);color:var(--prob);
   border-radius:10px;padding:10px 12px;font-size:13px;line-height:1.5;
@@ -236,7 +238,8 @@ button.tag.lnk-tag{font-family:inherit;font-size:10.5px;font-weight:700}
 .tabs:has(#tab-branches:checked) .tp-branches,
 .tabs:has(#tab-specialties:checked) .tp-specialties,
 .tabs:has(#tab-kpk:checked) .tp-kpk,
-.tabs:has(#tab-ergani:checked) .tp-ergani{display:block}
+.tabs:has(#tab-ergani:checked) .tp-ergani,
+.tabs:has(#tab-audit:checked) .tp-audit{display:block}
 /* ενεργή ετικέτα */
 #tab-general:checked ~ .tabbar label[for=tab-general],
 #tab-foreign:checked ~ .tabbar label[for=tab-foreign],
@@ -247,7 +250,8 @@ button.tag.lnk-tag{font-family:inherit;font-size:10.5px;font-weight:700}
 .tabs:has(#tab-branches:checked) .tabbar label[for=tab-branches],
 .tabs:has(#tab-specialties:checked) .tabbar label[for=tab-specialties],
 .tabs:has(#tab-kpk:checked) .tabbar label[for=tab-kpk],
-.tabs:has(#tab-ergani:checked) .tabbar label[for=tab-ergani]{
+.tabs:has(#tab-ergani:checked) .tabbar label[for=tab-ergani],
+.tabs:has(#tab-audit:checked) .tabbar label[for=tab-audit]{
   color:var(--ink);background:var(--card);border-color:var(--line);
   border-bottom:1px solid var(--card)}
 .legend{display:flex;gap:14px;flex-wrap:wrap;font-size:12.5px;
@@ -686,6 +690,9 @@ canvas{max-height:230px}
 .atbl .rt{text-align:right}
 .atbl-row .rt{font-family:var(--mono);font-size:14px}
 .atbl-row .nm{font-weight:600}
+/* όνομα = σύνδεσμος στο ημερολόγιο (modal) */
+.atbl-row a.nm{display:block;color:inherit;text-decoration:none;cursor:pointer}
+.atbl-row a.nm:hover{text-decoration:underline}
 .atbl-row .sub{font-size:11.5px;color:var(--muted);margin-top:1px}
 .atbl-row .zero{color:var(--muted)}
 .lnkbtn{font:inherit;background:none;border:0;padding:0;cursor:pointer;
@@ -2616,7 +2623,7 @@ nav.side .co{font-size:11.5px}
 /* --- Ημερολόγιο εργαζομένου (_employment_calendar.html) -----------------
    Κελιά-κάρτες με κλιμακωτή είσοδο (--i από το template) σε κάθε αλλαγή μήνα. */
 .ecal{--ecal-plan:#4F7CF7;--ecal-punch:#7CB518;--ecal-overtime:#F2742E;--ecal-leave:#14B8A6;
-  --ecal-hol:#D6336C;--ecal-today:#7C3AED}
+  --ecal-hol:#D6336C;--ecal-today:#7C3AED;--ecal-tele:#A044D0}
 .ecal-keys{display:flex;flex-wrap:wrap;gap:8px;font-size:12.5px;margin-bottom:14px}
 .ecal-keys label{--c:var(--ecal-plan);position:relative;display:flex;align-items:center;gap:7px;
   cursor:pointer;padding:5px 12px 5px 9px;border-radius:999px;user-select:none;font-weight:500;
@@ -2686,6 +2693,7 @@ nav.side .co{font-size:11.5px}
   transition:background .2s}
 .ecal-d:hover .ecal-ev{background:color-mix(in srgb,var(--c) 20%,var(--card))}
 .ecal-ev b{display:block;font-family:var(--mono);font-weight:600}
+.ecal-ev.plan.tele{--c:var(--ecal-tele)}
 .ecal-ev.punch{--c:var(--ecal-punch)}
 .ecal-ev.punch.orphan{--c:#F2B705}
 .ecal-ev.absence{--c:#8B5CF6}
@@ -2783,6 +2791,10 @@ nav.side .co{font-size:11.5px}
 .audit-tx summary{cursor:pointer;color:var(--muted)}
 .audit-tx[open] summary{margin-bottom:6px}
 .audit-tx .tbl{font-size:11.5px;max-height:none}
+/* μεγάλα πεδία payload — πίσω από κουμπί (_audit.html, macro payload) */
+.audit-more summary{cursor:pointer;color:var(--muted);margin-top:3px}
+.audit-more > div{white-space:pre-wrap;word-break:break-word;margin:4px 0;
+  padding:4px 6px;border:1px solid var(--line);border-radius:4px}
 
 /* Λεπτομέρειες υποχρέωσης: αναλυτικά ανά εργαζόμενο (_ob_detail_modal.html) */
 .ob-blocks{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:10px;margin-top:10px}
@@ -2969,3 +2981,13 @@ html[data-theme=hackernoon-dark] :is(.tag.teka, .pslip-h .badge, .payslip .pd-ta
 .themesel{display:flex;gap:8px;align-items:center;margin-top:18px;padding:0 10px;
   font-size:12px;color:var(--muted)}
 .themesel select{font:inherit;font-size:12px;padding:3px 6px}
+
+/* Οδηγός «Εισαγωγή από ΑΠΔ»: κλειδωμένα πεδία (από το αρχείο) και ομάδα
+   «Προς συμπλήρωση» με διαφορετικό φόντο, στο τέλος κάθε ενότητας. */
+.frm input.locked{background:var(--done-bg);color:var(--muted);cursor:default}
+.frm.need{background:var(--warn-bg);border:1px solid #F3D9AE;border-radius:10px;
+  padding:12px;margin:10px 0 16px}
+.need input:not([type=checkbox]),.need select{background:#fff}
+td.need,#apd-sched td input,#apd-sched td select{background:var(--warn-bg)}
+.need-title{font-size:11px;font-weight:700;letter-spacing:.06em;color:var(--warn);
+  text-transform:uppercase}

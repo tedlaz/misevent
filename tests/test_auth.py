@@ -1,7 +1,7 @@
 """
 ΧΡΗΣΤΕΣ & ΔΙΚΑΙΩΜΑΤΑ — μέσα από το ΙΔΙΟ το UI (test client).
 
-  • bootstrap admin@admin.app με ΠΡΟΣΩΡΙΝΟ κωδικό → υποχρεωτική αλλαγή
+  • νέα εγκατάσταση: ΚΑΝΕΝΑΣ προεπιλεγμένος χρήστης — ο διαχειριστής ορίζεται επί τόπου
   • πρόσκληση με token → ο προσκεκλημένος ορίζει email + κωδικό
   • χωρίς δικαιώματα δεν βλέπει καμία εταιρεία· ο admin τα δίνει
   • πρόσβαση ΜΟΝΟ στις εταιρείες που του δόθηκαν
@@ -45,22 +45,29 @@ def test_auth(fresh_system):
     app = create_app()
     admin = app.test_client()
 
-    # -- 1. BOOTSTRAP + ΥΠΟΧΡΕΩΤΙΚΗ ΑΛΛΑΓΗ ΚΩΔΙΚΟΥ --------------------
-    r = login(admin, "admin@admin.app", "λάθος")
-    check("λάθος κωδικός δεν συνδέει", r.status_code == 401)
-
-    r = login(admin, "admin@admin.app", "changeme")
-    check("ο αρχικός admin συνδέεται", r.headers.get("Location") == "/password")
-    r = admin.get("/persons/")
-    check("με προσωρινό κωδικό ΚΑΜΙΑ σελίδα δεν ανοίγει",
-          r.status_code == 302 and r.headers["Location"] == "/password")
-    r = admin.post("/password", data={"current_password": "changeme",
-                                      "new_password": "changeme", "repeat": "changeme"})
-    check("ο νέος κωδικός δεν επιτρέπεται ίδιος με τον παλιό", r.status_code == 400)
-    r = admin.post("/password", data={"current_password": "changeme",
-                                      "new_password": "admin-2026", "repeat": "admin-2026"})
-    check("η αλλαγή κωδικού ξεκλειδώνει την εφαρμογή", r.headers.get("Location") == "/")
+    # -- 1. ΑΡΧΙΚΗ ΡΥΘΜΙΣΗ: ΚΑΝΕΝΑΣ ΠΡΟΕΠΙΛΕΓΜΕΝΟΣ ΛΟΓΑΡΙΑΣΜΟΣ ---------
+    check("νέα εγκατάσταση: κανένας χρήστης", not auth.users)
+    check("ο παλιός προεπιλεγμένος λογαριασμός ΔΕΝ υπάρχει",
+          login(admin, "admin@admin.app", "changeme").status_code == 401)
+    r = admin.get("/login")
+    check("η σύνδεση οδηγεί στην αρχική ρύθμιση", r.headers.get("Location") == "/setup")
+    r = admin.post("/setup", data={"email": "boss@example.com", "password": "admin-2026",
+                                   "repeat": "λάθος"})
+    check("διαφορετική επανάληψη κωδικού απορρίπτεται",
+          r.status_code == 400 and not auth.users)
+    r = admin.post("/setup", data={"email": "boss@example.com", "password": "admin-2026",
+                                   "repeat": "admin-2026"})
+    check("ο διαχειριστής δημιουργείται και μπαίνει στον οδηγό «Ξεκινώντας»",
+          r.headers.get("Location") == "/welcome/")
+    (boss,) = auth.users.values()
+    check("είναι διαχειριστής με τον δικό του κωδικό",
+          boss.is_admin and not boss.must_change_password)
     check("η εφαρμογή ανοίγει", admin.get("/persons/").status_code == 200)
+    intruder = app.test_client()
+    r = intruder.post("/setup", data={"email": "x@example.com", "password": "x-2026-xx",
+                                      "repeat": "x-2026-xx"})
+    check("δεύτερη «αρχική ρύθμιση» δεν γίνεται",
+          r.headers.get("Location") == "/login" and len(auth.users) == 1)
 
     # -- 2. ΔΥΟ ΕΤΑΙΡΕΙΕΣ ----------------------------------------------
     a_id = registry.create_company("ΑΛΦΑ ΑΕ")
@@ -154,7 +161,9 @@ def test_auth(fresh_system):
 
     fresh = app.test_client()
     check("συνδέεται με τον νέο κωδικό",
-          login(fresh, "kostas@example.com", "neos-kodikos").headers.get("Location") == "/")
+          # δικαίωμα δημιουργίας + καμία εταιρεία με δεδομένα -> οδηγός «Ξεκινώντας»
+          login(fresh, "kostas@example.com", "neos-kodikos").headers.get("Location")
+          == "/welcome/")
     check("ο παλιός κωδικός δεν δουλεύει πια",
           login(app.test_client(), "kostas@example.com", "kostas-123").status_code == 401)
 

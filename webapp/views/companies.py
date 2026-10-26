@@ -42,9 +42,11 @@ def _page(user, status: int = 200, error: str | None = None):
     αυτόνομη σελίδα που εξηγεί ότι εκκρεμούν δικαιώματα."""
     rows = _rows(user)
     template = "companies.html" if rows else "companies_none.html"
+    archived = [c for c in auth.companies.values() if c.archived] if user.is_admin else []
     return (
         render_template(
-            template, rows=rows, may_create=may_create(user), user=user, error=error
+            template, rows=rows, may_create=may_create(user), user=user, error=error,
+            archived=archived,
         ),
         status,
     )
@@ -63,7 +65,7 @@ def select(company_id):
     user = current_user()
     if not user:
         return redirect(url_for("auth.login"))
-    if not user.can_access(company_id) or company_id not in auth.companies:
+    if company_id not in {c.company_id for c in accessible(user)}:
         abort(403)
     session["company_id"] = company_id
     return redirect(request.form.get("next") or url_for("dashboard.index"))
@@ -92,4 +94,40 @@ def rename(company_id):
     if not user or not (user.is_admin or user.can_access(company_id)):
         abort(403)
     run_command(registry.auth_svc.rename_company, company_id, request.form.get("name", ""))
+    return redirect(url_for("companies.index"))
+
+
+@bp.post("/delete/<company_id>")
+def delete(company_id):
+    """ΟΡΙΣΤΙΚΗ διαγραφή εταιρείας από παντού (`Registry.purge_company`).
+    Μόνο διαχειριστής, με πληκτρολόγηση της επωνυμίας ως επιβεβαίωση."""
+    user = current_user()
+    if not (user and user.is_admin):
+        abort(403)
+    if company_id not in auth.companies:
+        abort(404)
+    # Η επωνυμία ή ο χώρος: η display_name αλλάζει μόλις φορτωθεί η εταιρεία.
+    names = {registry.display_name(company_id), auth.companies[company_id].name}
+    if (request.form.get("confirm") or "").strip() not in names:
+        return _page(user, status=400, error="Λάθος επιβεβαίωση — τίποτα δεν διαγράφηκε")
+    try:
+        with lock:
+            registry.purge_company(company_id)
+    except ValueError as exc:
+        return _page(user, status=400, error=str(exc))
+    if session.get("company_id") == company_id:
+        session.pop("company_id")
+    return redirect(url_for("companies.index"))
+
+
+@bp.post("/unarchive/<company_id>")
+def unarchive(company_id):
+    user = current_user()
+    if not (user and user.is_admin):
+        abort(403)
+    try:
+        with lock:
+            registry.auth_svc.unarchive_company(company_id, by=user.user_id)
+    except ValueError as exc:
+        return _page(user, status=400, error=str(exc))
     return redirect(url_for("companies.index"))

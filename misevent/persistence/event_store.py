@@ -397,6 +397,25 @@ class EventStore:
         return cur.rowcount
 
 
+    def purge(self, aggregate_id: str | None = None) -> int:
+        """ΟΡΙΣΤΙΚΗ διαγραφή: ΟΛΟ το store (και η γραμμή του στο `stores`), ή
+        μόνο τα events ενός aggregate. Μόνο για τη διαγραφή εταιρείας."""
+        try:
+            self.conn.execute("BEGIN IMMEDIATE")
+            if aggregate_id is None:
+                cur = self.conn.execute("DELETE FROM events WHERE store = ?", (self.sid,))
+                self.conn.execute("DELETE FROM stores WHERE id = ?", (self.sid,))
+            else:
+                cur = self.conn.execute(
+                    "DELETE FROM events WHERE store = ? AND aggregate_id = ?",
+                    (self.sid, aggregate_id))
+            self.conn.commit()
+        except Exception:
+            self.conn.rollback()
+            raise
+        return cur.rowcount
+
+
 def _marks(values) -> str:
     """Placeholders για `IN (...)` — όσα και τα values."""
     return ",".join("?" * len(values))

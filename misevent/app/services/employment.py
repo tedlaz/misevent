@@ -634,7 +634,7 @@ class EmploymentMixin:
         return ergani_mod.build_web_e3n(
             self.proj.company,
             emp,
-            emp.insurance_profile,
+            self.ergani_profile(emp.insurance_profile),
             emp.schedule,
             branch=branch,
             files={kind: doc["content"]

@@ -62,6 +62,7 @@ def test_efka_days():
             "ΥΠΑΛΛΗΛΟΣ",
             {"MAIN_EPIK": {"kad": "0141", "specialty_code": "514020",
                            "kpk": "0101"}},
+            ergani_specialty_code="419", ergani_specialty_description="ΛΟΙΠΟΙ ΥΠΑΛΛΗΛΟΙ ΓΡΑΦΕΙΟΥ",
         )
         return store, proj, svc
 

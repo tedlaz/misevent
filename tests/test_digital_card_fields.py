@@ -45,6 +45,7 @@ def test_digital_card_fields_persist_and_map_to_web_e3n():
     profile = SimpleNamespace(
         branch_no=0, kad="1234", specialty_code="123456", kpk="0101",
         auxiliary_scheme="efka", specialty_name="ΠΩΛΗΤΗΣ",
+        ergani_specialty_code="4321", ergani_specialty_description="ΠΩΛΗΤΕΣ",
     )
     values = ergani.build_web_e3n(
         SimpleNamespace(ame="1", afm="2", legal_name="ΔΟΚΙΜΗ"),

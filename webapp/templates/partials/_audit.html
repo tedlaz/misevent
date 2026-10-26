@@ -1,13 +1,23 @@
-{% extends "base.html" %}
-{% block title %}Audit log{% endblock %}
-{% block heading %}Audit log{% endblock %}
-{% block subheading %}
-  {{ total }} events — επίλεξε σημείο για πλήρη επαναφορά
-{% endblock %}
-
-{% block content %}
-<div class="card">
-  <h2>Event log
+{# AUDIT LOG — καρτέλα ⑤ της «Εταιρείας», φορτώνεται με htmx μόλις ανοίξει
+   (το log μπορεί να είναι μεγάλο). Οι φόρμες γυρίζουν στο company.index?tab=audit. #}
+{# ΩΜΟ payload event: οι ημερομηνίες σε ΗΗ/ΜΜ/ΕΕΕΕ (val_gr — αναδρομικά, ώστε
+   να πιάνει και τα ISO κλειδιά των dict). Inline μόνο τα σύντομα πεδία· τα
+   μεγάλα (λίστες, λεξικά, μακριά κείμενα) πίσω από κουμπί, ένα ανά γραμμή. #}
+{% macro payload(p) %}
+  {% set ns = namespace(long=[]) %}
+  {% for k, v in p.items() %}
+    {% set s = v|val_gr|string %}
+    {% if s|length > 40 %}{% set ns.long = ns.long + [(k, s)] %}{% else %}<span class="tag">{{ k }}={{ s }}</span>{% endif %}
+  {% endfor %}
+  {% if ns.long %}
+    <details class="audit-more">
+      <summary>▸ +{{ ns.long|length }} πεδί{{ 'ο' if ns.long|length == 1 else 'α' }}: {{ ns.long|map('first')|join(', ') }}</summary>
+      {% for k, s in ns.long %}<div><b>{{ k }}</b> = {{ s }}</div>{% endfor %}
+    </details>
+  {% endif %}
+{% endmacro %}
+<div id="audit-panel">
+  <h2>Event log · {{ total }} events
     <span class="norm">— η ΜΟΝΑΔΙΚΗ πηγή αλήθειας· όλα τα υπόλοιπα είναι
       παράγωγα (replay)</span></h2>
 
@@ -46,7 +56,9 @@
     παραγόμενα αρχεία που έχουν διαγραφεί από τον δίσκο.
   </div>
 
-  <form class="btnrow" style="margin-bottom:14px" method="get">
+  <form class="btnrow" style="margin-bottom:14px" method="get"
+        action="{{ url_for('company.index') }}">
+    <input type="hidden" name="tab" value="audit">
     <label class="ref">Τύπος event
       <select name="type" onchange="this.form.submit()">
         <option value="">— όλοι —</option>
@@ -55,14 +67,32 @@
         {% endfor %}
       </select>
     </label>
-    {% if etype %}<a class="ghost" href="{{ url_for('audit.index') }}">Καθαρισμός</a>{% endif %}
+    {% if etype %}<a class="ghost" href="{{ url_for('company.index', tab='audit') }}">Καθαρισμός</a>{% endif %}
   </form>
 
   {% if rows %}
+    {# Σελιδοποίηση μέσα στην καρτέλα (htmx)· το href κρατά τον σύνδεσμο
+       χρήσιμο και χωρίς JS / σε νέα καρτέλα browser. #}
+    {% macro pager() %}
+      {% if pages > 1 %}
+      <div class="btnrow" style="margin:8px 0">
+        {% for p, label in [(1, '« Πρώτη'), (page - 1, '‹ Νεότερες'), (page + 1, 'Παλαιότερες ›'), (pages, 'Τελευταία »')] %}
+          {% if 1 <= p <= pages and p != page %}
+            <a class="ghost" href="{{ url_for('company.index', tab='audit', type=etype or None, page=p) }}"
+               hx-get="{{ url_for('audit.index', type=etype or None, page=p) }}"
+               hx-target="#audit-panel" hx-swap="outerHTML">{{ label }}</a>
+          {% endif %}
+        {% endfor %}
+        <span class="muted">Σελίδα {{ page }} / {{ pages }}</span>
+      </div>
+      {% endif %}
+    {% endmacro %}
     <div class="muted" style="font-size:12.5px;margin-bottom:8px">
-      Εμφανίζονται οι {{ rows|length }} νεότερες κινήσεις (από {{ total }} events) —
-      κάθε κίνηση είναι ΜΙΑ ενέργεια, με όλες τις γραμμές (events) που έγραψε.
+      Κινήσεις {{ (page - 1) * per_page + 1 }}–{{ (page - 1) * per_page + rows|length }} από {{ moves }}
+      ({{ total }} events), νεότερες πρώτα — κάθε κίνηση είναι ΜΙΑ ενέργεια, με όλες
+      τις γραμμές (events) που έγραψε.
     </div>
+    {{ pager() }}
     <form id="rollback-form" method="post" action="{{ url_for('audit.rollback') }}"
           onsubmit="return confirm('Να διαγραφούν ΟΡΙΣΤΙΚΑ όλα τα events μετά το επιλεγμένο σημείο; Η ενέργεια δεν αναιρείται και δεν ακυρώνει εξωτερικές υποβολές ή πληρωμές.');">
       <div class="audit-actions">
@@ -103,24 +133,20 @@
                     {% for x in r.lines %}
                       <tr><td class="mono">{{ x.seq }}</td>
                         <td><b>{{ x.label }}</b></td><td>{{ x.who }}</td>
-                        <td>{% for k, v in x.payload.items() %}<span class="tag">{{ k }}={{ v|val_gr }}</span>{% endfor %}</td></tr>
+                        <td>{{ payload(x.payload) }}</td></tr>
                     {% endfor %}
                   </table>
                 </details>
               {% else %}
-                {% for k, v in r.payload.items() %}
-                  {# ΩΜΟ payload event: οι ημερομηνίες σε ΗΗ/ΜΜ/ΕΕΕΕ (val_gr —
-                     αναδρομικά, ώστε να πιάνει και τα ISO κλειδιά των dict) #}
-                  <span class="tag">{{ k }}={{ v|val_gr }}</span>
-                {% endfor %}
+                {{ payload(r.payload) }}
               {% endif %}
             </td>
           </tr>
         {% endfor %}
       </tbody>
     </table>
+    {{ pager() }}
   {% else %}
     <div class="empty">Κανένα event.</div>
   {% endif %}
 </div>
-{% endblock %}

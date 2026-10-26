@@ -32,6 +32,7 @@ subscribers ΚΑΙ σε αυτό. Έτσι μια νέα ΓΣΣΕ γράφετα
 
 import atexit
 import os
+import shutil
 import threading
 from pathlib import Path
 
@@ -130,7 +131,6 @@ class Registry:
 
         self._tenants: dict[str, Tenant] = {}
 
-        self.auth_svc.bootstrap_admin()
         self._ensure_default_company()
         # Καθαρό κλείσιμο -> η SQLite σβήνει τα -wal/-shm δίπλα στις βάσεις.
         atexit.register(self.close)
@@ -150,21 +150,27 @@ class Registry:
         self.auth.rebuild(self.auth_store)
         for ref in self.auth.active_companies():
             self.tenant(ref.company_id)  # replay τώρα: ένα χαλασμένο event σκάει ΕΔΩ
-        self.auth_svc.bootstrap_admin()
         self._ensure_default_company()
 
+    def needs_setup(self) -> bool:
+        """Νέα εγκατάσταση: κανένας χρήστης — ο πρώτος ορίζεται στη σελίδα
+        «Αρχική ρύθμιση» (κανένας προεπιλεγμένος λογαριασμός)."""
+        return not self.auth.users
+
     def is_fresh(self) -> bool:
-        """Πρώτη εκκίνηση: μόνο ο αρχικός admin με τον ΠΡΟΣΩΡΙΝΟ κωδικό και
-        καμία εταιρεία με δεδομένα. Μόνο τότε επιτρέπεται restore ΧΩΡΙΣ
-        σύνδεση — ο προσωρινός κωδικός είναι ούτως ή άλλως γνωστός, οπότε
-        δεν ανοίγει τίποτα που δεν ήταν ήδη ανοιχτό."""
-        users = list(self.auth.users.values())
-        return (
-            len(users) == 1
-            and users[0].must_change_password
-            and all(self.tenant(c.company_id).event_count == 0
-                    for c in self.auth.active_companies())
-        )
+        """Καμία εταιρεία με δεδομένα — τότε ανοίγει ο οδηγός «Ξεκινώντας»
+        (νέα εταιρεία / restore / εισαγωγή από ΑΠΔ)."""
+        return all(self.tenant(c.company_id).event_count == 0
+                   for c in self.auth.active_companies())
+
+    def empty_company(self, user=None) -> str | None:
+        """Ένας ΚΕΝΟΣ χώρος εταιρείας (χωρίς events), προσβάσιμος από τον
+        χρήστη: η πρώτη εταιρεία μιας νέας εγκατάστασης τον ΞΑΝΑΧΡΗΣΙΜΟΠΟΙΕΙ,
+        αντί να μείνει δίπλα της ένας άδειος «προεπιλεγμένος»."""
+        companies = (self.auth.companies_for(user) if user
+                     else self.auth.active_companies())
+        return next((c.company_id for c in companies
+                     if self.tenant(c.company_id).event_count == 0), None)
 
     # ------------------------------------------------------------ εταιρείες
     def store_name(self, company_id: str) -> str:
@@ -194,6 +200,38 @@ class Registry:
         self.tenant(company_id)  # στήνει τον κόσμο της, ώστε να υπάρχει αμέσως
         if created_by:
             self.auth_svc.grant_company(created_by, company_id, by=created_by)
+        return company_id
+
+    def purge_company(self, company_id: str):
+        """ΟΡΙΣΤΙΚΗ διαγραφή εταιρείας ΑΠΟ ΠΑΝΤΟΥ: events, έγγραφα, κωδικοί
+        ΕΡΓΑΝΗ, safety backups και η εγγραφή της στο μητρώο. ΔΕΝ αναιρείται.
+        ⚠️ Backups ΟΛΟΥ του συστήματος (.zip) που έχουν ήδη κατέβει την
+        περιέχουν ακόμη — αυτά δεν είναι στη διάθεσή μας."""
+        ref = self.auth.companies.get(company_id)
+        if ref is None:
+            raise ValueError("Η εταιρεία δεν βρέθηκε")
+        if not ref.archived and len(self.auth.active_companies()) == 1:
+            raise ValueError("Πρέπει να παραμείνει τουλάχιστον μία εταιρεία")
+        tenant = self._tenants.pop(company_id, None)
+        if tenant:  # να μην ακούει πια τις κοινές παραμέτρους
+            for handler in (tenant.proj.handle, tenant.sched.handle):
+                self.shared._subscribers.remove(handler)
+        store_name = company_store(company_id)
+        self.secrets.delete(store_name)
+        self.documents.purge(store_name)
+        self.db.store(store_name).purge()
+        # ΤΕΛΕΥΤΑΙΟ: αν κάτι πιο πάνω αποτύχει, η εταιρεία φαίνεται ακόμη
+        # στη λίστα και η διαγραφή ξαναδοκιμάζεται.
+        self.auth_store.purge(company_id)
+        self.auth.rebuild(self.auth_store)
+        shutil.rmtree(self.root / "backups" / company_id, ignore_errors=True)
+
+    def claim_company(self, name: str, user) -> str:
+        """Χώρος για ΝΕΑ εταιρεία: ο κενός υπάρχων (μετονομασμένος) ή νέος."""
+        company_id = self.empty_company(user)
+        if company_id is None:
+            return self.create_company(name, created_by=user.user_id)
+        self.auth_svc.rename_company(company_id, name)
         return company_id
 
     def display_name(self, company_id: str) -> str:

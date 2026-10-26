@@ -58,10 +58,12 @@ def test_main_coverage_requires_a_valid_combination():
     with pytest.raises(ValueError, match="δεν ισχύει στο μητρώο"):
         svc.define_specialty(
             "ΛΑΘΟΣ", {"MAIN_EPIK": {"kad": "0110", "specialty_code": "411100",
-                                    "kpk": "0101"}})
+                                    "kpk": "0101"}},
+    ergani_specialty_code="419", ergani_specialty_description="ΛΟΙΠΟΙ ΥΠΑΛΛΗΛΟΙ ΓΡΑΦΕΙΟΥ",)
     svc.define_specialty(
         "ΣΩΣΤΟ", {"MAIN_EPIK": {"kad": "0110", "specialty_code": "122100",
-                                "kpk": "0101"}})
+                                "kpk": "0101"}},
+    ergani_specialty_code="419", ergani_specialty_description="ΛΟΙΠΟΙ ΥΠΑΛΛΗΛΟΙ ΓΡΑΦΕΙΟΥ",)
     assert "ΣΩΣΤΟ" in proj.specialties
 
 
@@ -176,6 +178,7 @@ def test_teka_package_is_fixed():
         {"MAIN": {"kad": "0110", "specialty_code": "122100", "kpk": "0103"},
          "TEKA": {"kad": "1111", "specialty_code": "222222", "kpk": "4169"}},
         epik_carriers=["teka"],
+        ergani_specialty_code="419", ergani_specialty_description="ΛΟΙΠΟΙ ΥΠΑΛΛΗΛΟΙ ΓΡΑΦΕΙΟΥ",
     )
     teka = proj.specialties["ΣΕΡΒΙΤΟΡΟΣ"].package("TEKA")
     assert (teka["kad"], teka["specialty_code"], teka["kpk"]) == ("0083", "000860", "4169")
@@ -192,11 +195,13 @@ def test_welfare_coverage_requires_a_valid_combination():
         svc.define_specialty("ΛΑΘΟΣ", {
             "MAIN_EPIK": main,
             "PRON_UNIFORM": {"kad": "0013", "specialty_code": "999999", "kpk": "0026"},
-        }, pron=pron)
+        }, pron=pron,
+    ergani_specialty_code="419", ergani_specialty_description="ΛΟΙΠΟΙ ΥΠΑΛΛΗΛΟΙ ΓΡΑΦΕΙΟΥ",)
     svc.define_specialty("ΣΩΣΤΟ", {
         "MAIN_EPIK": main,
         "PRON_UNIFORM": {"kad": "0013", "specialty_code": "000108", "kpk": "0026"},
-    }, pron=pron)
+    }, pron=pron,
+    ergani_specialty_code="419", ergani_specialty_description="ΛΟΙΠΟΙ ΥΠΑΛΛΗΛΟΙ ΓΡΑΦΕΙΟΥ",)
     assert "ΣΩΣΤΟ" in proj.specialties
 
 
@@ -208,7 +213,8 @@ def test_apd_special_case_follows_the_auxiliary_carrier():
     combo = {"kad": "5242", "specialty_code": "532030"}
     svc.define_specialty("ΠΩΛΗΤΡΙΑ", {"MAIN_EPIK": {**combo, "kpk": "0101"},
                                       "MAIN": {**combo, "kpk": "0103"}},
-                         epik_carriers=["efka", "teka"])
+                         epik_carriers=["efka", "teka"],
+    ergani_specialty_code="419", ergani_specialty_description="ΛΟΙΠΟΙ ΥΠΑΛΛΗΛΟΙ ΓΡΑΦΕΙΟΥ",)
     people = (("111222336", "05059012343"), ("222333440", "03039012343"))
     for i, ((afm, amka), carrier) in enumerate(zip(people, ("efka", "teka"))):
         pid = svc.register_person(

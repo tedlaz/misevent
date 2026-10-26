@@ -32,7 +32,7 @@ from datetime import timedelta
 from flask import abort, g, redirect, render_template_string, request, session, url_for
 
 from . import clock, filters
-from .labels import EMP_LIFECYCLE, MONTHS_GEN, NAV_HOME, SUBSIDY_LABELS, nav_for
+from .labels import EMP_LIFECYCLE, MONTHS_GEN, NAV_TOP, SUBSIDY_LABELS, nav_for
 from .system import auth, registry, set_tenant
 from .tenancy import data_dir
 
@@ -40,7 +40,8 @@ from .tenancy import data_dir
 # Οι «Παράμετροι» ανήκουν εδώ: οι νομοθετικές παράμετροι και το Μητρώο ΚΠΚ
 # γράφονται στο ΚΟΙΝΟ store (SHARED_EVENT_TYPES) και ισχύουν για ΟΛΕΣ τις
 # εταιρείες — η ενεργή εταιρεία δεν αλλάζει τίποτε σε αυτή τη σελίδα.
-SYSTEM_ENDPOINTS = ("auth.", "companies.", "users.", "settings.", "backup.")
+SYSTEM_ENDPOINTS = ("auth.", "companies.", "apd_import.", "welcome.", "users.",
+                    "settings.", "backup.")
 
 # Σελίδες ΜΟΝΟ για διαχειριστές. Οι «Παράμετροι» είναι ΚΟΙΝΕΣ για όλες τις
 # εταιρείες (νέα ΓΣΣΕ/φορολογική κλίμακα) — δεν τις αλλάζει απλός χρήστης.
@@ -88,6 +89,7 @@ def create_app():
     app.jinja_env.globals["time_strip"] = lambda: queries.time_strip(clock.today())
 
     from .views import (
+        apd_import,
         attendance,
         audit,
         backup,
@@ -107,6 +109,7 @@ def create_app():
         persons,
         settings,
         users,
+        welcome,
         work_schedules,
     )
     from .views import (
@@ -136,6 +139,8 @@ def create_app():
         clock_view,
         auth_view,
         companies,
+        apd_import,
+        welcome,
         users,
     ):
         app.register_blueprint(mod.bp)
@@ -181,7 +186,9 @@ def create_app():
         if not allowed:
             return redirect(url_for("companies.index")) if required else None
         chosen = session.get("company_id")
-        if not chosen or not user.can_access(chosen) or chosen not in auth.companies:
+        # ΟΧΙ `auth.companies`: εκείνο κρατά και τις ΑΠΟΣΥΡΜΕΝΕΣ — μια
+        # εταιρεία που αποσύρθηκε δεν μένει ενεργή σε κανένα ανοιχτό session.
+        if chosen not in {c.company_id for c in allowed}:
             chosen = allowed[0].company_id
             session["company_id"] = chosen
         set_tenant(chosen)
@@ -214,7 +221,7 @@ def create_app():
         user = getattr(g, "user", None)
         company_id = getattr(g, "company_id", None)
         return {
-            "NAV_HOME": NAV_HOME,
+            "NAV_TOP": NAV_TOP,
             "nav": nav_for(bool(user and user.is_admin), request.endpoint or ""),
             "current_user": user,
             # Η ετικέτα κάθε εταιρείας είναι η ΕΠΩΝΥΜΙΑ που καταχωρήθηκε μέσα

@@ -72,6 +72,8 @@ def hire(svc, proj, idx, hire_date=date(2024, 4, 8), gross=1500.0):
     svc.record_external_hire_submission(eid)
     svc.assign_insurance_profile(
         eid,
+        ergani_specialty_code="419",
+        ergani_specialty_description="ΛΟΙΠΟΙ ΥΠΑΛΛΗΛΟΙ ΓΡΑΦΕΙΟΥ",
         coverages=(
             {
                 "fund": "efka_main",

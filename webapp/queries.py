@@ -526,9 +526,9 @@ def payroll_rows(y: int, m: int, preview: bool):
 
     # Preview πάνω στο ΙΔΙΟ συγκεντρωτικό που θα χρησιμοποιήσει η μισθοδοσία
     # (εγκεκριμένο αν υπάρχει, αλλιώς το προσχέδιο) — ίδιοι αριθμοί, όχι
-    # άλλοι: ασθένεια και προσαυξήσεις ωρών όπως στη run_monthly_payroll.
+    # άλλοι: ο ΙΔΙΟΣ υπολογισμός (`payroll_calc_for`) με τη run_monthly_payroll,
+    # ώστε επιδοτήσεις/απαλλαγές να μην αποκλίνουν σε δεύτερο αντίγραφο.
     end = last_working_day_of_month(y, m)
-    wh_rules = config.work_hour_rules_for(end)
     sheet = {r["eid"]: r for r in attendance_sheet(y, m)["rows"]}
     for e in proj.employments.values():
         if not e.hire_submitted or not e.active or e.hire_date is None or e.hire_date > end:
@@ -536,29 +536,14 @@ def payroll_rows(y: int, m: int, preview: bool):
         line = sheet.get(e.employment_id)
         if line is None:
             continue
-        unpaid, days = svc.payroll_days(e, line)
-        sick = svc.sick_deduction(e, line, y, m)
-        hourly = work_hours.hourly_rate(
-            e.pay_type, e.monthly_gross, e.daily_wage, e.weekly_hours
-        )
-        premium = work_hours.pay_supplement(hourly, line, wh_rules)["total"]
-        rates = svc.contribution_rates(e.insurance_profile, end)
-        if e.pay_type == "daily":
-            if days == 0:
-                continue  # καμία παρουσία -> καμία μισθοδοσία
-            r = pe.calc_monthly_daily(e.daily_wage, days, e.children_on(end), end,
-                                      sick=sick, premiums=premium,
-                                      rates=rates)
-        else:
-            r = pe.calc_monthly(e.monthly_gross, e.children_on(end), end,
-                                unpaid_days=unpaid, sick=sick,
-                                premiums=premium, rates=rates,
-                                base_days=pe.monthly_insurance_days(
-                                    e.weekly_hours, line.get("month_planned")))
+        calc = svc.payroll_calc_for(e, y, m, line)
+        if calc is None:
+            continue  # καμία ημέρα ΕΦΚΑ -> καμία μισθοδοσία
+        r = calc["result"]
         rows.append(
             {
                 "Εργαζόμενος": e.full_name,
-                "Ημέρες": days,
+                "Ημέρες": calc["efka_days"],
                 "Προσαυξ.": r.premiums,
                 "Μικτά": r.gross,
                 "ΕΦΚΑ εργαζ.": r.efka_employee,

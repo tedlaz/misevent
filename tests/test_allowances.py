@@ -50,6 +50,8 @@ def make_svc():
 def insure(svc, employment_id):
     svc.assign_insurance_profile(
         employment_id,
+        ergani_specialty_code="419",
+        ergani_specialty_description="ΛΟΙΠΟΙ ΥΠΑΛΛΗΛΟΙ ΓΡΑΦΕΙΟΥ",
         coverages=(
             {
                 "fund": "efka_main",

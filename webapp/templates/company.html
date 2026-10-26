@@ -8,15 +8,27 @@
    ζουν ΕΞΩ από τα htmx targets (#company-form, #spec-panel), ώστε το ενεργό
    tab να επιβιώνει κάθε swap (π.χ. μετά από εισαγωγή CSV ή αποθήκευση). #}
 <div class="tabs">
-  <input class="tabradio" type="radio" name="_tab" id="tab-employer" checked>
+  {% set audit_tab = request.args.get('tab') == 'audit' %}
+  <input class="tabradio" type="radio" name="_tab" id="tab-employer" {{ 'checked' if not audit_tab }}>
   <input class="tabradio" type="radio" name="_tab" id="tab-specialties">
   <input class="tabradio" type="radio" name="_tab" id="tab-branches">
   <input class="tabradio" type="radio" name="_tab" id="tab-ergani">
+  <input class="tabradio" type="radio" name="_tab" id="tab-audit" {{ 'checked' if audit_tab }}>
   <div class="tabbar">
     <label for="tab-employer">① Στοιχεία εργοδότη</label>
     <label for="tab-branches">② Παραρτήματα</label>
     <label for="tab-specialties">③ Ειδικότητες (θέσεις εργασίας)</label>
     <label for="tab-ergani">④ Σύνδεση ΕΡΓΑΝΗ</label>
+    <label for="tab-audit">⑤ Audit log</label>
+  </div>
+
+  {# Φορτώνεται μόλις φανεί (ολόκληρο το event log — όχι σε κάθε άνοιγμα της
+     σελίδας). Τα μηνύματα των φορμών του (?error=, ?rolled=…) περνούν μέσα. #}
+  <div class="card tabpane tp-audit">
+    <div hx-get="{{ url_for('audit.index') }}?{{ request.query_string.decode() }}"
+         hx-trigger="intersect once" hx-swap="outerHTML">
+      <div class="muted">Φόρτωση…</div>
+    </div>
   </div>
 
   <div class="card tabpane tp-ergani">

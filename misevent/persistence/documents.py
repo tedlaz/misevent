@@ -45,16 +45,33 @@ class DocumentStore:
     def scope(self, store: str) -> "Documents":
         return Documents(self, store)
 
-    def snapshot(self) -> bytes:
+    def purge(self, store: str) -> int:
+        """ΟΡΙΣΤΙΚΗ διαγραφή όλων των εγγράφων ενός store (διαγραφή εταιρείας)."""
+        with self.conn:
+            return self.conn.execute("DELETE FROM documents WHERE store = ?",
+                                     (store,)).rowcount
+
+    def snapshot(self, store: str | None = None) -> bytes:
+        """Όλη η βάση — ή, με `store`, μόνο τα έγγραφα μιας εταιρείας."""
         mem = sqlite3.connect(MEMORY)
         try:
-            self.conn.backup(mem)
+            if store is None:
+                self.conn.backup(mem)
+            else:
+                mem.execute(_SCHEMA)
+                mem.executemany(
+                    f"INSERT INTO documents ({_COLUMNS}) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                    self.conn.execute(f"SELECT {_COLUMNS} FROM documents "
+                                      "WHERE store = ?", (store,)))
+                mem.commit()
             return _without_wal(mem.serialize())
         finally:
             mem.close()
 
-    def restore_snapshot(self, data: bytes) -> int:
-        """Αντικαθιστά ατομικά ΟΛΑ τα έγγραφα με αυτά ενός `snapshot`."""
+    def restore_snapshot(self, data: bytes, store: str | None = None) -> int:
+        """Αντικαθιστά ατομικά ΟΛΑ τα έγγραφα με αυτά ενός `snapshot` — ή, με
+        `store`, μόνο τα έγγραφα αυτής της εταιρείας, με ΟΛΑ τα έγγραφα του
+        snapshot να ανήκουν πλέον σε αυτήν (backup άλλης εταιρείας → εδώ)."""
         src = sqlite3.connect(MEMORY)
         try:
             src.deserialize(_without_wal(data))
@@ -63,9 +80,14 @@ class DocumentStore:
             raise ValueError("Το αρχείο δεν είναι backup εγγράφων του misevent") from None
         finally:
             src.close()
+        if store is not None:
+            rows = [(store, *r[1:]) for r in rows]
         try:
             self.conn.execute("BEGIN IMMEDIATE")
-            self.conn.execute("DELETE FROM documents")
+            if store is None:
+                self.conn.execute("DELETE FROM documents")
+            else:
+                self.conn.execute("DELETE FROM documents WHERE store = ?", (store,))
             self.conn.executemany(f"INSERT INTO documents ({_COLUMNS}) VALUES "
                                   "(?, ?, ?, ?, ?, ?, ?)", rows)
             self.conn.commit()

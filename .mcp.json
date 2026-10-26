@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "misevent": {
+      "command": "uv",
+      "args": ["run", "--extra", "mcp", "-m", "mcp_server"]
+    }
+  }
+}

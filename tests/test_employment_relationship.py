@@ -57,7 +57,8 @@ def test_fixed_term_is_required_persisted_and_mapped_to_web_e3n():
     assert employment.fixed_term_to == date(2026, 12, 31)
 
     company = SimpleNamespace(ame="1", afm="2", legal_name="ΔΟΚΙΜΗ")
-    profile = SimpleNamespace(branch_no=0, auxiliary_scheme="efka")
+    profile = SimpleNamespace(branch_no=0, auxiliary_scheme="efka",
+                              ergani_specialty_code="4321", ergani_specialty_description="ΠΩΛΗΤΕΣ",)
     form = ergani.build_web_e3n(company, employment, profile, WEEK)[
         "AnaggeliesE3N"
     ]["AnaggeliaE3N"][0]
@@ -282,6 +283,8 @@ def test_fixed_term_correction_does_not_block_next_web_e3n_event(tmp_path):
     )
     service.assign_insurance_profile(
         employment_id,
+        ergani_specialty_code="419",
+        ergani_specialty_description="ΛΟΙΠΟΙ ΥΠΑΛΛΗΛΟΙ ΓΡΑΦΕΙΟΥ",
         coverages=({"fund": "efka_main", "kad": "0000",
                     "specialty_code": "000000", "kpk": "0101"},),
         auxiliary_scheme="efka",

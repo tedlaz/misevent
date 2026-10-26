@@ -61,6 +61,7 @@ def test_web_e3n_payload_uses_documented_schema_and_formats():
         specialty_code="123456",
         specialty_name="ΥΠΑΛΛΗΛΟΣ",
         kpk="101",
+        ergani_specialty_code="4321", ergani_specialty_description="ΠΩΛΗΤΕΣ",
         auxiliary_scheme="efka",
     )
 
@@ -99,7 +100,7 @@ def test_web_e3n_payload_uses_documented_schema_and_formats():
     assert form["f_res_permit_visa_from"] == "01/07/2026"
     assert form["f_res_permit_visa_to"] == "31/10/2026"
     assert form["f_kad_pararthmatos"] == "1234"
-    assert form["f_eidikothta"] == "123456"
+    assert form["f_eidikothta"] == "4321"  # ΕΡΓΑΝΗ, ΟΧΙ ο κωδ. ΟΣΥΚ
     # >=40 ώρες υπερισχύουν του μονοήμερου template: πλήρης απασχόληση.
     assert form["f_kathestosapasxolisis"] == "0"
     assert form["f_working_time_digital_organization"] == "1"
@@ -151,6 +152,7 @@ def test_web_e3n_uses_selected_branch_ergani_fields_not_insurance_kad():
     profile = SimpleNamespace(
         branch_no=2, kad="9999", specialty_code="123456", kpk="101",
         auxiliary_scheme="efka",
+        ergani_specialty_code="4321", ergani_specialty_description="ΠΩΛΗΤΕΣ",
     )
     branch = SimpleNamespace(
         sepe_code="11010", oaed_code="101201", kad_code="0111",

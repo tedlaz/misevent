@@ -159,7 +159,8 @@ def test_kpk_tier_must_match_the_package_role():
             # 0103 είναι ΚΥΡΙΑ — ο MAIN_EPIK απαιτεί ΚΥΡΙΑ+ΕΠΙΚΟΥΡΙΚΗ
             "MAIN_EPIK": {"kad": "5242", "specialty_code": "532030",
                           "kpk": "0103"},
-        })
+        },
+    ergani_specialty_code="419", ergani_specialty_description="ΛΟΙΠΟΙ ΥΠΑΛΛΗΛΟΙ ΓΡΑΦΕΙΟΥ",)
 
 
 def test_teka_carrier_allows_only_the_auxiliary_tier():

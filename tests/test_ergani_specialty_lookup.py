@@ -93,6 +93,43 @@ def test_company_specialty_persists_verified_ergani_pair():
     with pytest.raises(ValueError, match="δεν αντιστοιχεί"):
         service.define_specialty("ΑΛΛΗ", coverages, row["code"], "ΛΑΘΟΣ")
 
+    # Διόρθωση του κωδικού στην ΕΙΔΙΚΟΤΗΤΑ φτάνει στα ΕΠΟΜΕΝΑ έντυπα ΕΡΓΑΝΗ,
+    # παρότι το προφίλ κρατά το αντίγραφο της ανάθεσης.
+    other = ergani_parameters.search_specialties("ταμι")[0]
+    service.define_specialty("ΠΩΛΗΤΗΣ", coverages, other["code"], other["description"])
+    assert proj.employments[employment_id].insurance_profile.ergani_specialty_code == row["code"]
+    form = service.build_hire_web_e3n(employment_id)["AnaggeliesE3N"]["AnaggeliaE3N"][0]
+    assert (form["f_eidikothta"], form["f_eidikothta_anal"]) == (
+        other["code"], other["description"])
+
+
+def test_no_ergani_code_means_no_ergani_form():
+    """Χωρίς κωδικό ΕΡΓΑΝΗ: σφάλμα — ΟΧΙ σιωπηλά ο κωδικός ΟΣΥΚ της ΑΠΔ."""
+    profile = SimpleNamespace(specialty_name="ΠΩΛΗΤΗΣ", specialty_code="411100")
+    with pytest.raises(ValueError, match="ΠΩΛΗΤΗΣ.*κωδικό ειδικότητας ΕΡΓΑΝΗ"):
+        ergani._specialty(profile)
+
+
+def test_lookup_with_prefix_for_many_pairs_on_one_page():
+    """Οδηγός ΑΠΔ: πολλά ζεύγη στη σελίδα — ids/ονόματα με πρόθεμα."""
+    client = ui_client(create_app())
+    row = _registry_row()
+    results = client.get(
+        "/company/specialties/ergani/search",
+        query_string={"pfx": "sp1_", "sp1_ergani_specialty_description": "πωλη"},
+    ).get_data(as_text=True)
+    assert row["code"] in results and "pfx=sp1_" in results
+    assert 'hx-target="#sp1_ergani-specialty-results"' in results
+    picked = client.get(
+        "/company/specialties/ergani/pick",
+        query_string={"code": row["code"], "pfx": "sp1_"},
+    ).get_data(as_text=True)
+    assert 'name="sp1_ergani_specialty_code"' in picked
+    assert 'id="sp1_ergani-specialty-description"' in picked
+    bad = client.get("/company/specialties/ergani/pick",
+                     query_string={"code": row["code"], "pfx": '"><x'}).get_data(as_text=True)
+    assert 'name="ergani_specialty_code"' in bad  # άκυρο πρόθεμα -> κανένα
+
 
 def test_web_e3n_prefers_the_separate_ergani_specialty_fields():
     company = SimpleNamespace(ame="1", afm="2", legal_name="ACME")

@@ -1,5 +1,5 @@
 """
-Backup / restore ΟΛΟΥ του συστήματος — ΜΟΝΟ για admin.
+Backup / restore ΟΛΟΥ του συστήματος ή ΜΙΑΣ εταιρείας — ΜΟΝΟ για admin.
 
 Σε αντίθεση με το audit (event log ΜΙΑΣ εταιρείας, JSON), εδώ ταξιδεύει
 ολόκληρη η βάση: όλες οι εταιρείες, οι χρήστες και οι κοινές παράμετροι,
@@ -14,6 +14,7 @@ log, βλ. persistence/documents.py) και `secrets.db` + `secrets.key` (κωδ
 backup αποτύχει.
 """
 
+import json
 import re
 import zipfile
 from datetime import UTC, datetime
@@ -22,6 +23,7 @@ from io import BytesIO
 from flask import (
     Blueprint,
     abort,
+    g,
     redirect,
     render_template,
     request,
@@ -86,6 +88,74 @@ def _apply(parts: dict[str, bytes]):
         registry.secrets.restore_snapshot(parts[SECRETS_DB_NAME], parts[SECRETS_KEY_NAME])
 
 
+# ------------------------------------------------------- μία εταιρεία
+# .zip με το event log της (ίδιο JSON με το Audit log) και τα έγγραφά της.
+# ΧΩΡΙΣ κωδικούς ΕΡΓΑΝΗ: το κλειδί τους είναι ένα για όλο το σύστημα, άρα
+# θα ταξίδευε μαζί και θα άνοιγε τους κωδικούς όλων των εταιρειών.
+COMPANY_EVENTS_NAME = "events.json"
+
+
+def _company(company_id: str):
+    if company_id not in registry.auth.companies:
+        abort(404)
+    return registry.tenant(company_id)
+
+
+def _company_bundle(tenant) -> bytes:
+    out = BytesIO()
+    with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED) as z:
+        z.writestr(COMPANY_EVENTS_NAME, tenant.store.backup_bytes())
+        z.writestr(DOCUMENTS_DB_NAME, registry.documents.snapshot(tenant.store_name))
+    return out.getvalue()
+
+
+def _company_unbundle(tenant, data: bytes) -> tuple[dict, bytes | None]:
+    """(ελεγμένο backup events, έγγραφα ή None). Δεκτό και σκέτο .json του
+    Audit log (μόνο events — τα έγγραφα τότε δεν αγγίζονται)."""
+    documents = None
+    try:
+        if data.startswith(b"PK"):
+            with zipfile.ZipFile(BytesIO(data)) as z:
+                names = z.namelist()
+                if COMPANY_EVENTS_NAME not in names:
+                    raise ValueError("Το αρχείο δεν είναι backup εταιρείας του misevent")
+                data = z.read(COMPANY_EVENTS_NAME)
+                if DOCUMENTS_DB_NAME in names:
+                    documents = z.read(DOCUMENTS_DB_NAME)
+        document = json.loads(data.decode("utf-8-sig"))
+        tenant.store.validate_backup(document)
+    except (zipfile.BadZipFile, UnicodeDecodeError, json.JSONDecodeError,
+            TypeError, ValueError) as exc:
+        raise ValueError(f"Αποτυχία ελέγχου backup: {exc}") from None
+    return document, documents
+
+
+def _company_apply(tenant, document: dict, documents: bytes | None):
+    tenant.store.restore_backup(document)
+    if documents is not None:
+        registry.documents.restore_snapshot(documents, tenant.store_name)
+    tenant.rebuild_all()
+
+
+def _restore_company(company_id: str, data: bytes):
+    """Ίδιο δίχτυ με το restore όλου του συστήματος, μόνο για μία εταιρεία."""
+    tenant = _company(company_id)
+    with lock:
+        document, documents = _company_unbundle(tenant, data)
+        current = _company_bundle(tenant)
+        folder = BACKUPS_DIR / company_id
+        folder.mkdir(parents=True, exist_ok=True)
+        stamp = datetime.now(UTC).strftime("%Y%m%d-%H%M%S-%fZ")
+        (folder / f"before-restore-{stamp}.zip").write_bytes(current)
+        try:
+            _company_apply(tenant, document, documents)
+        except Exception:
+            _company_apply(tenant, *_company_unbundle(tenant, current))
+            raise ValueError(
+                "Το backup δεν φορτώθηκε· επανήλθε η προηγούμενη κατάσταση"
+            ) from None
+
+
 def _stamp() -> str:
     return datetime.now(UTC).strftime("%Y%m%d-%H%M%SZ")
 
@@ -126,8 +196,68 @@ def index():
     return render_template(
         "backup.html",
         error=request.args.get("error") or "",
+        restored=registry.display_name(request.args.get("restored", "")),
+        companies=[(c.company_id, registry.display_name(c.company_id))
+                   for c in registry.auth.active_companies()],
         safety_files=_safety_files(),
     )
+
+
+@bp.get("/company/<company_id>/download")
+def company_download(company_id):
+    tenant = _company(company_id)
+    with lock:
+        data = _company_bundle(tenant)
+    # Η επωνυμία, χωρίς ό,τι δεν χωρά σε όνομα αρχείου (τα ελληνικά μένουν).
+    name = re.sub(r"[^\w.-]+", "_", registry.display_name(company_id)).strip("_.")
+    return send_file(
+        BytesIO(data),
+        mimetype="application/zip",
+        as_attachment=True,
+        download_name=f"misevent-{name or company_id}-{_stamp()}.zip",
+    )
+
+
+def _read_upload() -> bytes:
+    upload = request.files.get("backup")
+    if upload is None or not upload.filename:
+        raise ValueError("Επίλεξε αρχείο backup")
+    data = upload.stream.read(MAX_BACKUP_BYTES + 1)
+    if len(data) > MAX_BACKUP_BYTES:
+        raise ValueError("Το backup ξεπερνά τα 500 MB")
+    return data
+
+
+@bp.post("/company/<company_id>/restore")
+def company_restore(company_id):
+    try:
+        _restore_company(company_id, _read_upload())
+    except ValueError as exc:
+        return redirect(url_for("backup.index", error=str(exc)))
+    return redirect(url_for("backup.index", restored=company_id))
+
+
+@bp.post("/company/new")
+def company_new():
+    """Restore σε ΝΕΑ εταιρεία (π.χ. από άλλη εγκατάσταση). Αποτυχία → η
+    νέα εταιρεία διαγράφεται ολόκληρη, σαν να μην έγινε τίποτα."""
+    try:
+        data = _read_upload()
+        with lock:
+            company_id = registry.create_company("Από backup", created_by=g.user.user_id)
+            tenant = registry.tenant(company_id)
+            try:
+                _company_apply(tenant, *_company_unbundle(tenant, data))
+            except Exception as exc:
+                registry.purge_company(company_id)
+                if isinstance(exc, ValueError):
+                    raise
+                raise ValueError("Το backup δεν φορτώθηκε") from None
+            if tenant.proj.company and tenant.proj.company.legal_name:
+                registry.auth_svc.rename_company(company_id, tenant.proj.company.legal_name)
+    except ValueError as exc:
+        return redirect(url_for("backup.index", error=str(exc)))
+    return redirect(url_for("backup.index", restored=company_id))
 
 
 @bp.get("/download")
@@ -142,22 +272,20 @@ def download():
     )
 
 
-def _restore_upload(first_run: bool = False):
+def _restore_upload():
     upload = request.files.get("backup")
     if upload is None or not upload.filename:
         raise ValueError("Επίλεξε αρχείο backup")
     data = upload.stream.read(MAX_BACKUP_BYTES + 1)
     if len(data) > MAX_BACKUP_BYTES:
         raise ValueError("Το backup ξεπερνά τα 500 MB")
-    _restore_bytes(data, first_run)
+    _restore_bytes(data)
 
 
-def _restore_bytes(data: bytes, first_run: bool = False):
+def _restore_bytes(data: bytes):
     """Αντίγραφο ασφαλείας, αντικατάσταση, replay. Πετά ValueError με μήνυμα
     για τον χρήστη."""
     with lock:
-        if first_run and not registry.is_fresh():
-            raise ValueError("Το σύστημα έχει ήδη δεδομένα· restore μόνο από διαχειριστή")
         parts = _unbundle(data)
         current = _bundle()
         SAFETY_BACKUP_DIR.mkdir(parents=True, exist_ok=True)
@@ -194,16 +322,6 @@ def restore():
     return _to_login()
 
 
-@bp.post("/first-run")
-def first_run():
-    """Restore από τη σελίδα σύνδεσης, ΜΟΝΟ σε πρώτη εκκίνηση (`is_fresh`)."""
-    try:
-        _restore_upload(first_run=True)
-    except ValueError as exc:
-        return redirect(url_for("auth.login", restore_error=str(exc)))
-    return _to_login()
-
-
 # ------------------------------------------------------- αυτόματα αντίγραφα
 @bp.get("/safety/<scope>/<name>")
 def safety_download(scope, name):
@@ -218,12 +336,15 @@ def safety_delete(scope, name):
 
 @bp.post("/safety/<scope>/<name>/restore")
 def safety_restore(scope, name):
-    """Μόνο τα `.zip`/`.db` όλου του συστήματος· τα `.json` μιας εταιρείας
-    επαναφέρονται από το audit log της."""
+    """Όλο το σύστημα (`.zip`/`.db`) ή μία εταιρεία (`.zip`, ή `.json` του
+    Audit log)."""
     path = _safety_path(scope, name)
-    if scope != "system" or path.suffix not in (".zip", ".db"):
-        abort(404)
     try:
+        if scope != "system":
+            _restore_company(scope, path.read_bytes())
+            return redirect(url_for("backup.index", restored=scope))
+        if path.suffix not in (".zip", ".db"):
+            abort(404)
         _restore_bytes(path.read_bytes())
     except ValueError as exc:
         return redirect(url_for("backup.index", error=str(exc)))

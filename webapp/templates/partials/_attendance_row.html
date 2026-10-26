@@ -3,7 +3,10 @@
    επιστρέφεται με hx-swap-oob για να ενημερωθεί επιτόπου (div -> ασφαλές OOB). #}
 <div id="emp-{{ r.eid }}" class="atbl-row"{% if oob|default(false) %} hx-swap-oob="true"{% endif %}>
   <div>
-    <div class="nm">{{ r.name }}</div>
+    {# κλικ στο όνομα -> ημερολόγιο του εργαζομένου (modal) στον μήνα της περιόδου #}
+    <a class="nm" href="#" title="Ημερολόγιο εργαζομένου"
+       hx-get="{{ url_for('employments.calendar_modal', employment_id=r.eid, m='%04d-%02d' % (y|int, m|int)) }}"
+       hx-target="#cal-host" hx-swap="innerHTML">{{ r.name }}</a>
     <div class="sub">
       {{ 'Ημερομίσθιος' if r.pay_type == 'daily' else 'Μισθωτός' }}
       · {{ '%.2f'|format(r.hourly_rate) }}€/ω

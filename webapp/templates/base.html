@@ -60,11 +60,13 @@ try { const t = localStorage.getItem('theme'); if (t) document.documentElement.d
     {% else %}
       <span class="co">{{ company_name or '— δεν έχει καταχωρηθεί εταιρεία —' }}</span>
     {% endif %}
-    {# Η αρχική: εκτός ομάδων, πάντα ορατή. #}
-    <a class="nl {{ 'on' if request.endpoint == NAV_HOME[0] else '' }}"
-       href="{{ url_for(NAV_HOME[0]) }}">
-      <span class="ic">{{ NAV_HOME[1] }}</span><span>{{ NAV_HOME[2] }}</span>
+    {# Σελίδες εκτός ομάδων, πάντα ορατές. #}
+    {% for ep, ic, lb in NAV_TOP %}
+    <a class="nl {{ 'on' if request.endpoint == ep else '' }}"
+       href="{{ url_for(ep) }}">
+      <span class="ic">{{ ic }}</span><span>{{ lb }}</span>
     </a>
+    {% endfor %}
     <div class="navsep"></div>
     {# ΠΤΥΣΣΟΜΕΝΕΣ ΟΜΑΔΕΣ με native <details> — μηδέν JS για το ίδιο το
        άνοιγμα/κλείσιμο (ίδιο μοτίβο με τα CSS-only tabs). Ο server ανοίγει

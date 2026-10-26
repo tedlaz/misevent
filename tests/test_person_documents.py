@@ -74,7 +74,10 @@ def _hired(birth_date, nationality_code, **hire):
     eid = svc.start_employment(pid, date(2026, 1, 1), monthly_gross=1500,
                                weekly_pattern=WEEK, draft=True, **hire)
     svc.assign_insurance_profile(
-        eid, coverages=({"fund": "efka_main", "kad": "0000",
+        eid,
+        ergani_specialty_code="419",
+        ergani_specialty_description="ΛΟΙΠΟΙ ΥΠΑΛΛΗΛΟΙ ΓΡΑΦΕΙΟΥ",
+        coverages=({"fund": "efka_main", "kad": "0000",
                          "specialty_code": "000000", "kpk": "0101"},),
         auxiliary_scheme="efka")
     return svc, proj, pid, eid

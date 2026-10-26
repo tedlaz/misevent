@@ -7,6 +7,7 @@
 μεταξύ mixins, θα φτιάξεις κύκλους.
 """
 
+import dataclasses
 import json
 from datetime import date
 
@@ -230,7 +231,9 @@ class SpecialtiesMixin:
         είναι ΥΠΟΧΡΕΩΤΙΚΑ σε ΚΑΘΕ ρόλο — η τριάδα της ΑΠΔ (No 31/35/37)
         εξαρτάται από το επάγγελμα, όχι από το πακέτο κάλυψης. Η «ονομασία
         πρόνοιας» (6ο πεδίο) και το «προαιρετική» (7ο· 1/ναι/yes) διαβάζονται
-        από τις γραμμές πρόνοιας.
+        από τις γραμμές πρόνοιας. Ο «κωδ. ΕΡΓΑΝΗ» (8ο, προαιρετικό, σε
+        ΟΠΟΙΑΔΗΠΟΤΕ γραμμή της ειδικότητας) είναι ο κωδικός ειδικότητας για
+        τα έντυπα ΕΡΓΑΝΗ — η περιγραφή του έρχεται από το μητρώο ΕΡΓΑΝΗ.
 
         ➜ Οι επιτρεπτοί φορείς επικουρικής και οι ρυθμίσεις πρόνοιας
         ΠΑΡΑΓΟΝΤΑΙ από τους ρόλους που δηλώθηκαν (MAIN+TEKA -> επιτρέπεται
@@ -244,6 +247,7 @@ class SpecialtiesMixin:
 
         groups: dict[str, list] = {}
         pron_by_name: dict[str, dict] = {}
+        ergani_by_name: dict[str, str] = {}
         errors = []
         for i, raw in enumerate(text.splitlines(), 1):
             line = raw.strip()
@@ -270,6 +274,8 @@ class SpecialtiesMixin:
                     "kpk": parts[4],
                 }
             )
+            if len(parts) > 7 and parts[7]:
+                ergani_by_name[name] = parts[7]
             if config.SPECIALTY_ROLES[role].tier == "welfare":
                 pron = pron_by_name.setdefault(
                     name, {"enabled": True, "differentiated": False}
@@ -290,7 +296,13 @@ class SpecialtiesMixin:
         imported = 0
         for name, packages in groups.items():
             try:
-                self.define_specialty(name, packages, pron=pron_by_name.get(name))
+                code = ergani_by_name.get(name, "")
+                row = ergani_parameters.specialty(code) if code else None
+                if code and row is None:
+                    raise ValueError(f"άγνωστος κωδικός ειδικότητας ΕΡΓΑΝΗ «{code}»")
+                self.define_specialty(name, packages,
+                                      code, row["description"] if row else "",
+                                      pron=pron_by_name.get(name))
                 imported += 1
             except ValueError as exc:
                 errors.append(f"ειδικότητα «{name}»: {exc}")
@@ -457,6 +469,22 @@ class SpecialtiesMixin:
         if not any(counts.values()) and not errors:
             raise ValueError("Το αρχείο δεν περιέχει στοιχεία εταιρείας")
         return {"counts": counts, "errors": errors}
+
+    def ergani_profile(self, profile):
+        """Το προφίλ με τον ΤΡΕΧΟΝΤΑ κωδικό ειδικότητας ΕΡΓΑΝΗ της ειδικότητας.
+
+        Το προφίλ κρατά ΑΝΤΙΓΡΑΦΟ της ειδικότητας από την ανάθεση — σωστό για
+        τις καλύψεις (η μισθοδοσία δεν αλλάζει αναδρομικά), όχι για τον κωδικό
+        ΕΡΓΑΝΗ: μια διόρθωσή του πρέπει να φτάνει στα επόμενα έντυπα. Αν η
+        ειδικότητα δεν υπάρχει πια, μένει το αντίγραφο."""
+        sp = self.proj.specialties.get(getattr(profile, "specialty_name", ""))
+        if profile is None or sp is None or not sp.ergani_specialty_code:
+            return profile
+        return dataclasses.replace(
+            profile,
+            ergani_specialty_code=sp.ergani_specialty_code,
+            ergani_specialty_description=sp.ergani_specialty_description,
+        )
 
     def get_specialty(self, name):
         """Η δηλωμένη ειδικότητα εταιρείας — ValueError αν δεν υπάρχει."""

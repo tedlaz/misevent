@@ -60,6 +60,24 @@ def test_youth_employer_subsidy_in_payroll_and_apd():
     assert "4107000000" + "0000000000" + "006660" in apd_text(svc, 2026, 2)
 
 
+def test_payroll_preview_matches_run(monkeypatch):
+    """Η πρόβλεψη (`payroll_rows(preview=True)`) == ο υπολογισμός: ΜΙΑ πηγή.
+    Παλιότερα είχε δικό της αντίγραφο χωρίς τις επιδοτήσεις -> φούσκωνε."""
+    from webapp import queries as q
+
+    svc, proj, _eid = setup(birth_date=date(2005, 3, 10))
+    monkeypatch.setattr(q, "proj", proj)
+    monkeypatch.setattr(q, "svc", svc)
+    run(svc, 2026, 1)
+    svc.approve_attendance(2026, 2)
+    (pre,) = q.payroll_rows(2026, 2, preview=True)
+    svc.run_monthly_payroll(2026, 2)
+    (done,) = q.payroll_rows(2026, 2, preview=False)
+    assert payroll(proj, 2).analysis["subsidy_employer"] > 0
+    for k in ("Μικτά", "ΕΦΚΑ εργαζ.", "ΕΦΚΑ εργοδ.", "ΦΜΥ", "Καθαρά"):
+        assert pre[k] == done[k], k
+
+
 def test_youth_ends_on_25th_birthday():
     """Λήγει ΤΗΝ ΗΜΕΡΑ των γενεθλίων: 15/2 → 14 από τις 28 ημέρες του Φεβ."""
     svc, proj, _eid = setup(birth_date=date(2001, 2, 15))

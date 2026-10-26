@@ -37,37 +37,25 @@ if not os.environ.get("MISEVENT_DATA_DIR"):
     os.environ["MISEVENT_DATA_DIR"] = DATA_DIR
     atexit.register(shutil.rmtree, DATA_DIR, ignore_errors=True)
 
-# Κωδικός του διαχειριστή στα tests: ο αρχικός (`changeme`) είναι ΠΡΟΣΩΡΙΝΟΣ
-# και ο guard δεν ανοίγει καμία σελίδα πριν αντικατασταθεί.
+# Ο διαχειριστής των tests: νέα εγκατάσταση = ΚΑΝΕΝΑΣ χρήστης, οπότε ο
+# πρώτος `ui_client` τον δημιουργεί από τη σελίδα «Αρχική ρύθμιση».
+TEST_EMAIL = "admin@example.com"
 TEST_PASSWORD = "misevent-test"
 
 
 def ui_client(app):
-    """Test client ΣΥΝΔΕΔΕΜΕΝΟΣ ως ο αρχικός διαχειριστής.
+    """Test client ΣΥΝΔΕΔΕΜΕΝΟΣ ως ο διαχειριστής των tests.
 
     ΜΙΑ πηγή αλήθειας για ΟΛΑ τα tests που χτυπούν routes: από τότε που
     υπάρχουν χρήστες (ARCH_REF.md §1α), σκέτο `app.test_client()` παίρνει 302
-    προς `/login` σε κάθε σελίδα. Είναι idempotent — ο κωδικός αλλάζει μόνο
-    την πρώτη φορά μέσα στο ίδιο process.
+    προς `/login` σε κάθε σελίδα. Είναι idempotent — ο λογαριασμός
+    δημιουργείται μόνο την πρώτη φορά μέσα στο ίδιο σύστημα.
     """
-    from misevent.app.auth import BOOTSTRAP_EMAIL, BOOTSTRAP_PASSWORD
-
     client = app.test_client()
-    ok = client.post(
-        "/login", data={"email": BOOTSTRAP_EMAIL, "password": TEST_PASSWORD}
-    )
+    ok = client.post("/login", data={"email": TEST_EMAIL, "password": TEST_PASSWORD})
     if ok.status_code != 302:
-        client.post(
-            "/login", data={"email": BOOTSTRAP_EMAIL, "password": BOOTSTRAP_PASSWORD}
-        )
-        client.post(
-            "/password",
-            data={
-                "current_password": BOOTSTRAP_PASSWORD,
-                "new_password": TEST_PASSWORD,
-                "repeat": TEST_PASSWORD,
-            },
-        )
+        client.post("/setup", data={"email": TEST_EMAIL, "password": TEST_PASSWORD,
+                                    "repeat": TEST_PASSWORD})
     return client
 
 

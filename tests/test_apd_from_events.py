@@ -63,6 +63,7 @@ def setup(monthly_gross=1500.0, hire=date(2026, 1, 5), teka=False,
                        "kpk": "0101"},
          "MAIN": {"kad": "0141", "specialty_code": "411100", "kpk": "0103"},
          "TEKA": {"kad": "0083", "specialty_code": "000860", "kpk": "4169"}},
+        ergani_specialty_code="419", ergani_specialty_description="ΛΟΙΠΟΙ ΥΠΑΛΛΗΛΟΙ ΓΡΑΦΕΙΟΥ",
     )
     pid = svc.register_person(
         last_name="ΠΑΠΑΔΟΠΟΥΛΟΣ", first_name="ΙΩΑΝΝΗΣ", father_name="ΝΙΚΟΛΑΟΣ",

@@ -157,6 +157,14 @@ class CompanyArchived(DomainEvent):
     by: str = ""
 
 
+@dataclass(frozen=True)
+class CompanyUnarchived(DomainEvent):
+    """Επαναφορά στη λίστα μιας αποσυρμένης εταιρείας."""
+
+    company_id: str
+    by: str = ""
+
+
 AUTH_EVENT_TYPES = {
     cls.__name__: cls
     for cls in [
@@ -175,6 +183,7 @@ AUTH_EVENT_TYPES = {
         CompanyProvisioned,
         CompanyRenamed,
         CompanyArchived,
+        CompanyUnarchived,
     ]
 }
 

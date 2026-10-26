@@ -11,6 +11,11 @@ dependencies = [
     "pypdf>=6",
 ]
 
+[project.optional-dependencies]
+mcp = [
+    "mcp>=2.3.0",
+]
+
 [dependency-groups]
 dev = [
     "pyinstaller>=6.22.3",

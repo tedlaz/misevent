@@ -4,18 +4,39 @@
 {% block subheading %}{% endblock %}
 
 {% block content %}
+{% macro delete_form(company_id, name) %}
+  <button class="run danger" type="button" popovertarget="del-{{ company_id }}">Διαγραφή</button>
+  <div class="card confirm-pop" id="del-{{ company_id }}" popover>
+    <h2>Διαγραφή «{{ name }}»</h2>
+    <form class="frm" method="post" action="{{ url_for('companies.delete', company_id=company_id) }}">
+      <p class="warnbox">ΟΡΙΣΤΙΚΗ διαγραφή: πρόσωπα, απασχολήσεις, μισθοδοσίες,
+        ΑΠΔ, έγγραφα, κωδικοί ΕΡΓΑΝΗ και backups της εταιρείας σβήνονται και
+        <b>δεν επαναφέρονται</b>. Κράτα πρώτα αντίγραφο (Ιστορικό → Backup).</p>
+      <label>Πληκτρολόγησε «{{ name }}» για επιβεβαίωση
+        <input name="confirm" required autocomplete="off"></label>
+      <div class="btnrow">
+        <button class="ghost" type="button" popovertarget="del-{{ company_id }}"
+                popovertargetaction="hide">Άκυρο</button>
+        <button class="run danger" type="submit">Οριστική διαγραφή</button>
+      </div>
+    </form>
+  </div>
+{% endmacro %}
 {% if error %}<div class="warnbox">{{ error }}</div>{% endif %}
 
 <div class="card">
   <h2>Οι εταιρείες μου <span class="norm">— η ενεργή ορίζει τι βλέπεις σε
     ΟΛΕΣ τις σελίδες</span></h2>
   <table class="tbl">
-    <thead><tr><th>Εταιρεία</th><th>Χώρος</th><th></th></tr></thead>
+    <thead><tr><th>Εταιρεία</th><th>Χώρος</th><th></th><th></th></tr></thead>
     <tbody>
       {% for r in rows %}
         <tr>
           <td><b>{{ r.name }}</b></td>
           <td class="muted">{{ r.space_name }}</td>
+          <td class="rt">
+            {% if user.is_admin and rows|length > 1 %}{{ delete_form(r.company_id, r.name) }}{% endif %}
+          </td>
           <td class="rt">
             {% if r.active %}
               <span class="tag ok">ενεργή</span>
@@ -30,6 +51,28 @@
     </tbody>
   </table>
 </div>
+
+{% if archived %}
+  <div class="card">
+    <h2>Διαγραμμένες εταιρείες <span class="norm">— αποσυρμένες· επαναφέρονται ή
+      διαγράφονται οριστικά</span></h2>
+    <table class="tbl">
+      <tbody>
+        {% for c in archived %}
+          <tr>
+            <td class="muted">{{ c.name }}</td>
+            <td class="rt">{{ delete_form(c.company_id, c.name) }}</td>
+            <td class="rt">
+              <form method="post" action="{{ url_for('companies.unarchive', company_id=c.company_id) }}">
+                <button class="ghost sm" type="submit">Επαναφορά</button>
+              </form>
+            </td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+{% endif %}
 
 {% if may_create %}
   <div class="card">

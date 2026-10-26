@@ -39,7 +39,7 @@ def _pending_hire(svc, schedule_mode="fixed"):
                                schedule_weeks=1)
     svc.assign_insurance_profile(eid, coverages=(
         {"fund": "efka_main", "kad": "0000", "specialty_code": "000000", "kpk": "0101"},
-    ))
+    ), ergani_specialty_code="419", ergani_specialty_description="ΛΟΙΠΟΙ ΥΠΑΛΛΗΛΟΙ ΓΡΑΦΕΙΟΥ")
     return eid
 
 

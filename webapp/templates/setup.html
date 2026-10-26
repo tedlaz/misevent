@@ -1,0 +1,20 @@
+{% extends "auth_base.html" %}
+{% block title %}Αρχική ρύθμιση{% endblock %}
+{% block heading %}Αρχική ρύθμιση{% endblock %}
+{% block subheading %}δημιουργία του διαχειριστή{% endblock %}
+
+{% block content %}
+{# Νέα εγκατάσταση: ΚΑΝΕΝΑΣ προεπιλεγμένος λογαριασμός — ο πρώτος χρήστης
+   (διαχειριστής) ορίζει εδώ το δικό του email και κωδικό. #}
+<div class="muted">Πρώτη εκκίνηση. Ορίστε το email και τον κωδικό με τον οποίο
+  θα συνδέεστε ως διαχειριστής.</div>
+<form class="frm" method="post" action="{{ url_for('auth.setup') }}">
+  <label>Email
+    <input name="email" type="email" value="{{ email or '' }}" required autofocus></label>
+  <label>Κωδικός
+    <input name="password" type="password" required></label>
+  <label>Επανάληψη κωδικού
+    <input name="repeat" type="password" required></label>
+  <div class="btnrow"><button class="run" type="submit">Δημιουργία λογαριασμού</button></div>
+</form>
+{% endblock %}

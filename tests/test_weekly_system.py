@@ -43,7 +43,8 @@ def test_weekly_system():
         )
         svc.define_specialty("ΠΩΛΗΤΗΣ", {
             "MAIN_EPIK": {"kad": "0110", "specialty_code": "122100", "kpk": "0101"},
-        })
+        },
+    ergani_specialty_code="419", ergani_specialty_description="ΛΟΙΠΟΙ ΥΠΑΛΛΗΛΟΙ ΓΡΑΦΕΙΟΥ",)
         return store, proj, svc
 
 

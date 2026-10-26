@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+{% block title %}Ξεκινώντας{% endblock %}
+{% block heading %}Ξεκινώντας{% endblock %}
+{% block subheading %}πώς θέλετε να στήσετε την πρώτη εταιρεία;{% endblock %}
+
+{% block content %}
+{% if error %}<div class="warnbox">{{ error }}</div>{% endif %}
+
+{% if may_create %}
+<div class="card">
+  <h2>① Δημιουργία νέας εταιρείας <span class="norm">— τα στοιχεία του
+    εργοδότη, οι ειδικότητες και οι εργαζόμενοι καταχωρούνται μετά</span></h2>
+  <form class="frm" method="post" action="{{ url_for('welcome.new_company') }}">
+    <label>Ονομασία
+      <input name="name" required placeholder="π.χ. ΑΛΦΑ ΕΜΠΟΡΙΚΗ ΑΕ"></label>
+    <div class="btnrow"><button class="run" type="submit">Δημιουργία</button></div>
+  </form>
+</div>
+{% endif %}
+
+{% if is_admin %}
+<div class="card">
+  <h2>② Επαναφορά από backup <span class="norm">— μεταφορά από άλλον
+    υπολογιστή ή επανεγκατάσταση</span></h2>
+  <form class="frm" method="post" enctype="multipart/form-data"
+        action="{{ url_for('backup.restore') }}"
+        onsubmit="return confirm('Να φορτωθούν όλα τα δεδομένα από αυτό το backup; Μετά συνδέεστε με τους χρήστες του backup.');">
+    <div class="muted">Αρχείο <span class="mono">.zip</span>/<span class="mono">.db</span>
+      από «Σύστημα → Backup» άλλης εγκατάστασης. Οι χρήστες και οι κωδικοί
+      γίνονται αυτοί του backup.</div>
+    <label>Αρχείο backup <input type="file" name="backup" accept=".zip,.db" required></label>
+    <div class="btnrow"><button class="run" type="submit">⬆ Restore</button></div>
+  </form>
+</div>
+{% endif %}
+
+{% if may_create %}
+<div class="card">
+  <h2>③ Εισαγωγή εταιρείας από ΑΠΔ <span class="norm">— εταιρεία, ειδικότητες
+    και εργαζόμενοι από το αρχείο ΑΠΔ, βήμα-βήμα</span></h2>
+  <div class="btnrow"><a class="run" href="{{ url_for('apd_import.index') }}">Έναρξη οδηγού</a></div>
+</div>
+{% endif %}
+
+<div class="btnrow"><a class="ghost" href="{{ url_for('dashboard.index') }}">Παράλειψη</a></div>
+{% endblock %}

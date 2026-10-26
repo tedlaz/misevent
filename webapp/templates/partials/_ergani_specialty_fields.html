@@ -1,40 +1,42 @@
+{# `pfx`: πρόθεμα ids/ονομάτων όταν η σελίδα έχει ΠΟΛΛΑ ζεύγη (οδηγός ΑΠΔ) #}
+{% set pfx = pfx|default('') %}
 {% if oob %}
-  <input id="ergani-specialty-code" name="ergani_specialty_code"
+  <input id="{{ pfx }}ergani-specialty-code" name="{{ pfx }}ergani_specialty_code"
          maxlength="6" required inputmode="numeric" autocomplete="off"
          value="{{ code }}" placeholder="Αναζήτηση κωδικού…"
-         hx-get="{{ url_for('company.ergani_specialty_search') }}"
+         hx-get="{{ url_for('company.ergani_specialty_search', pfx=pfx or None) }}"
          hx-trigger="input changed delay:250ms, focus"
-         hx-target="#ergani-specialty-results" hx-swap="innerHTML"
+         hx-target="#{{ pfx }}ergani-specialty-results" hx-swap="innerHTML"
          hx-include="this" hx-swap-oob="outerHTML">
-  <input id="ergani-specialty-description"
-         name="ergani_specialty_description" required autocomplete="off"
+  <input id="{{ pfx }}ergani-specialty-description"
+         name="{{ pfx }}ergani_specialty_description" required autocomplete="off"
          value="{{ description }}"
          placeholder="Πληκτρολογήστε κωδικό ή λέξεις περιγραφής…"
-         hx-get="{{ url_for('company.ergani_specialty_search') }}"
+         hx-get="{{ url_for('company.ergani_specialty_search', pfx=pfx or None) }}"
          hx-trigger="input changed delay:250ms, focus"
-         hx-target="#ergani-specialty-results" hx-swap="innerHTML"
+         hx-target="#{{ pfx }}ergani-specialty-results" hx-swap="innerHTML"
          hx-include="this" hx-swap-oob="outerHTML">
-  <div id="ergani-specialty-results" hx-swap-oob="innerHTML"></div>
+  <div id="{{ pfx }}ergani-specialty-results" hx-swap-oob="innerHTML"></div>
 {% else %}
   <label>Κωδικός ειδικότητας ΕΡΓΑΝΗ
-    <input id="ergani-specialty-code" name="ergani_specialty_code"
+    <input id="{{ pfx }}ergani-specialty-code" name="{{ pfx }}ergani_specialty_code"
            maxlength="6" required inputmode="numeric" autocomplete="off"
            value="{{ ergani_code }}" placeholder="Αναζήτηση κωδικού…"
-           hx-get="{{ url_for('company.ergani_specialty_search') }}"
+           hx-get="{{ url_for('company.ergani_specialty_search', pfx=pfx or None) }}"
            hx-trigger="input changed delay:250ms, focus"
-           hx-target="#ergani-specialty-results" hx-swap="innerHTML"
+           hx-target="#{{ pfx }}ergani-specialty-results" hx-swap="innerHTML"
            hx-include="this">
   </label>
   <label class="wide ergani-specialty-lookup">Περιγραφή ειδικότητας ΕΡΓΑΝΗ
-    <input id="ergani-specialty-description"
-           name="ergani_specialty_description" required autocomplete="off"
+    <input id="{{ pfx }}ergani-specialty-description"
+           name="{{ pfx }}ergani_specialty_description" required autocomplete="off"
            placeholder="Πληκτρολογήστε κωδικό ή λέξεις περιγραφής…"
            value="{{ ergani_description }}"
-           hx-get="{{ url_for('company.ergani_specialty_search') }}"
+           hx-get="{{ url_for('company.ergani_specialty_search', pfx=pfx or None) }}"
            hx-trigger="input changed delay:250ms, focus"
-           hx-target="#ergani-specialty-results" hx-swap="innerHTML"
+           hx-target="#{{ pfx }}ergani-specialty-results" hx-swap="innerHTML"
            hx-include="this">
-    <div id="ergani-specialty-results"
+    <div id="{{ pfx }}ergani-specialty-results"
          class="ergani-specialty-results"></div>
   </label>
 {% endif %}

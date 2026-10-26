@@ -25,8 +25,8 @@ def test_webapp(fresh_system):
 
     # ΚΑΘΕ σελίδα απαιτεί συνδεδεμένο χρήστη. ΜΙΑ πηγή αλήθειας για τη σύνδεση:
     # ο `_bootstrap.ui_client` — είναι idempotent, οπότε δουλεύει είτε ο
-    # προσωρινός κωδικός έχει ήδη αλλάξει από άλλο test αρχείο της ίδιας
-    # διεργασίας είτε όχι (με hardcoded «changeme» έπαιρνε 302 παντού).
+    # διαχειριστής των tests έχει ήδη δημιουργηθεί από άλλο test αρχείο της
+    # ίδιας διεργασίας είτε όχι (τότε κάνει την «Αρχική ρύθμιση»).
     c = _bootstrap.ui_client(app)
 
 
@@ -131,7 +131,7 @@ def test_webapp(fresh_system):
     if proj.schedule_system_on(_date(2026, 9, 1)) != "retro":
         fails.append("Σύστημα δήλωσης: δεν καταγράφηκε το απολογιστικό")
     check("/settings    Παράμετροι", c.get("/settings/"), "Αλυσίδα υποχρεώσεων")
-    check("/audit       Audit log", c.get("/audit/"), "Event log",
+    check("/audit       Audit log", c.get("/audit/", headers={"HX-Request": "true"}), "Event log",
           iso_ok=True)  # ωμό JSON payload ΕΡΓΑΝΗ στα events
 
     print("\n=== Lookup Τοπικής Δ/νσης e-ΕΦΚΑ (ΑΠΔ No 3/No 4) ===")
@@ -336,8 +336,19 @@ def test_webapp(fresh_system):
     # ιδανική κάρτα ΟΛΟΥ του προσωπικού (Παρουσίες): περιέχει και αυτόν τον εργαζόμενο
     check("/attendance κουμπί ιδανικής κάρτας", c.get("/attendance/?y=2026&m=8"),
           "Ιδανική κάρτα xlsx")
-    allp = karta_import.parse_karta(
-        c.get("/attendance/karta.xlsx?y=2026&m=8").data)
+    # κλικ στο όνομα -> ημερολόγιο του εργαζομένου (modal) στον μήνα της περιόδου
+    check("/attendance όνομα -> ημερολόγιο", c.get("/attendance/?y=2026&m=8"),
+          f"/employments/{eid}/calendar/modal?m=2026-08")
+    check("ημερολόγιο σε modal", c.get(f"/employments/{eid}/calendar/modal?m=2026-08"),
+          f"/employments/{eid}/calendar?m=2026-08")
+    resp = c.get("/attendance/karta.xlsx?y=2026&m=8")
+    # το όνομα αρχείου έχει και την επωνυμία (ελληνικά: filename* κατά RFC 5987)
+    from urllib.parse import quote
+    disp = resp.headers["Content-Disposition"]
+    want_name = quote("karta_ΔΟΚΙΜΑΣΤΙΚΗ_ΕΜΠΟΡΙΚΗ_ΕΠΕ_2026-08.xlsx")
+    if f"filename*=UTF-8''{want_name}" not in disp:
+        fails.append(f"ιδανική κάρτα: όνομα αρχείου χωρίς επωνυμία ({disp})")
+    allp = karta_import.parse_karta(resp.data)
     if {(p.day, p.time_in) for p in kp} - {(p.day, p.time_in) for p in allp
                                          if p.afm == emp.afm}:
         fails.append("ιδανική κάρτα προσωπικού: λείπουν χτυπήματα του εργαζομένου")

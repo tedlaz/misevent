@@ -22,9 +22,14 @@ from ..tenancy import data_dir
 
 bp = Blueprint("audit", __name__, url_prefix="/audit")
 
-PAGE = 200
+PAGE = 50
 MAX_BACKUP_BYTES = 50 * 1024 * 1024
 SAFETY_BACKUP_DIR = data_dir() / "backups"
+
+
+def _back(**args):
+    """Οι φόρμες του audit γυρίζουν στην καρτέλα ⑤ της Εταιρείας."""
+    return redirect(url_for("company.index", tab="audit", **args))
 
 
 def _describe(agg: str) -> str:
@@ -66,6 +71,10 @@ def _transactions(rows: list[dict]) -> list[dict]:
 
 @bp.get("/")
 def index():
+    """Το περιεχόμενο της καρτέλας ⑤ «Audit log» της Εταιρείας (htmx). Μια
+    απευθείας επίσκεψη (παλιοί σύνδεσμοι) πάει στην καρτέλα."""
+    if not request.headers.get("HX-Request"):
+        return redirect(url_for("company.index", **(request.args.to_dict() | {"tab": "audit"})))
     etype = request.args.get("type") or ""
     rows = []
     log = store.load_log()
@@ -89,18 +98,24 @@ def index():
             }
         )
     total = len(rows)
-    rows = _transactions(rows)[::-1][:PAGE]  # νεότερα πρώτα
+    moves = _transactions(rows)[::-1]  # νεότερα πρώτα
+    pages = max(1, -(-len(moves) // PAGE))
+    page = min(max(1, request.args.get("page", 1, type=int)), pages)
+    rows = moves[(page - 1) * PAGE:page * PAGE]
     types = sorted(
         ((t, EVENT_LABELS.get(t, t)) for t in {rec["event_type"] for rec in log}),
         key=lambda x: x[1],
     )
     return render_template(
-        "audit.html",
+        "partials/_audit.html",
         rows=rows,
         total=total,
         types=types,
         etype=etype,
-        page=PAGE,
+        page=page,
+        pages=pages,
+        per_page=PAGE,
+        moves=len(moves),
         rolled=request.args.get("rolled", type=int),
         removed=request.args.get("removed", type=int),
         restored=request.args.get("restored", type=int),
@@ -115,16 +130,16 @@ def rollback():
     try:
         seq = int(raw)
     except ValueError:
-        return redirect(url_for("audit.index", error="Επίλεξε ένα event"))
+        return _back(error="Επίλεξε ένα event")
 
     try:
         with lock:
             removed = store.rollback_to(seq)
             rebuild_all()
     except ValueError as exc:
-        return redirect(url_for("audit.index", error=str(exc)))
+        return _back(error=str(exc))
 
-    return redirect(url_for("audit.index", rolled=seq, removed=removed))
+    return _back(rolled=seq, removed=removed)
 
 
 @bp.get("/backup")
@@ -161,15 +176,15 @@ def restore():
     """Έλεγχος, safety backup, ατομική αντικατάσταση και πλήρες replay."""
     upload = request.files.get("backup")
     if upload is None or not upload.filename:
-        return redirect(url_for("audit.index", error="Επίλεξε αρχείο backup"))
+        return _back(error="Επίλεξε αρχείο backup")
     raw = upload.stream.read(MAX_BACKUP_BYTES + 1)
     if len(raw) > MAX_BACKUP_BYTES:
-        return redirect(url_for("audit.index", error="Το backup ξεπερνά τα 50 MB"))
+        return _back(error="Το backup ξεπερνά τα 50 MB")
     try:
         document = json.loads(raw.decode("utf-8-sig"))
         store.validate_backup(document)
     except (UnicodeDecodeError, json.JSONDecodeError, ValueError) as exc:
-        return redirect(url_for("audit.index", error=f"Αποτυχία ελέγχου backup: {exc}"))
+        return _back(error=f"Αποτυχία ελέγχου backup: {exc}")
 
     with lock:
         current = store.export_backup()
@@ -185,14 +200,6 @@ def restore():
             # στο in-memory safety copy και ξαναχτίζουμε το συνεπές state.
             store.restore_backup(current)
             rebuild_all()
-            return redirect(
-                url_for("audit.index", error="Το restore απέτυχε· επανήλθε το safety backup")
-            )
+            return _back(error="Το restore απέτυχε· επανήλθε το safety backup")
 
-    return redirect(
-        url_for(
-            "audit.index",
-            restored=restored,
-            safety=safety_path.name,
-        )
-    )
+    return _back(restored=restored, safety=safety_path.name)

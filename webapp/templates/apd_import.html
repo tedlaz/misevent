@@ -1,0 +1,274 @@
+{% extends "base.html" %}
+{% block title %}Εισαγωγή από ΑΠΔ{% endblock %}
+{% block heading %}Εισαγωγή από ΑΠΔ{% endblock %}
+{% block subheading %}εταιρεία και εργαζόμενοι από αρχείο ΑΠΔ — τίποτα δεν
+  καταχωρείται πριν τον τελικό έλεγχο{% endblock %}
+
+{% block content %}
+{# Πεδίο ΑΠΟ ΤΟ ΑΡΧΕΙΟ: κλειδωμένο, χωρίς name (δεν υποβάλλεται καν) #}
+{% macro locked(label, value, type="text") %}
+  <label>{{ label }}<input class="locked" type="{{ type }}" value="{{ value }}" readonly tabindex="-1"></label>
+{% endmacro %}
+<div class="btnrow" style="margin-bottom:12px">
+  {% for key, label in steps %}
+    {% if key == step %}<span class="tag ok">{{ label }}</span>
+    {% elif d is defined and key != "upload" %}
+      <a class="tag off lnk-tag" href="{{ url_for('apd_import.step', name=key) }}">{{ label }}</a>
+    {% else %}<span class="tag off">{{ label }}</span>{% endif %}
+  {% endfor %}
+</div>
+{% if error %}<div class="warnbox">{{ error }}</div>{% endif %}
+
+{# ─────────────────────────────── ① Αρχείο ─────────────────────────────── #}
+{% if step == "upload" %}
+<div class="card">
+  <h2>Αρχείο ΑΠΔ <span class="norm">— το CSL01 (ή το .zip του) της πιο
+    πρόσφατης περιόδου</span></h2>
+  <form class="frm" method="post" enctype="multipart/form-data"
+        action="{{ url_for('apd_import.upload') }}">
+    <label>ΑΠΔ e-ΕΦΚΑ <input type="file" name="efka" required></label>
+    <label>ΑΠΔ ΤΕΚΑ (ίδια περίοδος){{ "" if need_teka else " — αν υπάρχει" }}
+      <input type="file" name="teka" {{ "required" if need_teka }}></label>
+    {% if need_teka %}<small>Οι εργαζόμενοι με επικουρική στο ΤΕΚΑ θέλουν και την ΑΠΔ ΤΕΚΑ — επιλέξτε ξανά και τα δύο αρχεία.</small>{% endif %}
+    <div class="btnrow"><button class="run" type="submit">OK — έλεγχος αρχείου</button></div>
+  </form>
+</div>
+
+{# ─────────────────────── ② Εταιρεία & ειδικότητες ─────────────────────── #}
+{% elif step == "company" %}
+<form class="frm" method="post">
+  <div class="card">
+    {% if d.company_id %}
+      <h2>Εταιρεία <span class="norm">— υπάρχει ήδη ({{ d.company.legal_name }},
+        ΑΦΜ {{ d.company.afm }}): η εισαγωγή γίνεται σε αυτήν</span></h2>
+    {% else %}
+      <h2>Νέα εταιρεία <span class="norm">— τα κλειδωμένα πεδία είναι από την ΑΠΔ</span></h2>
+      <div class="frm cols">
+        {% for k, label in [("legal_name","Επωνυμία"),("afm","ΑΦΜ"),("ame","ΑΜΕ"),
+            ("first_name","Όνομα (φυσικό πρόσωπο)"),("father_name","Πατρώνυμο"),
+            ("local_office_code","Κωδ. Τοπικής Δ/νσης e-ΕΦΚΑ"),
+            ("local_office_name","Τοπική Δ/νση e-ΕΦΚΑ")] %}
+          {{ locked(label, d.company[k]) }}
+        {% endfor %}
+      </div>
+      <div class="frm cols need">
+        <b class="wide need-title">Προς συμπλήρωση</b>
+        <label class="wide">Δραστηριότητα
+          <input name="c_activity" value="{{ d.company.activity }}" required
+                 placeholder="π.χ. ΛΙΑΝΙΚΟ ΕΜΠΟΡΙΟ ΕΝΔΥΜΑΤΩΝ"></label>
+      </div>
+      <h2>Έδρα <span class="norm">— παράρτημα 0</span></h2>
+      <div class="frm cols">
+        {% for k, label in [("street","Οδός"),("street_no","Αριθμός"),("postal_code","Τ.Κ."),
+            ("city","Πόλη")] %}
+          {{ locked(label, d.branch[k]) }}
+        {% endfor %}
+      </div>
+      <div class="frm cols need">
+        <b class="wide need-title">Προς συμπλήρωση</b>
+        {# ίδια selects με τη φόρμα παραρτήματος (_company_branch_form.html) #}
+        {% for k, label in [("sepe_code","Υπηρεσία ΣΕΠΕ"),("oaed_code","Υπηρεσία ΔΥΠΑ"),
+            ("kad_code","ΚΑΔ παραρτήματος"),("kallikratis_code","Καλλικράτης")] %}
+          <label>{{ label }}
+            <select name="b_{{ k }}">
+              <option value="">— Επιλογή —</option>
+              {% for r in catalogs[k] %}<option value="{{ r.code }}" {{ 'selected' if d.branch[k] == r.code }}>{{ r.code }} — {{ r.description }}</option>{% endfor %}
+            </select></label>
+        {% endfor %}
+      </div>
+    {% endif %}
+  </div>
+  <div class="card">
+    <h2>Ειδικότητες <span class="norm">— μία ανά ΚΑΔ/ειδικότητα της ΑΠΔ. Αν η
+      ονομασία υπάρχει ήδη στην εταιρεία, χρησιμοποιείται αυτή.</span></h2>
+    <table class="tbl">
+      <thead><tr><th>ΚΑΔ / Ειδ.</th><th>Πακέτα (ρόλος: ΚΠΚ)</th>
+        <th>Ονομασία <small>(συμπλήρωση)</small></th>
+        <th>Κωδ. ειδικότητας ΕΡΓΑΝΗ <small>(συμπλήρωση)</small></th></tr></thead>
+      <tbody>
+      {% for sp in d.specialties %}
+        <tr>
+          <td>{{ sp.kad }} / {{ sp.specialty_code }}</td>
+          <td>{% for role, p in sp.packages.items() %}<span class="tag">{{ role }}: {{ p.kpk }}</span> {% endfor %}</td>
+          <td class="need frm"><input name="sp{{ loop.index0 }}_name" value="{{ sp.name }}" required
+                     placeholder="π.χ. ΥΠΑΛΛΗΛΟΣ ΓΡΑΦΕΙΟΥ"></td>
+          <td class="need frm">{# ίδια αναζήτηση με τη φόρμα ειδικότητας (μητρώο ΕΡΓΑΝΗ) #}
+            {% with pfx="sp%d_" % loop.index0, ergani_code=sp.ergani_specialty_code,
+                    ergani_description=sp.ergani_specialty_description %}
+              {% include "partials/_ergani_specialty_fields.html" %}
+            {% endwith %}</td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <div class="btnrow"><button class="run" type="submit">Επόμενο →</button></div>
+</form>
+
+{# ───────────────────────────── ③ Εργαζόμενοι ──────────────────────────── #}
+{% elif step == "employees" %}
+<form class="frm" method="post">
+  <div class="card">
+    <h2>Έναρξη μισθοδοσίας στο σύστημα <span class="norm">— από ποιον μήνα
+      υπολογίζει μισθοδοσία ΑΥΤΟ το πρόγραμμα (για όλους τους εργαζόμενους)</span></h2>
+    <div class="frm need">
+      <b class="need-title">Προς συμπλήρωση</b>
+      <label class="chk"><input type="radio" name="payroll_mode" value="next"
+        {{ "checked" if payroll_start.mode != "custom" }}>
+        Η επόμενη περίοδος μετά την ΑΠΔ ({{ "%02d/%d"|format(apd_next.month, apd_next.year) }})</label>
+      <label class="chk"><input type="radio" name="payroll_mode" value="custom"
+        {{ "checked" if payroll_start.mode == "custom" }}>
+        Άλλος μήνας:
+        <input type="month" name="payroll_month" value="{{ payroll_start.month }}"
+               onfocus="this.form.payroll_mode.value='custom'"></label>
+    </div>
+  </div>
+  {% for e in d.employees %}{% set i = loop.index0 %}
+  <div class="card">
+    <h2>{{ e.person.last_name }} {{ e.person.first_name }}
+      <span class="norm">ΑΦΜ {{ e.afm }} · ΑΜΚΑ {{ e.person.amka }} ·
+      γέν. {{ e.person.birth_date }} · ΑΠΔ: {{ e.apd.days }} ημ., {{ "%.2f"|format(e.apd.gross) }} €
+      · {{ "ΤΕΚΑ" if e.auxiliary_scheme == "teka" else "ΕΦΚΑ" }}</span></h2>
+    {% if e.exists %}
+      <span class="tag warn">υπάρχει ήδη στην εταιρεία — παραλείπεται</span>
+    {% else %}
+    {% set h, p = e.hire, e.person %}
+    {# ΑΠΟ ΤΗΝ ΑΠΔ — κλειδωμένα (ο server δεν τα διαβάζει από τη φόρμα) #}
+    <div class="frm cols">
+      {{ locked("Επώνυμο", p.last_name) }}{{ locked("Όνομα", p.first_name) }}
+      {{ locked("Πατρώνυμο", p.father_name) }}{{ locked("Μητρώνυμο", p.mother_name) }}
+      {{ locked("Ημ. γέννησης", p.birth_date, "date") }}{{ locked("ΑΦΜ", p.afm) }}
+      {{ locked("ΑΜΚΑ", p.amka) }}{{ locked("ΑΜΑ", p.ama) }}
+      {{ locked("Αμοιβή", "Ημερομίσθιο" if h.pay_type == "daily" else "Μηνιαίος μισθός") }}
+      {{ locked("Σύστημα", "Εξαήμερο" if h.weekly_system == "6" else "Πενθήμερο") }}
+      {{ locked("Επικουρική", "ΤΕΚΑ" if e.auxiliary_scheme == "teka" else "ΕΦΚΑ") }}
+      {{ locked("Παράρτημα", e.branch_no) }}
+    </div>
+    {# ΠΡΟΣ ΣΥΜΠΛΗΡΩΣΗ / ΕΠΙΒΕΒΑΙΩΣΗ #}
+    <div class="frm cols need">
+      <b class="wide need-title">Προς συμπλήρωση</b>
+      <label>Ημ. πρόσληψης (πραγματική)<input type="date" name="e{{ i }}_hire_date" value="{{ h.hire_date }}" required></label>
+      <label>Ποσό σύμβασης (€) <small>ΑΠΔ: {{ "%.2f"|format(e.apd.gross) }} € / {{ e.apd.days }} ημ.</small>
+        <input name="e{{ i }}_amount" value="{{ h.amount }}" required></label>
+      <label>Ώρες / εβδομάδα<input name="e{{ i }}_weekly_hours" value="{{ h.weekly_hours }}" required></label>
+      <label>Σχέση εργασίας
+        <select name="e{{ i }}_employment_relationship">
+          <option value="0" {{ "selected" if h.employment_relationship == "0" }}>Αορίστου</option>
+          <option value="1" {{ "selected" if h.employment_relationship == "1" }}>Ορισμένου</option>
+        </select></label>
+      <label>Λήξη (ορισμένου)<input type="date" name="e{{ i }}_fixed_term_to" value="{{ h.fixed_term_to }}"></label>
+      <label>Προϋπηρεσία (έτη, τριετίες)<input name="e{{ i }}_service_years" value="{{ h.service_years }}"></label>
+      <label>Παγωμένη προϋπηρεσία (έτη)<input name="e{{ i }}_frozen_service_years" value="{{ h.frozen_service_years }}"></label>
+      <label>Λοιπές προσαυξήσεις (%)<input name="e{{ i }}_extra_allowances_pct" value="{{ h.extra_allowances_pct }}"></label>
+      <label class="chk"><input type="checkbox" name="e{{ i }}_married" value="1" {{ "checked" if h.married }}> Επίδομα γάμου</label>
+      <label>Τέκνα<input name="e{{ i }}_children" value="{{ p.children }}"></label>
+      <label>Φύλο
+        <select name="e{{ i }}_sex" required>
+          <option value="" {{ "selected" if not p.sex }}>— Επιλογή —</option>
+          <option value="0" {{ "selected" if p.sex == "0" }}>Άνδρας</option>
+          <option value="1" {{ "selected" if p.sex == "1" }}>Γυναίκα</option>
+        </select></label>
+      {# ίδια ομάδα ταυτότητας με τη φόρμα πρόσληψης (_general_tab.html) #}
+      <label>Υπηκοότητα
+        <select name="e{{ i }}_nationality_code" required>
+          <option value="">— Επιλογή —</option>
+          {% for row in nationalities %}<option value="{{ row.code }}" {{ "selected" if p.nationality_code == row.code }}>{{ row.code }} — {{ row.description }}</option>{% endfor %}
+        </select></label>
+      <label>Τύπος ταυτότητας
+        <select name="e{{ i }}_identity_type" required>
+          <option value="">— Επιλογή —</option>
+          {% for row in identity_types %}<option value="{{ row.code }}" {{ "selected" if p.identity_type == row.code }}>{{ row.code }} — {{ row.description }}</option>{% endfor %}
+        </select></label>
+      <label>Αριθμός ταυτότητας<input name="e{{ i }}_identity_number" maxlength="20" required value="{{ p.identity_number }}"></label>
+      <label>Εκδούσα αρχή<input name="e{{ i }}_identity_issuer" maxlength="50" value="{{ p.identity_issuer }}"></label>
+      <label>Ημερομηνία έκδοσης<input type="date" name="e{{ i }}_identity_issue_date" value="{{ p.identity_issue_date }}"></label>
+      <label>Ημερομηνία λήξης ισχύος<input type="date" name="e{{ i }}_identity_expiry_date" value="{{ p.identity_expiry_date }}"></label>
+      <label>Email<input name="e{{ i }}_email" value="{{ p.email }}"></label>
+      <label>Τηλέφωνο<input name="e{{ i }}_phone" value="{{ p.phone }}"></label>
+      {% if e.pron_choice %}
+      <label>Πρόνοια
+        <select name="e{{ i }}_pron_choice">
+          {% for v, lbl in [("yes","Ναι"),("no","Όχι"),("new","Νέος"),("old","Παλαιός")] %}
+            <option value="{{ v }}" {{ "selected" if e.pron_choice == v }}>{{ lbl }}</option>
+          {% endfor %}
+        </select></label>
+      {% endif %}
+    </div>
+    {% endif %}
+  </div>
+  {% endfor %}
+  <div class="btnrow"><button class="run" type="submit">Επόμενο →</button></div>
+</form>
+
+{# ────────────────────────── ④ Πρόγραμμα εργασίας ──────────────────────── #}
+{% elif step == "schedule" %}
+{% set labels = {"MON":"Δευ","TUE":"Τρι","WED":"Τετ","THU":"Πεμ","FRI":"Παρ","SAT":"Σαβ","SUN":"Κυρ"} %}
+<form class="frm" method="post" id="apd-sched">
+  <div class="card">
+    <h2>Εβδομαδιαίο πρόγραμμα <span class="norm">— ωράριο ανά ημέρα
+      (π.χ. 09:00-17:00), κενό = ρεπό</span></h2>
+    <div class="btnrow"><button type="button" class="ghost sm" onclick="apdSame()">
+      Ίδιο με τον πρώτο για όλους</button></div>
+    <table class="tbl">
+      <thead><tr><th>Εργαζόμενος</th>{% for dd in days %}<th>{{ labels[dd] }}</th>{% endfor %}
+        <th>Τύπος</th><th>Εβδ.</th></tr></thead>
+      <tbody>
+      {% for e in d.employees if not e.exists %}
+        {# η θέση στο draft (το loop.index0 μετρά ΜΟΝΟ τους νέους) #}
+        {% set i = d.employees.index(e) %}
+        <tr data-row>
+          <td>{{ e.person.last_name }} {{ e.person.first_name }}</td>
+          {% for dd in days %}
+            <td><input name="e{{ i }}_day_{{ dd }}" value="{{ e.schedule.days.get(dd, '') }}"
+                       size="11" placeholder="—"></td>
+          {% endfor %}
+          <td><select name="e{{ i }}_mode">
+            <option value="fixed" {{ "selected" if e.schedule.mode == "fixed" }}>Σταθερό</option>
+            <option value="variable" {{ "selected" if e.schedule.mode == "variable" }}>Μεταβλητό</option>
+          </select></td>
+          <td><input name="e{{ i }}_weeks" value="{{ e.schedule.weeks }}" size="2"
+                     title="Μεταβλητό: πλήθος εβδομάδων 1–10"></td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <div class="btnrow"><button class="run" type="submit">Επόμενο →</button></div>
+</form>
+<script>
+function apdSame() {
+  const rows = document.querySelectorAll('#apd-sched tr[data-row]');
+  const first = [...rows[0].querySelectorAll('input,select')].map(x => x.value);
+  rows.forEach(r => r.querySelectorAll('input,select').forEach((x, k) => x.value = first[k]));
+}
+</script>
+
+{# ─────────────────────────── ⑤ Έλεγχος & εισαγωγή ─────────────────────── #}
+{% elif step == "check" %}
+{% set step_label = {"company":"② Εταιρεία","employees":"③ Εργαζόμενοι","schedule":"④ Πρόγραμμα"} %}
+<div class="card">
+  {% if errors %}
+    <h2>{{ errors|length }} {{ "πρόβλημα" if errors|length == 1 else "προβλήματα" }}
+      <span class="norm">— διορθώστε τα και ξαναελέγξτε. Τίποτα δεν έχει καταχωρηθεί{% if committed %} (η εισαγωγή διακόπηκε){% endif %}.</span></h2>
+    <table class="tbl">
+      <thead><tr><th>Βήμα</th><th>Αφορά</th><th>Πρόβλημα</th></tr></thead>
+      <tbody>
+      {% for st, who, msg in errors %}
+        <tr><td><a href="{{ url_for('apd_import.step', name=st) }}">{{ step_label[st] }}</a></td>
+            <td>{{ who }}</td><td>{{ msg }}</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  {% else %}
+    {% set new = d.employees|rejectattr("exists")|list %}
+    <h2>Όλα εντάξει <span class="norm">— ο δοκιμαστικός έλεγχος πέρασε</span></h2>
+    <p>{{ "Νέα εταιρεία" if not d.company_id else "Εταιρεία" }} <b>{{ d.company.legal_name }}</b>
+      · {{ d.specialties|length }} ειδικότητες · {{ new|length }} εργαζόμενοι
+      (υπάρχοντες, μισθοδοσία από {{ d.employees[0].hire.payroll_from }}).</p>
+    <form method="post" action="{{ url_for('apd_import.commit') }}">
+      <div class="btnrow"><button class="run" type="submit">Εισαγωγή στο σύστημα</button></div>
+    </form>
+  {% endif %}
+</div>
+{% endif %}
+{% endblock %}

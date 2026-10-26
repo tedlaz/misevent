@@ -41,6 +41,8 @@ def _setup():
                                weekly_pattern=FULL_WEEK)
     svc.assign_insurance_profile(
         eid,
+        ergani_specialty_code="419",
+        ergani_specialty_description="ΛΟΙΠΟΙ ΥΠΑΛΛΗΛΟΙ ΓΡΑΦΕΙΟΥ",
         coverages=({"fund": "efka_main", "kad": "0000",
                     "specialty_code": "000000", "kpk": "0101"},),
     )

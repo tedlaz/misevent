@@ -12,6 +12,7 @@ MODAL. Οι διορθώσεις «σταδιάζονται» σε κρυφά in
 event) και ΟΛΕΣ μαζί γράφονται με το κουμπί «Έγκριση».
 """
 
+import re
 from datetime import date
 
 from flask import Blueprint, Response, render_template, request
@@ -195,7 +196,10 @@ def ideal_karta():
             punches += ideal_punches(e, first)
     except ValueError as exc:
         return Response(str(exc), status=400, content_type="text/plain; charset=utf-8")
-    return karta_response(punches, f"karta_{y}-{m:02d}.xlsx")
+    # + η επωνυμία, χωρίς χαρακτήρες που δεν επιτρέπονται σε όνομα αρχείου
+    company = proj.company.legal_name if proj.company else ""
+    name = re.sub(r'[\\/:*?"<>|\s]+', "_", company).strip("_")
+    return karta_response(punches, f"karta_{name + '_' if name else ''}{y}-{m:02d}.xlsx")
 
 
 @bp.post("/import")

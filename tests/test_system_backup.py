@@ -62,36 +62,57 @@ def test_system_backup_roundtrip(fresh_system):
     assert client.get("/persons/").status_code == 200
 
 
-def test_first_run_restore_from_login_page(fresh_system):
-    from _bootstrap import TEST_PASSWORD, ui_client
+def test_new_install_wizard_restore(fresh_system):
+    """Νέα εγκατάσταση: αρχική ρύθμιση → οδηγός «Ξεκινώντας» → restore →
+    σύνδεση με τους χρήστες του backup (ο προσωρινός διαχειριστής χάνεται)."""
+    from _bootstrap import TEST_EMAIL, TEST_PASSWORD, ui_client
 
-    from misevent.app.auth import BOOTSTRAP_EMAIL
     from webapp import create_app
     from webapp.system import lock, registry
 
     app = create_app()
+    backup = ui_client(app).get("/backup/download").data  # εγκατάσταση σε χρήση
+    blank = None
+    with lock:  # «νέα εγκατάσταση»: κανένας χρήστης
+        from misevent.persistence.database import Database
+        blank = Database().snapshot()
     anon = app.test_client()
-    assert "Επαναφορά από backup" in anon.get("/login").get_data(as_text=True)
-    blank = registry.db.snapshot()  # ό,τι έχει μια νέα εγκατάσταση
-
-    # Εγκατάσταση σε χρήση (αλλαγμένος κωδικός) -> backup της.
-    backup = ui_client(app).get("/backup/download").data
-
-    # Με δεδομένα: ούτε φόρμα ούτε restore χωρίς σύνδεση.
-    anon = app.test_client()
-    assert "Επαναφορά από backup" not in anon.get("/login").get_data(as_text=True)
-    r = anon.post("/backup/first-run", data={"backup": (BytesIO(backup), "b.db")})
-    assert "restore_error=" in r.headers["Location"]
-
-    # «Νέα εγκατάσταση» -> restore από τη σελίδα σύνδεσης -> σύνδεση με τον
-    # κωδικό του backup.
     with lock:
-        registry.db.restore_snapshot(blank)
+        registry.db.conn.execute("DELETE FROM events")
+        registry.db.conn.commit()
         registry.reload()
-    r = anon.post("/backup/first-run", data={"backup": (BytesIO(backup), "b.db")})
+    assert blank and registry.needs_setup()
+    assert anon.get("/login").headers["Location"] == "/setup"
+
+    new = app.test_client()
+    r = new.post("/setup", data={"email": "new@example.com", "password": "new-2026-xx",
+                                 "repeat": "new-2026-xx"})
+    assert r.headers["Location"] == "/welcome/"
+    page = new.get("/welcome/").get_data(as_text=True)
+    assert "Δημιουργία νέας εταιρείας" in page and "Επαναφορά από backup" in page
+    assert "Εισαγωγή εταιρείας από ΑΠΔ" in page
+
+    r = new.post("/backup/restore", data={"backup": (BytesIO(backup), "b.db")})
     assert "restored=1" in r.headers["Location"]
-    r = anon.post("/login", data={"email": BOOTSTRAP_EMAIL, "password": TEST_PASSWORD})
-    assert r.status_code == 302 and r.headers["Location"] != "/password"
+    r = anon.post("/login", data={"email": TEST_EMAIL, "password": TEST_PASSWORD})
+    assert r.status_code == 302
+    assert anon.post("/login", data={"email": "new@example.com",
+                                     "password": "new-2026-xx"}).status_code == 401
+
+
+def test_new_install_wizard_new_company_reuses_the_empty_space(fresh_system):
+    from _bootstrap import ui_client
+
+    from webapp import create_app
+    from webapp.system import registry
+
+    app = create_app()
+    client = ui_client(app)  # αρχική ρύθμιση
+    spaces = len(registry.auth.companies)
+    r = client.post("/welcome/company", data={"name": "ΑΛΦΑ ΑΕ"})
+    assert r.headers["Location"] == "/company/"
+    assert len(registry.auth.companies) == spaces  # όχι δεύτερος, άδειος χώρος
+    assert [c.name for c in registry.auth.active_companies()] == ["ΑΛΦΑ ΑΕ"]
 
 
 def test_safety_backups_page(fresh_system):
@@ -146,3 +167,86 @@ def test_restore_snapshot_remaps_store_ids():
     assert dst.restore_snapshot(src.snapshot()) == 2
     assert [e.fields for _, e in a.load()] == [{"who": "a"}]
     assert [e.fields for _, e in system.load()] == [{"who": "system"}]
+
+
+def test_company_backup_restore(fresh_system):
+    """Backup/restore ΜΙΑΣ εταιρείας: events + έγγραφα, οι άλλες ανέγγιχτες."""
+    from _bootstrap import ui_client
+
+    from webapp import create_app
+    from webapp.system import registry
+
+    app = create_app()
+    client = ui_client(app)
+    a = registry.create_company("ΑΛΦΑ")
+    b = registry.create_company("ΒΗΤΑ")
+    ta, tb = registry.tenant(a), registry.tenant(b)
+    ta.svc.register_company(ame="1234567890", afm="999888771", legal_name="ΑΛΦΑ ΑΕ")
+    docs_a = registry.documents.scope(ta.store_name)
+    docs_b = registry.documents.scope(tb.store_name)
+    docs_a.put("P1", "other", "a.pdf", b"%PDF-a")
+    docs_b.put("P1", "other", "b.pdf", b"%PDF-b")
+    assert "ΑΛΦΑ ΑΕ" in client.get("/backup/").get_data(as_text=True)
+
+    r = client.get(f"/backup/company/{a}/download")
+    assert r.status_code == 200
+    assert "misevent-%CE%91%CE%9B%CE%A6%CE%91_%CE%91%CE%95-" in r.headers["Content-Disposition"]
+    with zipfile.ZipFile(BytesIO(r.data)) as z:
+        assert sorted(z.namelist()) == ["documents.db", "events.json"]
+    snapshot = r.data
+    count = ta.event_count
+
+    # Αλλαγές μετά το backup, σε ΑΛΦΑ και ΒΗΤΑ.
+    ta.svc.register_company(ame="1234567890", afm="999888771", legal_name="ΑΛΛΟ ΑΕ")
+    docs_a.delete("P1", "other")
+    docs_b.put("P2", "other", "b2.pdf", b"%PDF-b2")
+
+    r = client.post(f"/backup/company/{a}/restore",
+                    data={"backup": (BytesIO(b"junk"), "x.zip")})
+    assert "error=" in r.headers["Location"]
+    assert ta.proj.company.legal_name == "ΑΛΛΟ ΑΕ"
+
+    r = client.post(f"/backup/company/{a}/restore",
+                    data={"backup": (BytesIO(snapshot), "a.zip")})
+    assert r.headers["Location"].endswith(f"restored={a}")
+    assert ta.event_count == count and ta.proj.company.legal_name == "ΑΛΦΑ ΑΕ"
+    assert docs_a.get("P1", "other")["content"] == b"%PDF-a"
+    assert [d["kind"] for d in docs_b.list("P2")] == ["other"]  # η ΒΗΤΑ ανέγγιχτη
+    assert client.get("/persons/").status_code == 200  # δεν αποσυνδέει
+
+    # Το αυτόματο αντίγραφο της ΑΛΦΑ επαναφέρεται από τη σελίδα.
+    (safety,) = (fresh_system / "backups" / a).glob("before-restore-*.zip")
+    r = client.post(f"/backup/safety/{a}/{safety.name}/restore")
+    assert ta.proj.company.legal_name == "ΑΛΛΟ ΑΕ"
+    assert docs_a.get("P1", "other") is None
+    assert client.get("/backup/company/nope/download").status_code == 404
+
+
+def test_company_restore_as_new(fresh_system):
+    """Restore εταιρείας που ΔΕΝ υπάρχει: νέος χώρος με την επωνυμία της."""
+    from _bootstrap import ui_client
+
+    from webapp import create_app
+    from webapp.system import auth, registry
+
+    app = create_app()
+    client = ui_client(app)
+    a = registry.create_company("ΑΛΦΑ")
+    ta = registry.tenant(a)
+    ta.svc.register_company(ame="1234567890", afm="999888771", legal_name="ΑΛΦΑ ΑΕ")
+    registry.documents.scope(ta.store_name).put("P1", "other", "a.pdf", b"%PDF-a")
+    snapshot = client.get(f"/backup/company/{a}/download").data
+    count = ta.event_count
+    registry.purge_company(a)
+    companies = {c.company_id for c in auth.active_companies()}
+
+    r = client.post("/backup/company/new", data={"backup": (BytesIO(b"junk"), "x.zip")})
+    assert "error=" in r.headers["Location"]
+    assert {c.company_id for c in auth.active_companies()} == companies  # τίποτα δεν έμεινε
+
+    r = client.post("/backup/company/new", data={"backup": (BytesIO(snapshot), "a.zip")})
+    (new,) = {c.company_id for c in auth.active_companies()} - companies
+    assert r.headers["Location"].endswith(f"restored={new}")
+    tn = registry.tenant(new)
+    assert tn.event_count == count and auth.companies[new].name == "ΑΛΦΑ ΑΕ"
+    assert registry.documents.scope(tn.store_name).get("P1", "other")["content"] == b"%PDF-a"

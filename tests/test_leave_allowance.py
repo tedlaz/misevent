@@ -53,6 +53,7 @@ def setup(hire: date, monthly_gross: float = 1200.0, schedule: bool = True,
         "ΥΠΑΛΛΗΛΟΣ",
         {"MAIN_EPIK": {"kad": "0110", "specialty_code": "122100",
                        "kpk": "0101"}},
+        ergani_specialty_code="419", ergani_specialty_description="ΛΟΙΠΟΙ ΥΠΑΛΛΗΛΟΙ ΓΡΑΦΕΙΟΥ",
     )
     pid = svc.register_person(
         last_name="ΠΑΠΑΔΟΠΟΥΛΟΣ", first_name="ΙΩΑΝΝΗΣ", father_name="ΝΙΚΟΛΑΟΣ",

@@ -1,0 +1,16 @@
+{# Ημερολόγιο εργαζομένου σε modal (από τις Παρουσίες). Ζει στο #cal-host,
+   ΠΡΙΝ από το #modal-host: τα modals του ίδιου του ημερολογίου (ημέρα,
+   σύγκριση με κάρτα) ανοίγουν στο #modal-host και βγαίνουν ΠΑΝΩ του. #}
+<div class="modal-backdrop">
+  <div class="modal cmp-big">
+    <div class="mhead"><h3>📆 Ημερολόγιο — {{ e.full_name }}</h3></div>
+    <div class="mbody">
+      <div hx-get="{{ url_for('employments.calendar', employment_id=e.employment_id, m=m or None) }}"
+           hx-trigger="load" hx-swap="outerHTML"></div>
+    </div>
+    <div class="mfoot btnrow">
+      <button type="button" class="ghost" hx-get="{{ url_for('employments.calendar_modal_close') }}"
+              hx-target="#cal-host" hx-swap="innerHTML">Κλείσιμο</button>
+    </div>
+  </div>
+</div>
