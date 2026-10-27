@@ -33,6 +33,7 @@ from ..helpers import (
     form_service_years,
     form_third_country_fields,
     frozen_service_years_fields,
+    pdf_response,
     run_command,
     service_years_fields,
 )
@@ -273,8 +274,38 @@ def info_modal(person_id):
         "partials/_person_info_modal.html",
         education_level_label=education_level_label,
         documents=_documents(person_id),
+        cert_year=clock.today().year - 1,  # οι βεβαιώσεις αφορούν συνήθως το προηγούμενο
         **info,
     )
+
+
+@bp.get("/<person_id>/certificates")
+def certificates_modal(person_id):
+    """Modal «📄 Βεβαιώσεις» της λίστας εργαζομένων."""
+    person = proj.persons.get(person_id)
+    if person is None:
+        abort(404)
+    return render_template("partials/_person_certificates_modal.html",
+                           person=person, cert_year=clock.today().year - 1)
+
+
+@bp.get("/<person_id>/certificate/<kind>")
+def certificate(person_id, kind):
+    """Βεβαιώσεις εργαζομένου (PDF σε νέα καρτέλα): `tax` = ετήσια
+    αποδοχών (?year=), `employment` = εργασίας/προϋπηρεσίας."""
+    from .. import pdf_reports
+
+    person = proj.persons.get(person_id)
+    if person is None:
+        abort(404)
+    if kind == "tax":
+        year = request.args.get("year", type=int) or clock.today().year - 1
+        return pdf_response(lambda: pdf_reports.tax_certificate_pdf(person_id, year),
+                            f"vevaiosi_apodoxon_{year}_{person.afm}.pdf")
+    if kind == "employment":
+        return pdf_response(lambda: pdf_reports.employment_certificate_pdf(person_id),
+                            f"vevaiosi_ergasias_{person.afm}.pdf")
+    abort(404)
 
 
 @bp.get("/<person_id>/pay")
@@ -284,7 +315,7 @@ def pay_modal(person_id):
     person = proj.persons.get(person_id)
     if person is None:
         abort(404)
-    card = q.employee_pay_card(person_id)
+    card = q.employee_pay_card(person_id, clock.today())
     return render_template("partials/_person_pay_modal.html", person=person,
                            hires=card["hires"], pay_years=card["years"])
 

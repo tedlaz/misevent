@@ -171,6 +171,10 @@ MISC_DEFAULTS = {
     # Χρονολόγιο «Εκκρεμείς»: οι ΜΕΛΛΟΝΤΙΚΕΣ υποχρεώσεις εμφανίζονται έως και
     # τόσους μήνες μετά τον τρέχοντα (3/2026 + 1 -> έως 30/4/2026). Ακέραιος.
     "obligations_horizon_months": 1,
+    # Περίοδοι ΑΙΧΜΗΣ (ετήσιες, «ΗΗ/ΜΜ-ΗΗ/ΜΜ, ...»): οι ημέρες τους ΔΕΝ
+    # μετράνε ως διαθέσιμες για άδεια στο «χωράει το υπόλοιπο ως 31/12;»
+    # (queries.leave_fit). Parsing/έλεγχος: calendar_gr.day_ranges.
+    "peak_periods": "",
 }
 
 
@@ -1391,11 +1395,6 @@ class Projections:
         # Σύστημα δήλωσης αλλαγών ωραρίου ΑΝΑ ΜΗΝΑ (1η του μήνα -> "pre"|"retro"):
         # νέα δήλωση για τον ίδιο μήνα αντικαθιστά (βλ. schedule_system_on)
         self.schedule_systems: dict = {}
-        # ΨΗΦΙΑΚΗ ΚΑΡΤΑ: μετρητής διελεύσεων (κάθε καταγραφή/ακύρωση τον
-        # ανεβάζει). Είναι το «σφυγμός» που ρωτά η οθόνη «Ζωντανά» για να
-        # ανανεωθεί ΜΟΝΟ όταν όντως άλλαξε κάτι — δεν είναι δεδομένο, είναι
-        # παράγωγο του log (το replay δίνει το ίδιο πλήθος).
-        self.card_pulse: int = 0
 
     # -- Τελευταίοι υπολογισμοί (ο επανυπολογισμός αντικαθιστά τον παλιό) --
     @property
@@ -1800,7 +1799,6 @@ class Projections:
             day.sort(key=lambda p: (p["m"], 0 if p["kind"] == "in" else 1))
             emp._sync_attendance(event.punch_date)
             emp.card_checked.discard((event.punch_date.year, event.punch_date.month))
-            self.card_pulse += 1
 
         elif isinstance(event, CardPunchCancelled):
             emp = self.employments.get(event.employee_id)
@@ -1816,7 +1814,6 @@ class Projections:
                     emp._sync_attendance(d)
                     emp.card_checked.discard((d.year, d.month))
                     break
-            self.card_pulse += 1
 
         elif isinstance(event, CardMonthChecked):
             self.employments[event.employee_id].card_checked.add(

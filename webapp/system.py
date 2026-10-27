@@ -35,6 +35,8 @@ shared_store = registry.shared  # ΚΟΙΝΕΣ νομοθετικές παράμ
 def set_tenant(company_id: str) -> Tenant:
     """Ορίζει την ενεργή εταιρεία του αιτήματος (το κάνει ο guard)."""
     g.tenant = registry.tenant(company_id)
+    with lock:  # ό,τι έγραψε άλλη διεργασία (MCP server) στην ίδια βάση
+        g.tenant.sync()
     return g.tenant
 
 

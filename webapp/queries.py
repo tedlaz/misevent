@@ -18,6 +18,7 @@ from misevent.integrations import card_punches as cp
 from misevent.rules import config, constraints
 from misevent.rules import obligation_types as ot
 from misevent.rules.calendar_gr import (
+    day_ranges,
     holiday_names,
     last_working_day_of_month,
     public_holidays,
@@ -751,6 +752,27 @@ def leave_status(e, year: int) -> dict:
             for a in proj.allowances
         ),
     }
+
+
+def leave_fit(e, today: date) -> dict:
+    """ΧΩΡΑΕΙ το υπόλοιπο κανονικής άδειας ως 31/12; Διαθέσιμες = οι ημέρες
+    ΠΡΟΓΡΑΜΜΑΤΟΣ από σήμερα ως το τέλος του έτους, χωρίς όσες έχουν ήδη άδεια,
+    τις αργίες και τις περιόδους αιχμής της εταιρείας (`peak_periods`).
+    Οι ήδη προγραμματισμένες μελλοντικές άδειες μετρούν στις ληφθείσες, οπότε
+    εδώ αφαιρούνται από τις διαθέσιμες — όχι δεύτερη φορά από το υπόλοιπο."""
+    blocked = day_ranges(proj.misc_settings.get("peak_periods", ""), today.year)
+    free = peak = 0
+    for m in range(today.month, 13):
+        for d in e.scheduled_days_in_month(today.year, m):
+            if d < today or _leave_on(e, d)[0] or e.holiday_off(d):
+                continue
+            if d in blocked:
+                peak += 1
+            else:
+                free += 1
+    slack = free - leave_status(e, today.year)["remaining"]
+    return {"fit_available": free, "fit_blocked": peak, "fit_slack": slack,
+            "fit_tone": "ok" if slack > 2 else "warn"}
 
 
 def next_payroll_period():
@@ -2065,7 +2087,7 @@ PAYMENT_KINDS = {"salary": "payroll", "easter_gift": "easter",
                  "leave_compensation": "leave", "severance": "severance"}
 
 
-def employee_pay_card(person_id: str):
+def employee_pay_card(person_id: str, today: date | None = None):
     """Καρτέλα αποδοχών ΕΡΓΑΖΟΜΕΝΟΥ (προσώπου — ΟΛΕΣ οι προσλήψεις του, §2):
     ανά έτος (νεότερο πρώτο) οι γραμμές του καθολικού (`payroll_ledger`) με
     το ποσό που ΠΛΗΡΩΘΗΚΕ (`PaymentMade`, δικαιούχος η απασχόληση) δίπλα
@@ -2077,7 +2099,11 @@ def employee_pay_card(person_id: str):
     ΠΟΛΛΑΠΛΕΣ ΠΡΟΣΛΗΨΕΙΣ: αριθμούνται #1, #2… κατά ημερομηνία πρόσληψης και
     το καθολικό βγαίνει ΑΝΑ πρόσληψη — μια λήξη και επαναπρόσληψη μέσα στον
     ίδιο μήνα δίνει δύο γραμμές, όχι ένα άθροισμα. Επιστρέφει
-    {"hires": [...σύνοψη ανά πρόσληψη], "years": [...ανά έτος]}."""
+    {"hires": [...σύνοψη ανά πρόσληψη], "years": [...ανά έτος]}.
+
+    Με `today`, το τρέχον έτος παίρνει και ΠΡΟΒΛΕΨΗ έως 31/12 για τις ενεργές
+    προσλήψεις (`forecast`, `forecast_totals`, `estimate` = υπολογισμένο +
+    πρόβλεψη) — ΧΩΡΙΣ να αγγίζει τα `rows`/`totals`, που μένουν τα πραγματικά."""
     person = proj.persons.get(person_id)
     emps = sorted((proj.employments[eid] for eid in
                    (person.employment_ids if person is not None else ())
@@ -2121,7 +2147,116 @@ def employee_pay_card(person_id: str):
     for h in hires:
         for k in ("gross", "net", "paid"):
             h[k] = round(h[k], 2)
+    if today is not None:
+        fc = []
+        for h in hires:
+            e = proj.employments[h["eid"]]
+            if e.termination_date is None:
+                for r in _forecast_rows(e, today.year):
+                    r["hire"] = h
+                    fc.append(r)
+        if fc:
+            fc.sort(key=lambda r: (-r["month"], order[r["kind"]], r["hire"]["n"]))
+            cur = next((py for py in out if py["year"] == today.year), None)
+            if cur is None:
+                cur = {"year": today.year, "rows": [],
+                       "totals": ledger_totals([]) | {"paid": 0.0}}
+                out.insert(0, cur)
+            cur["forecast"] = fc
+            cur["forecast_totals"] = ledger_totals(fc)
+            cur["estimate"] = ledger_totals(cur["rows"] + fc)
     return {"hires": hires, "years": out}
+
+
+def _forecast_rows(e, y: int):
+    """ΠΡΟΒΛΕΨΗ έτους `y` μιας ενεργής απασχόλησης, σε γραμμές καθολικού: ό,τι
+    ΔΕΝ έχει ακόμη υπολογιστεί (μισθοδοσίες μηνών, Δώρα, Επίδομα Αδείας) —
+    ΙΔΙΟΙ κανόνες με την ετήσια αναφορά κόστους (`annual_cost_report`)."""
+    eid = e.employee_id
+    if not _employed_in(e, date(y, 1, 1), date(y, 12, 31)):
+        return []
+    labels = dict(LEDGER_KINDS)
+    rows = []
+
+    def row(m, kind, r):
+        if r is not None and r.gross:
+            rows.append({"month": m, "kind": kind, "label": labels[kind],
+                         "gross": round(r.gross, 2),
+                         "efka_employee": round(r.efka_employee, 2),
+                         "fmy": round(r.fmy, 2), "net": round(r.net, 2),
+                         "cost": round(r.gross + r.efka_employer, 2),
+                         "paid": 0.0, "forecast": True})
+
+    done = {p.period_month for p in proj.payrolls
+            if p.employee_id == eid and p.period_year == y}
+    for m in range(1, 13):
+        if m not in done and _employed_in(
+                e, date(y, m, 1), date(y, m, monthrange(y, m)[1])):
+            row(m, "payroll", _forecast_payroll_result(e, y, m))
+    gifts = {g.gift_type for g in proj.gifts if g.employee_id == eid and g.year == y}
+    for kind, code in (("easter", "EASTER_GIFT"), ("christmas", "CHRISTMAS_GIFT")):
+        if kind not in gifts:
+            row(ot.due_date(code, y, 0).month, kind, svc.gift_preview_for(e, kind, y))
+    if not any(a.employee_id == eid and a.year == y for a in proj.allowances):
+        row(_allowance_month(e, y), "allowance", svc.allowance_preview_for(e, y))
+    return rows
+
+
+# ------------------------------------------------- Βεβαιώσεις εργαζομένου
+def _person_hires(person_id: str):
+    """(πρόσωπο, προσλήψεις του κατά ημερομηνία) — ValueError αν δεν υπάρχει."""
+    person = proj.persons.get(person_id)
+    if person is None:
+        raise ValueError("Άγνωστος εργαζόμενος")
+    emps = sorted((proj.employments[eid] for eid in person.employment_ids
+                   if eid in proj.employments
+                   and proj.employments[eid].hire_date is not None),
+                  key=lambda e: e.hire_date)
+    return person, emps
+
+
+def tax_certificate(person_id: str, year: int, today: date) -> dict:
+    """ΕΤΗΣΙΑ ΒΕΒΑΙΩΣΗ ΑΠΟΔΟΧΩΝ (φορολογική χρήση): οι περίοδοι εργασίας του
+    έτους και, ανά είδος, ακαθάριστα / κρατήσεις εργαζομένου / ΦΜΥ / καθαρά —
+    ΑΘΡΟΙΣΜΑ όλων των προσλήψεων του προσώπου (§2). Πηγή: το ίδιο
+    `payroll_ledger` με την καρτέλα αποδοχών, άρα τα ποσά συμφωνούν.
+    Για το τρέχον έτος οι περίοδοι φτάνουν έως `today`, όχι 31/12."""
+    person, emps = _person_hires(person_id)
+    first, last = date(year, 1, 1), min(date(year, 12, 31), today)
+    periods = [(max(e.hire_date, first), min(e.termination_date or last, last))
+               for e in emps
+               if e.hire_date <= last and (e.termination_date or last) >= first]
+    rows = payroll_ledger(year, {e.employment_id for e in emps})
+    if not rows:
+        raise ValueError(f"Καμία υπολογισμένη καταβολή για το {year}")
+    by_kind = {}
+    for r in rows:
+        label = "Τακτικές αποδοχές" if r["kind"] == "payroll" else r["label"]
+        k = by_kind.setdefault(r["kind"], {"label": label, **dict.fromkeys(
+            ("gross", "efka_employee", "fmy", "net"), 0.0)})
+        for f in ("gross", "efka_employee", "fmy", "net"):
+            k[f] = round(k[f] + r[f], 2)
+    kinds = [by_kind[k] for k, _l in LEDGER_KINDS if k in by_kind]
+    return {"person": person, "year": year, "periods": periods,
+            "days": sum((b - a).days + 1 for a, b in periods),
+            "kinds": kinds, "totals": ledger_totals(rows)}
+
+
+def employment_certificate(person_id: str) -> dict:
+    """ΒΕΒΑΙΩΣΗ ΕΡΓΑΣΙΑΣ (προϋπηρεσίας): κάθε πρόσληψη με από–έως (κενό
+    «έως» = εργάζεται ακόμη), ειδικότητα και καθεστώς απασχόλησης."""
+    person, emps = _person_hires(person_id)
+    if not emps:
+        raise ValueError("Καμία πρόσληψη για τον εργαζόμενο")
+    periods = [{
+        "date_from": e.hire_date, "date_to": e.termination_date,
+        "specialty": (e.insurance_profile.specialty_name
+                      if e.insurance_profile else ""),
+        "part_time": e.part_time, "weekly_hours": e.weekly_hours,
+        "fixed_term": e.employment_relationship == "1",
+    } for e in emps]
+    return {"person": person, "periods": periods,
+            "active": any(p["date_to"] is None for p in periods)}
 
 
 # ------------------------------------------- Ετήσια αναφορά κόστους (γράφημα)
@@ -2164,8 +2299,17 @@ def _employed_in(emp, first: date, last: date) -> bool:
 
 def _forecast_payroll(emp, y: int, m: int) -> tuple[float, float, float]:
     """ΠΡΟΒΛΕΠΟΜΕΝΟΣ μήνας μιας απασχόλησης, στις τρεις οπτικές της αναφοράς:
-    (κόστος εργοδότη, μικτά, καθαρά εργαζόμενου) — από τον ΙΔΙΟ υπολογισμό,
-    όταν η μισθοδοσία ΔΕΝ έχει ακόμη υπολογιστεί.
+    (κόστος εργοδότη, μικτά, καθαρά εργαζόμενου) — βλ. `_forecast_payroll_result`."""
+    r = _forecast_payroll_result(emp, y, m)
+    if r is None:
+        return 0.0, 0.0, 0.0
+    return round(r.gross + r.efka_employer, 2), round(r.gross, 2), round(r.net, 2)
+
+
+def _forecast_payroll_result(emp, y: int, m: int):
+    """ΠΡΟΒΛΕΠΟΜΕΝΟΣ μήνας μιας απασχόλησης (`PayrollResult`, ή None αν δεν
+    αντιστοιχεί καμία ημέρα) — από τον ΙΔΙΟ υπολογισμό, όταν η μισθοδοσία ΔΕΝ
+    έχει ακόμη υπολογιστεί.
 
     Εκτίμηση, όχι υπολογισμός: παίρνει τη ΣΥΜΒΑΣΗ που ισχύει στο τέλος του
     μήνα και υποθέτει **πλήρη κανονικό μήνα** — καμία άδεια άνευ αποδοχών,
@@ -2187,15 +2331,13 @@ def _forecast_payroll(emp, y: int, m: int) -> tuple[float, float, float]:
     days = round(base_days * covered / ((last - first).days + 1))
     if terms.pay_type == "daily":
         if days == 0:
-            return 0.0, 0.0, 0.0
-        r = pe.calc_monthly_daily(terms.wage, days, emp.children_on(end), end,
-                                  rates=rates)
-    else:
-        r = pe.calc_monthly(
-            terms.wage, emp.children_on(end), end, unpaid_days=base_days - days,
-            rates=rates, base_days=base_days,
-        )
-    return round(r.gross + r.efka_employer, 2), round(r.gross, 2), round(r.net, 2)
+            return None
+        return pe.calc_monthly_daily(terms.wage, days, emp.children_on(end),
+                                     end, rates=rates)
+    return pe.calc_monthly(
+        terms.wage, emp.children_on(end), end, unpaid_days=base_days - days,
+        rates=rates, base_days=base_days,
+    )
 
 
 def _gift_cost(g) -> float:
@@ -2962,8 +3104,8 @@ def detail_payload(ob_id: str, ref: date):
             d["steps"] = [
                 f"Παρήχθη το αρχείο CSL01 ({fund.upper()}) της περιόδου {per} "
                 f"με τη γραμμογράφηση {spec} και καταγράφηκε η υποβολή του. "
-                "Δεν αποθηκεύτηκε στον δίσκο — παράγεται on the fly από τα "
-                f"«Αρχεία ΑΠΔ» (λήψη ως {fname})."
+                "Δεν αποθηκεύτηκε στον δίσκο — παράγεται on the fly από την οθόνη "
+                f"«ΑΠΔ» (λήψη ως {fname})."
             ]
         else:
             gifts_in = sorted(
@@ -2981,7 +3123,7 @@ def detail_payload(ob_id: str, ref: date):
             d["steps"] = [
                 f"Θα δημιουργηθεί το αρχείο CSL01 ({layout}), για ΟΛΟΥΣ τους "
                 f"ασφαλισμένους της περιόδου μαζί — διαθέσιμο για λήψη ως "
-                f"{fname} από τα «Αρχεία ΑΠΔ» (δεν αποθηκεύεται στον δίσκο).",
+                f"{fname} από την οθόνη «ΑΠΔ» (δεν αποθηκεύεται στον δίσκο).",
                 (
                     "Περιλαμβάνει και: "
                     + ", ".join(gifts_in)
@@ -3798,6 +3940,7 @@ def staff_now(day: date, now_min: int, horizon: int = 31) -> list:
             "next": nxt,
             "next_at": nxt_at,
             **leave_status(e, day.year),
+            **leave_fit(e, day),
         })
     rows.sort(key=lambda r: (r["last"], r["first"]))
     return rows
@@ -3848,9 +3991,9 @@ def card_day(day: date, eid: str = "") -> dict:
 
 
 def card_pulse() -> int:
-    """Ο «σφυγμός» της κάρτας: αυξάνει σε ΚΑΘΕ καταγραφή/ακύρωση διέλευσης.
+    """Ο «σφυγμός» του Προγράμματος: το πλήθος events της εταιρείας.
 
-    Τον ρωτά η οθόνη «Ζωντανά» κάθε λίγα δευτερόλεπτα και ξαναζητά τις γραμμές
-    ΜΟΝΟ όταν άλλαξε — έτσι ένα χτύπημα φαίνεται αμέσως (και σε ΑΛΛΟΝ browser),
-    χωρίς να κατεβαίνει όλο το παράθυρο κάθε φορά."""
-    return proj.card_pulse
+    Τον ρωτά η κάρτα «Πρόγραμμα» κάθε λίγα δευτερόλεπτα και ξαναζητά τις
+    γραμμές ΜΟΝΟ όταν άλλαξε — έτσι ΚΑΘΕ αλλαγή (χτύπημα, βάρδια, άδεια· και
+    από ΑΛΛΟΝ browser ή τον MCP server) φαίνεται αμέσως, χωρίς reload."""
+    return store.event_count()

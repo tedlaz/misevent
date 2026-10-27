@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "ask": [
+      "mcp__misevent__set_day_schedule",
+      "mcp__misevent__record_leave"
+    ]
+  }
+}

@@ -2028,6 +2028,144 @@ EXPORT_DIR = Path("apodeijeis")
 GIFT_SUFFIX = {"easter": "ΔΠ", "christmas": "ΔΧ", "allowance": "EA"}
 
 
+# ------------------------------------------------- Βεβαιώσεις εργαζομένου
+def _cert_parties(pdf: ReportPDF, person):
+    """Κάρτες «Εργοδότης» / «Εργαζόμενος» στην κορυφή μιας βεβαίωσης."""
+    c = proj.company
+    if c is None:
+        raise ValueError("Δεν έχουν καταχωρηθεί στοιχεία εταιρείας")
+    b = proj.branches.get(0)
+    addr = ", ".join(x for x in (
+        f"{b.street} {b.street_no}".strip() if b else "",
+        f"{b.postal_code} {b.city}".strip() if b else "") if x)
+    cards = [
+        ("building", "ΕΡΓΟΔΟΤΗΣ", c.legal_name,
+         " · ".join(x for x in (f"ΑΦΜ {c.afm}", f"ΑΜΕ {c.ame}", addr) if x)),
+        ("person", "ΕΡΓΑΖΟΜΕΝΟΣ/Η", person.full_name,
+         " · ".join(x for x in (
+             f"πατρώνυμο {person.father_name}" if person.father_name else "",
+             f"ΑΦΜ {person.afm}", f"ΑΜΚΑ {person.amka}") if x)),
+    ]
+    for icon, cap, name, line in cards:
+        y = pdf.get_y()
+        pdf.set_fill_color(*FAINT)
+        pdf.rect(pdf.l_margin, y, pdf.epw, 19, round_corners=True,
+                 corner_radius=2.6, style="F")
+        pdf.badge(pdf.l_margin + 4, y + 4.6, 10, TEAL, icon)
+        pdf.set_xy(pdf.l_margin + 18, y + 2.4)
+        pdf.font(6.6, bold=True, color=MUTED)
+        pdf.cell(0, 4, cap)
+        pdf.set_xy(pdf.l_margin + 18, y + 6.4)
+        pdf.font(11, bold=True, color=NAVY)
+        pdf.cell(0, 6, name)
+        pdf.set_xy(pdf.l_margin + 18, y + 12.6)
+        pdf.font(7.4, color=INK)
+        pdf.cell(0, 4, line)
+        pdf.set_y(y + 22)
+
+
+def _cert_text(pdf: ReportPDF, text: str):
+    pdf.font(9.6, color=INK)
+    pdf.multi_cell(0, 5.6, text, new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+    pdf.ln(2)
+
+
+def _cert_signature(pdf: ReportPDF):
+    """Τόπος/ημερομηνία και υπογραφή ΜΟΝΟ του εργοδότη (η βεβαίωση είναι
+    δήλωση του εργοδότη)."""
+    b = proj.branches.get(0)
+    place = f"{b.city}, " if b and b.city else ""
+    y = max(pdf.get_y() + 8, 225)
+    if y + 30 > pdf.page_break_trigger:
+        pdf.add_page()
+        y = pdf.get_y() + 8
+    x = pdf.l_margin + pdf.epw / 2
+    pdf.set_xy(x, y)
+    pdf.font(9, color=INK)
+    pdf.cell(pdf.epw / 2, 5, f"{place}{dmy(today())}", align="C")
+    pdf.set_xy(x, y + 6)
+    pdf.font(8, bold=True, color=NAVY)
+    pdf.cell(pdf.epw / 2, 5, "Για τον εργοδότη", align="C")
+    pdf.set_draw_color(*MUTED)
+    pdf.set_line_width(0.2)
+    pdf.set_dash_pattern(dash=1, gap=1)
+    pdf.line(x + 12, y + 26, pdf.w - pdf.r_margin - 12, y + 26)
+    pdf.set_dash_pattern()
+    pdf.set_xy(x, y + 27)
+    pdf.font(7, color=MUTED)
+    pdf.cell(pdf.epw / 2, 4, "(σφραγίδα & υπογραφή)", align="C")
+
+
+def tax_certificate_pdf(person_id: str, year: int) -> bytes:
+    """Ετήσια βεβαίωση αποδοχών για φορολογική χρήση (μία σελίδα A4)."""
+    c = q.tax_certificate(person_id, year, today())
+    person, t = c["person"], c["totals"]
+    pdf = ReportPDF(footer_note=f"Βεβαίωση αποδοχών {year} — {person.full_name}"
+                                f" — εκδόθηκε {dmy(today())}")
+    pdf.add_page()
+    pdf.title_band("Βεβαίωση Αποδοχών", "για φορολογική χρήση",
+                   f"Έτος {year}", icon="euro")
+    _cert_parties(pdf, person)
+
+    pdf.section("Περίοδος εργασίας", NAVY, "calendar",
+                note=f"σύνολο {c['days']} ημερολογιακές ημέρες")
+    _cert_text(pdf, "\n".join(f"από {dmy(a)} έως {dmy(b)}"
+                              for a, b in c["periods"]) or "—")
+
+    pdf.section("Αποδοχές & κρατήσεις", GREEN, "sigma")
+    tbl = Table(pdf, [("Είδος", 62, "L"), ("Ακαθάριστες", 32, "R"),
+                      ("Κρατήσεις\n(πριν φόρους)", 32, "R"),
+                      ("Παρακρατηθείς\nφόρος", 32, "R"),
+                      ("Καθαρό\nπληρωτέο", pdf.epw - 158, "R")])
+    tbl.head()
+    for i, k in enumerate(c["kinds"]):
+        tbl.row([k["label"], eur(k["gross"]), eur(k["efka_employee"]),
+                 eur(k["fmy"]), eur(k["net"])],
+                fill=ROW_ALT if i % 2 else None)
+    tbl.row(["ΣΥΝΟΛΟ", eur(t["gross"]), eur(t["efka_employee"]),
+             eur(t["fmy"]), eur(t["net"])], h=7.6, bold=True, rule=True,
+            color=NAVY)
+    pdf.ln(4)
+    _cert_text(pdf, (
+        f"Βεβαιώνεται ότι ο/η {person.full_name} έλαβε κατά το έτος {year} "
+        f"ακαθάριστες αποδοχές {eur(t['gross'])}, από τις οποίες "
+        f"παρακρατήθηκαν ασφαλιστικές εισφορές {eur(t['efka_employee'])} και "
+        f"φόρος μισθωτών υπηρεσιών {eur(t['fmy'])}, με καθαρό πληρωτέο ποσό "
+        f"{eur(t['net'])}. Η βεβαίωση χορηγείται για φορολογική χρήση."))
+    _cert_signature(pdf)
+    return bytes(pdf.output())
+
+
+def employment_certificate_pdf(person_id: str) -> bytes:
+    """Βεβαίωση εργασίας / προϋπηρεσίας (μία σελίδα A4)."""
+    c = q.employment_certificate(person_id)
+    person = c["person"]
+    pdf = ReportPDF(footer_note=f"Βεβαίωση εργασίας — {person.full_name}"
+                                f" — εκδόθηκε {dmy(today())}")
+    pdf.add_page()
+    pdf.title_band("Βεβαίωση Εργασίας", "προϋπηρεσίας / απασχόλησης",
+                   dmy(today()), icon="doc")
+    _cert_parties(pdf, person)
+
+    lines = []
+    for p in c["periods"]:
+        span = (f"από {dmy(p['date_from'])} έως {dmy(p['date_to'])}"
+                if p["date_to"] else f"από {dmy(p['date_from'])} έως σήμερα")
+        kind = (f"μερική απασχόληση ({num(p['weekly_hours'])} ώρες/εβδομάδα)"
+                if p["part_time"] else "πλήρη απασχόληση")
+        rel = "ορισμένου" if p["fixed_term"] else "αορίστου"
+        role = f" ως {p['specialty']}" if p["specialty"] else ""
+        lines.append(f"•  {span}{role}, με {kind}, σύμβαση {rel} χρόνου.")
+    verb = "εργάζεται" if c["active"] else "εργάστηκε"
+    _cert_text(pdf, f"Βεβαιώνεται ότι ο/η {person.full_name} {verb} στην "
+                    f"επιχείρησή μας με σχέση εξαρτημένης εργασίας:")
+    _cert_text(pdf, "\n".join(lines))
+    _cert_text(pdf, "Η βεβαίωση χορηγείται ύστερα από αίτηση του/της "
+                    "ενδιαφερόμενου/ης για κάθε νόμιμη χρήση.")
+    _cert_signature(pdf)
+    return bytes(pdf.output())
+
+
 def _company_afm() -> str:
     """ΑΦΜ εταιρείας για το όνομα του ZIP."""
     if proj.company is None:

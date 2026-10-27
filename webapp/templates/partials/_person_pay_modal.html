@@ -52,7 +52,8 @@
           <summary>Έτος {{ py.year }}
             <span class="muted" style="font-weight:400">
               — μικτά {{ py.totals.gross|money }} € · καθαρά
-              {{ py.totals.net|money }} € · πληρώθηκαν {{ py.totals.paid|money }} €</span>
+              {{ py.totals.net|money }} € · πληρώθηκαν {{ py.totals.paid|money }} €
+              {%- if py.forecast %} · εκτίμηση έτους: καθαρά {{ py.estimate.net|money }} €{% endif %}</span>
           </summary>
           <table class="tbl">
             <thead><tr>
@@ -89,6 +90,33 @@
                 <td class="num">{{ py.totals.net|money }}</td>
                 <td class="num">{{ py.totals.paid|money }}</td>
               </tr>
+              {% if py.forecast %}
+                {% for r in py.forecast %}
+                  <tr class="muted" style="font-style:italic">
+                    <td class="mono">{{ r.month }}/{{ py.year }}</td>
+                    {% if multi %}
+                      <td><span class="tag" title="{{ hire_span(r.hire) }}">#{{ r.hire.n }}</span></td>
+                    {% endif %}
+                    <td>{{ r.label }}</td>
+                    <td class="num">{{ r.gross|money }}</td>
+                    <td class="num">{{ r.efka_employee|money }}</td>
+                    <td class="num">{{ r.fmy|money }}</td>
+                    <td class="num">{{ r.net|money }}</td>
+                    <td class="num"><span class="tag" title="Εκτίμηση από την ισχύουσα σύμβαση — πλήρης κανονικός μήνας">πρόβλεψη</span></td>
+                  </tr>
+                {% endfor %}
+                {% for label, t in (("Πρόβλεψη έως 31/12", py.forecast_totals),
+                                    ("Εκτίμηση " ~ py.year, py.estimate)) %}
+                  <tr class="tot">
+                    <td class="mono">{{ label }}</td>{% if multi %}<td></td>{% endif %}<td></td>
+                    <td class="num">{{ t.gross|money }}</td>
+                    <td class="num">{{ t.efka_employee|money }}</td>
+                    <td class="num">{{ t.fmy|money }}</td>
+                    <td class="num">{{ t.net|money }}</td>
+                    <td></td>
+                  </tr>
+                {% endfor %}
+              {% endif %}
             </tbody>
           </table>
         </details>

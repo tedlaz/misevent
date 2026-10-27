@@ -1,0 +1,17 @@
+{# Modal «📄 Βεβαιώσεις» (λίστα εργαζομένων). #}
+<div class="modal-backdrop">
+  <div class="modal">
+    <div class="mhead">
+      <h3>{{ person.full_name }}</h3>
+      <span class="muted" style="font-size:12.5px">ΑΦΜ {{ person.afm }}</span>
+    </div>
+    <div class="mbody">
+      {% include "partials/_person_certificates.html" %}
+    </div>
+    <div class="mfoot">
+      <button type="button" class="ghost"
+              hx-get="{{ url_for('persons.modal_close') }}"
+              hx-target="#modal-host" hx-swap="innerHTML">Κλείσιμο</button>
+    </div>
+  </div>
+</div>

@@ -366,17 +366,16 @@ def test_webapp(fresh_system):
     r = c.post(f"/employments/{eid}/calendar/check?m=2026-08")
     check(f"/employments/{eid}/calendar/check", r, "ολοκληρώθηκε")
     svc.set_misc_settings(card_required=False)
-    # Καταγραφή παρουσιών όπως η Κάρτα ΕΡΓΑΝΗ: ημ/νία · είσοδος · έξοδος
-    c.post(f"/employments/{eid}/attendance", data={
-        "day": ["2026-08-21", "2026-08-21"], "time_in": ["08:00", "17:00"],
-        "time_out": ["12:00", "22:00"]})
+    # Διακοπτόμενη βάρδια (χτυπήματα κάρτας) -> φαίνεται στο Ημερολόγιο
+    svc.record_attendance(eid, _date(2026, 8, 21), ["08:00-12:00", "17:00-22:00"])
     if proj.employments[eid].attendance_shifts.get(_date(2026, 8, 21)) != [
             "08:00-12:00", "17:00-22:00"]:
         fails.append("Καταγραφή παρουσιών: δεν γράφτηκαν οι βάρδιες εισόδου/εξόδου")
     check("calendar παρουσία", c.get(f"/employments/{eid}/calendar?m=2026-08"),
           "17:00-22:00")
-    check("modal παρουσιών", c.get(f"/employments/{eid}/modal/attendance"),
-          'name="time_in"')
+    # η παλιά φόρμα «Καταγραφή παρουσιών» της καρτέλας καταργήθηκε
+    if c.get(f"/employments/{eid}/modal/attendance").status_code != 404:
+        fails.append("modal παρουσιών: έπρεπε να έχει καταργηθεί (404)")
     # Άδειες: κατάσταση ως προς την ημ. αναφοράς (26/08/2026)
     from misevent.domain.events import LeaveType
     svc.record_leave(eid, LeaveType.UNPAID, _date(2026, 8, 10), _date(2026, 8, 10))

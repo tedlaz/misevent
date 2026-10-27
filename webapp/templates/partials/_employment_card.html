@@ -322,48 +322,7 @@
   </div>
 
   {% if e.hire_submitted %}
-  {# Το μηνιαίο ημερολόγιο είναι ξεχωριστή οθόνη («Ημερολόγιο») #}
-  <div class="card" style="margin-top:20px">
-    <h2 class="bar"><span>Ημερολόγιο</span>
-      <span class="acts"><a class="ghost sm"
-        href="{{ url_for('employments.calendar_page', eid=mid) }}">📆 Άνοιγμα ημερολογίου</a></span>
-    </h2>
-  </div>
-
-  {# ------------------------------------------------------------ Παρουσίες #}
-  <div class="card" style="margin-top:20px">
-    <h2 class="bar"><span>Παρουσίες</span>
-      {% if e.pay_type == 'daily' %}
-        <span class="norm">— ΑΠΑΡΑΙΤΗΤΕΣ: ημερομίσθιο × ημέρες παρουσίας</span>
-      {% else %}
-        <span class="norm">— προαιρετικές για μισθωτούς (25 ημέρες/μήνα)</span>
-      {% endif %}
-      <span class="acts">
-        <button class="ghost sm"
-                hx-get="{{ url_for('employments.modal', employment_id=mid, name='attendance') }}"
-                hx-target="#modal-host" hx-swap="innerHTML">⏱️ Καταγραφή παρουσιών</button>
-      </span>
-    </h2>
-    {% if attendance %}
-      <table class="tbl">
-        <thead><tr><th>Περίοδος</th>
-          <th style="text-align:right">Ημέρες παρουσίας</th></tr></thead>
-        <tbody>
-          {% for (py, pm), n in attendance %}
-            <tr><td class="mono">{{ pm }}/{{ py }}</td><td class="num">{{ n }}</td></tr>
-          {% endfor %}
-        </tbody>
-      </table>
-    {% else %}
-      <div class="empty">
-        Καμία καταγεγραμμένη παρουσία.
-        {% if e.pay_type == 'daily' %}
-          Ο εργαζόμενος είναι ΗΜΕΡΟΜΙΣΘΙΟΣ — μέχρι να καταγραφούν παρουσίες,
-          η μισθοδοσία του βγαίνει μηδενική και παραλείπεται.
-        {% endif %}
-      </div>
-    {% endif %}
-  </div>
+  {# Ημερολόγιο/παρουσίες: ξεχωριστή οθόνη από το μενού («📆 Ημερολόγιο») #}
 
   {# --------------------------------------------------------------- Άδειες #}
   <div class="card" style="margin-top:20px">

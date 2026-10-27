@@ -107,6 +107,10 @@
         <div class="empty">Καμία απασχόληση ακόμη.</div>
       {% endif %}
 
+      {% if employments %}
+        {% include "partials/_person_certificates.html" %}
+      {% endif %}
+
       <b class="sec">Κανονική άδεια
         {% if leave %}<span class="muted" style="text-transform:none">
           — έτος {{ leave.year }}</span>{% endif %}</b>

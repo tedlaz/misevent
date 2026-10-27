@@ -60,6 +60,11 @@
           </td>
           <td></td>
           <td class="btnrow" style="justify-content:flex-end">
+            {% if r.employments %}
+              <button class="ghost" title="Βεβαιώσεις (αποδοχών / εργασίας)"
+                      hx-get="{{ url_for('persons.certificates_modal', person_id=r.person.person_id) }}"
+                      hx-target="#modal-host" hx-swap="innerHTML">📄</button>
+            {% endif %}
             <button class="ghost" title="Μεταβολή στοιχείων (τέκνα, ταυτότητα… από ημερομηνία)"
                     hx-get="{{ url_for('persons.change_modal', person_id=r.person.person_id) }}"
                     hx-target="#modal-host" hx-swap="innerHTML">🔄</button>

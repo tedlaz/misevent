@@ -343,6 +343,7 @@ def misc_save():
             digital_card=f.get("digital_card") == "1",
             auto_payments=f.get("auto_payments") == "1",
             obligations_horizon_months=form_int(f, "obligations_horizon_months", 1),
+            peak_periods=f.get("peak_periods", "").strip(),
         )
         return "Αποθηκεύτηκαν οι προτιμήσεις (Διάφορα)"
 

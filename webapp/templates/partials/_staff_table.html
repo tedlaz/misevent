@@ -11,6 +11,7 @@
       <th>Επώνυμο</th><th>Όνομα</th><th>Ειδικότητα</th>
       <th>Κατάσταση</th><th>Επόμενη βάρδια</th>
       <th class="num" title="Δικαίωμα − Ληφθείσες = Υπόλοιπο">Άδεια</th>
+      <th class="num" title="Διαθέσιμες εργάσιμες ως 31/12 − Υπόλοιπο (αρνητικό = δεν χωράει)">Χωράει;</th>
       <th title="Επίδομα Αδείας">Επ.Αδείας</th>
     </tr></thead>
     <tbody>
@@ -25,6 +26,8 @@
           href="{{ url_for('employments.calendar_page', eid=s.eid) }}">{{ s.state_text }}</a></td>
         <td data-sort="{{ s.next_at or '9999' }}">{{ s.next or '—' }}</td>
         <td class="num" data-sort="{{ s.remaining }}">{{ s.entitlement }}-{{ s.taken }}={% if s.remaining > 0 %}<b>{{ s.remaining }}</b>{% else %}{{ s.remaining }}{% endif %}</td>
+        <td class="num" data-sort="{{ s.fit_slack if s.remaining > 0 else 999 }}">{% if s.remaining > 0 %}<span class="tag {{ s.fit_tone }}"
+          title="{{ s.fit_available }} διαθέσιμες εργάσιμες ως 31/12{% if s.fit_blocked %} ({{ s.fit_blocked }} εξαιρούνται λόγω αιχμής){% endif %} για {{ s.remaining }} υπόλοιπο">{{ '%+d' % s.fit_slack }}</span>{% else %}—{% endif %}</td>
         <td>{% if s.allowance_done %}<span class="tag ok">υπολογισμένο</span>
           {% else %}<span class="tag warn">εκκρεμεί</span>{% endif %}</td>
       </tr>

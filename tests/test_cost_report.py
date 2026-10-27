@@ -379,6 +379,8 @@ def test_ledger_has_every_kind(fresh_system):
     τον τύπο τους. Το δίχτυ: ό,τι υπολογίστηκε ΠΡΕΠΕΙ να εμφανίζεται — μια
     καταβολή που λείπει από τον πίνακα λείπει και από κάθε συμφωνία.
     """
+    from datetime import date
+
     import _bootstrap  # noqa: F401  # ρίζα project στο sys.path + cwd
 
     from webapp import create_app
@@ -455,6 +457,23 @@ def test_ledger_has_every_kind(fresh_system):
         for r in c_["rows"]:
             if r["kind"] == "payroll" and r["month"] == m:
                 assert r["paid"] == r["net"], "η πληρωμή μισθού δεν αντιστοιχίστηκε"
+    # ΠΡΟΒΛΕΨΗ έως 31/12: δεν αγγίζει τα πραγματικά, δεν διπλομετρά ό,τι
+    # υπολογίστηκε, και εκτίμηση = υπολογισμένο + πρόβλεψη
+    with app.test_request_context("/"):
+        fcards = {pid: q.employee_pay_card(pid, date(y, 6, 1)) for pid in proj.persons}
+    for pid, cs in fcards.items():
+        for py in cs["years"]:
+            if py["year"] != y:
+                continue
+            old = next((o for o in cards[pid]["years"] if o["year"] == y), None)
+            assert old is None or py["totals"] == old["totals"]
+            fc = py.get("forecast", [])
+            done = {(r["month"], r["kind"], r["hire"]["n"]) for r in py["rows"]}
+            assert not done & {(r["month"], r["kind"], r["hire"]["n"]) for r in fc}
+            if fc:
+                assert py["estimate"]["net"] == round(
+                    py["totals"]["net"] + py["forecast_totals"]["net"], 2)
+    assert any(py.get("forecast") for cs in fcards.values() for py in cs["years"])
     pid = next(pid for pid, cs in cards.items() if cs["years"])
     body = c.get(f"/persons/{pid}/pay").get_data(as_text=True)
     assert "Αποδοχές & πληρωμές" in body and "Πληρώθηκε" in body

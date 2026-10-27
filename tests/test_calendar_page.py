@@ -24,8 +24,9 @@ def test_calendar_page(fresh_system):
     eid = e.employment_id
     page = c.get(f"/employments/calendar?eid={eid}").get_data(as_text=True)
     assert f"/employments/{eid}/calendar" in page and 'id="modal-host"' in page
+    # η καρτέλα ΔΕΝ έχει κάρτα «Ημερολόγιο» — η οθόνη ανοίγει από το μενού
     card = c.get(f"/employments/{eid}").get_data(as_text=True)
-    assert f"/employments/calendar?eid={eid}" in card
+    assert f"/employments/calendar?eid={eid}" not in card
 
     with app.test_request_context("/"):
         d = today() + timedelta(days=7)

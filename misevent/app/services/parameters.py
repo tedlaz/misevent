@@ -197,6 +197,10 @@ class ParametersMixin:
             raise ValueError("Δεν δόθηκε καμία έγκυρη προτίμηση")
         if not 0 <= clean.get("obligations_horizon_months", 0) <= 24:
             raise ValueError("Ο ορίζοντας εκκρεμοτήτων πρέπει να είναι 0–24 μήνες")
+        if "peak_periods" in clean:
+            from misevent.rules.calendar_gr import day_ranges
+
+            day_ranges(clean["peak_periods"], 2000)  # δίσεκτο: δέχεται και 29/02
         self.store.append("MISC", MiscSettingsChanged(clean))
 
     def misc_settings(self) -> dict:

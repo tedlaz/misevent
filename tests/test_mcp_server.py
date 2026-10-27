@@ -19,6 +19,8 @@ def test_tools_return_json(fresh_system):
     assert json.loads(mcp_server.employments(cid)) == []
     assert isinstance(json.loads(mcp_server.obligations(cid, view="all")), list)
     assert json.loads(mcp_server.payroll(cid, 2026, 1)) == []
+    assert json.loads(mcp_server.staff(cid)) == []
+    assert "error" in json.loads(mcp_server.certificates(cid, "x"))["tax"]
     sys.modules.pop("mcp_server", None)
 
 

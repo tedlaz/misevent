@@ -483,7 +483,6 @@ EMP_MODALS = {
     "insurance",
     "schedule",
     "daily",
-    "attendance",
     "leave",
     "childcare",
     "childbirth",
@@ -763,12 +762,6 @@ def _card(employment_id):
         abort(404)
     year = today().year  # έτος δικαιώματος αδείας, ως προς την ημ. αναφοράς
 
-    # Παρουσίες ανά μήνα (φθίνουσα) — κρίσιμες για τους ημερομίσθιους
-    per_month: dict[tuple[int, int], int] = {}
-    for d in e.attendance:
-        k = (d.year, d.month)
-        per_month[k] = per_month.get(k, 0) + 1
-
     # Ασφαλιστικές καλύψεις του προφίλ
     covs = profile_coverages(e.insurance_profile)
     prof = e.insurance_profile
@@ -803,7 +796,6 @@ def _card(employment_id):
         # Αποζημίωση απόλυσης (μόνο σε καταγγελία σύμβασης)
         "is_dismissal": e.termination_reason == DISMISSAL_REASON,
         "severance": svc.severance(employment_id),
-        "attendance": sorted(per_month.items(), reverse=True),
         # Ημερήσιο πρόγραμμα (υπερισχύει του εβδομαδιαίου), πρόσφατο πρώτα
         # Κατάσταση υποβολών πρόσληψης ΕΡΓΑΝΗ (ενεργοποιεί ο χρήστης)
         "e3_done": (
@@ -1906,53 +1898,6 @@ def _with_package(employment_id: str, week: str | None):
     modal = (render_template("partials/_emp_daily_package_modal.html", **ctx, **pkg)
              if pkg["pkg_rows"] else "")
     return render_template("partials/_employment_card.html", **ctx, modal_html=modal)
-
-
-
-@bp.post("/<employment_id>/attendance")
-def attendance(employment_id):
-    """Καταγραφή παρουσιών όπως οι γραμμές της Κάρτας Εργασίας ΕΡΓΑΝΗ:
-    ημερομηνία · ώρα εισόδου · ώρα εξόδου (έξοδος ≤ είσοδο = επόμενη ημέρα).
-
-    Ίδια διαδρομή με την εισαγωγή xlsx (`record_attendance` → χτυπήματα
-    κάρτας): πολλές γραμμές της ίδιας ημέρας = διακοπτόμενο ωράριο. Νέα
-    καταγραφή ημέρας ΑΝΤΙΚΑΘΙΣΤΑ την προηγούμενη της ίδιας ημέρας."""
-
-    def cmd():
-        f = request.form
-        e = proj.employments[employment_id]
-        punches = []
-        for day, t_in, t_out in zip(
-            f.getlist("day"), f.getlist("time_in"), f.getlist("time_out")
-        ):
-            if not (day or t_in or t_out):
-                continue  # κενή γραμμή
-            if not (day and t_in and t_out):
-                raise ValueError("Κάθε γραμμή θέλει ημερομηνία, είσοδο και έξοδο")
-            d = date.fromisoformat(day)
-            if not e.active_on(d):
-                raise ValueError(f"Η {d.strftime('%d/%m/%Y')} είναι εκτός "
-                                 "περιόδου απασχόλησης")
-            p = karta_import.KartaPunch(employment_id, "", "", d,
-                                        cp.hhmm(cp.parse_time(t_in)),
-                                        cp.hhmm(cp.parse_time(t_out)))
-            if p.minutes <= 0:
-                raise ValueError(f"{d.strftime('%d/%m/%Y')}: η είσοδος "
-                                 "ταυτίζεται με την έξοδο")
-            punches.append(p)
-        if not punches:
-            raise ValueError("Συμπληρώστε τουλάχιστον μία γραμμή")
-        daily = karta_import.daily_hours(punches)
-        shifts = karta_import.daily_shifts(punches)
-        for key, hours in sorted(daily.items()):
-            svc.record_attendance(employment_id, key[1], shifts[key])
-        return (f"Καταγράφηκαν {len(daily)} ημέρες παρουσίας "
-                f"({sum(daily.values()):g} ώρες)")
-
-    ok, msg = run_command(cmd)
-    if ok:
-        return flash_to(_fragment(employment_id), msg, err=False)
-    return _modal_error(employment_id, "attendance", msg)
 
 
 @bp.post("/<employment_id>/leave")

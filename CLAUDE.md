@@ -10,7 +10,7 @@ uv run ruff check . && uv run pytest
 
 233 tests, ~16s. Για ένα αρχείο: `uv run pytest tests/test_x.py`.
 Web UI: `uv run -m webapp` → http://localhost:8000
-MCP server (μόνο ανάγνωση, stdio): `uv run --extra mcp -m mcp_server` — το
+MCP server (stdio· γράφει μόνο πρόγραμμα ημέρας & άδειες): `uv run --extra mcp -m mcp_server` — το
 φορτώνει αυτόματα το Claude Code από το `.mcp.json`.
 
 ⚠️ Τα tests μοιράζονται ΜΙΑ διεργασία. Όποιο test μεταβάλλει καθολική

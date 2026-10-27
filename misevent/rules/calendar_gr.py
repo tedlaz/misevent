@@ -63,6 +63,26 @@ def last_working_day_of_month(year: int, month: int) -> date:
     return d
 
 
+def day_ranges(spec: str, year: int) -> set[date]:
+    """Ετήσια επαναλαμβανόμενα διαστήματα «ΗΗ/ΜΜ-ΗΗ/ΜΜ, ...» (π.χ. περίοδοι
+    αιχμής «15/12-31/12») ως σύνολο ημερομηνιών του `year`."""
+    out = set()
+    for part in filter(None, (p.strip() for p in (spec or "").split(","))):
+        try:
+            a, b = (date(year, int(m), int(d))
+                    for d, m in (x.strip().split("/") for x in part.split("-")))
+        except ValueError:
+            raise ValueError(
+                f"Μη έγκυρο διάστημα «{part}» — μορφή ΗΗ/ΜΜ-ΗΗ/ΜΜ, π.χ. 15/12-31/12"
+            ) from None
+        if a > b:
+            raise ValueError(f"Το διάστημα «{part}» τελειώνει πριν αρχίσει")
+        while a <= b:
+            out.add(a)
+            a += timedelta(days=1)
+    return out
+
+
 def working_days_in_range(start: date, end: date) -> int:
     n, d = 0, start
     while d <= end:

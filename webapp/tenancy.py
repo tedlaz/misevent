@@ -83,6 +83,9 @@ class Tenant:
         self.proj = Projections()
         self.proj.rebuild(self.store)  # replay: ΠΡΩΤΑ τα κοινά, μετά τα δικά της
         self.store.subscribe(self.proj.handle)
+        # Πόσα events έχουν δει τα projections — βλ. `sync`.
+        self._seen = self.store.event_count()
+        self.store.subscribe(self._saw)
 
         self.sched = ObligationScheduler(self.store, self.proj, horizon_months=1)
         self.store.subscribe(self.sched.handle)
@@ -98,6 +101,18 @@ class Tenant:
         """Πλήρες replay των παραγώγων μετά από rollback/restore."""
         self.proj.rebuild(self.store)
         self.sched.rebuild()
+        self._seen = self.store.event_count()
+
+    def _saw(self, *_):
+        self._seen += 1
+
+    def sync(self):
+        """Events που έγραψε ΑΛΛΗ διεργασία (web UI <-> MCP server, ίδια βάση)
+        δεν περνούν από τους subscribers μας -> replay όταν αλλάξει το πλήθος."""
+        # ponytail: σύγκριση ΠΛΗΘΟΥΣ — rollback + ίσα νέα events σε άλλη
+        # διεργασία ξεφεύγουν· αν χρειαστεί, σύγκρινε και MAX(seq)/event_id.
+        if self.store.event_count() != self._seen:
+            self.rebuild_all()
 
     @property
     def event_count(self) -> int:

@@ -131,16 +131,29 @@
     return new Date(y, m - 1, d);
   }
 
+  /** ⚠️ Το πλέγμα μετρά ΩΡΑ ΤΟΙΧΟΥ (κάθε ημέρα = DAY λεπτά). Με αφαίρεση
+   *  timestamps μια αλλαγή θερινής/χειμερινής ώρας μέσα στο παράθυρο
+   *  μετατοπίζει τα πάντα κατά ±60′ — γι' αυτό ΜΟΝΟ μέσω αυτών των δύο. */
+  function minOf(w, t) {
+    const day = new Date(t.getFullYear(), t.getMonth(), t.getDate());
+    return Math.round((day - baseDate(w)) / 86400000) * DAY
+      + t.getHours() * 60 + t.getMinutes() + t.getSeconds() / 60;
+  }
+
+  function dateAt(w, min) {
+    const b = baseDate(w);
+    return new Date(b.getFullYear(), b.getMonth(), b.getDate(), 0, min);
+  }
+
   /** Λεπτά (από τη base του παραθύρου) της ΠΡΑΓΜΑΤΙΚΗΣ τρέχουσας στιγμής.
    *  Σε ιστορική ημέρα δεν υπάρχει «τώρα»: κεντράρουμε στο μεσημέρι της
    *  ημέρας αναφοράς και ο δείκτης κρύβεται από το CSS (.nolive). */
   function nowMinutes(el, w) {
-    const base = baseDate(w);
     if (el.dataset.live !== "1") {
       const [y, m, d] = el.dataset.day.split("-").map(Number);
-      return (new Date(y, m - 1, d) - base) / 60000 + 12 * 60;
+      return minOf(w, new Date(y, m - 1, d, 12));
     }
-    return (Date.now() - base) / 60000;
+    return minOf(w, new Date());
   }
 
   function clamp(v, lo, hi) { return Math.min(hi, Math.max(lo, v)); }
@@ -271,7 +284,7 @@
   function dayLabel(w, leftMin) {
     const chip = document.getElementById("lb-daynow");
     if (!chip) return;
-    const d = new Date(baseDate(w).getTime() + leftMin * 60000);
+    const d = dateAt(w, leftMin);
     chip.textContent = `${DOW[(d.getDay() + 6) % 7]} ${pad(d.getDate())}/`
       + `${pad(d.getMonth() + 1)}/${d.getFullYear()}`;
   }
@@ -291,7 +304,7 @@
     if (!view.free) { at.textContent = at.dataset.home; return; }
     // Πλήρης ημερομηνία ΗΗ/ΜΜ/ΕΕΕΕ: στην προβολή έτους το «05/08» χωρίς έτος
     // δεν ξεχωρίζει το 2025 από το 2026.
-    const d = new Date(baseDate(w).getTime() + view.center * 60000);
+    const d = dateAt(w, view.center);
     at.textContent = `κέντρο: ${pad(d.getDate())}/${pad(d.getMonth() + 1)}/`
       + `${d.getFullYear()} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
   }
@@ -395,7 +408,7 @@
       if (nw && oldBase) {
         // ⚠️ Η μετατόπιση της base πρέπει να εφαρμοστεί σε ΟΛΕΣ τις θέσεις
         // (κέντρο, στόχος, τρέχον animation) — αλλιώς η εικόνα πηδά μία ημέρα
-        const d = (oldBase - baseDate(nw)) / 60000;
+        const d = Math.round((oldBase - baseDate(nw)) / 86400000) * DAY;
         view.center += d;
         view.target += d;
         if (view.anim) { view.anim.from += d; view.anim.to += d; }
@@ -424,11 +437,12 @@
   function edge(el, w, total) {
     const base = baseDate(w);
     const margin = edgeMargin();
-    const page = zoomLevel().page * DAY * 60000;   // βήμα μετακύλισης (ms)
+    const page = zoomLevel().page;                 // βήμα μετακύλισης (ημέρες)
+    const shifted = (n) => new Date(base.getFullYear(), base.getMonth(), base.getDate() + n);
     if (Math.max(view.center, view.target) > total - margin) {
-      load(el, iso(new Date(base.getTime() + page)));
+      load(el, iso(shifted(page)));
     } else if (Math.min(view.center, view.target) < margin) {
-      load(el, iso(new Date(base.getTime() - page)));
+      load(el, iso(shifted(-page)));
     }
   }
 
@@ -745,7 +759,7 @@
     if (!el || !w) return;
     const lvl = zoomLevel();
     const to = lvl.h * 60;
-    const mid = new Date(baseDate(w).getTime() + view.center * 60000);
+    const mid = dateAt(w, view.center);
     mid.setHours(0, 0, 0, 0);
     mid.setDate(mid.getDate() - Math.floor(lvl.days / 2));
     view.ts = performance.now();
@@ -839,12 +853,12 @@
       if (w && !view.drag && !view.loading) load(el, w.dataset.base);
     }, 10000);
 
-    // ΨΗΦΙΑΚΗ ΚΑΡΤΑ — ΠΡΑΓΜΑΤΙΚΟΣ ΧΡΟΝΟΣ (δύο διαδρομές, ίδιο αποτέλεσμα):
+    // ΠΡΑΓΜΑΤΙΚΟΣ ΧΡΟΝΟΣ (δύο διαδρομές, ίδιο αποτέλεσμα):
     // (α) καταχώρηση από ΑΥΤΗ την οθόνη: ο server απαντά με `HX-Trigger:
     //     lb-refresh` και οι γραμμές ξαναφορτώνονται ΑΜΕΣΩΣ·
-    // (β) καταχώρηση από ΑΛΛΟΥ (άλλη οθόνη, άλλος χρήστης, μηχάνημα κάρτας):
-    //     ρωτάμε τον «σφυγμό» — έναν αριθμό που αλλάζει σε κάθε διέλευση —
-    //     και κατεβάζουμε το παράθυρο ΜΟΝΟ όταν όντως άλλαξε κάτι.
+    // (β) καταχώρηση από ΑΛΛΟΥ (άλλη οθόνη, μηχάνημα κάρτας, MCP server):
+    //     ρωτάμε τον «σφυγμό» — έναν αριθμό που αλλάζει σε κάθε event — και
+    //     όταν αλλάξει στέλνουμε το ΙΔΙΟ `lb-refresh` (γραμμές + «Προσωπικό»).
     document.body.addEventListener("lb-refresh", () => refresh(el));
     const purl = el.dataset.pulseUrl;
     if (purl) {
@@ -853,7 +867,7 @@
         if (view.drag || view.loading || document.hidden) return;
         try {
           const v = (await (await fetch(purl)).json()).v;
-          if (seen !== null && v !== seen) refresh(el);
+          if (seen !== null && v !== seen) document.body.dispatchEvent(new Event("lb-refresh"));
           seen = v;
         } catch (err) { /* προβολή μόνο: η αποτυχία δεν χαλά την εικόνα */ }
       }, PULSE_MS);

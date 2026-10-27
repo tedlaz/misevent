@@ -1,0 +1,14 @@
+{# Βεβαιώσεις εργαζομένου (PDF σε νέα καρτέλα) — κοινό για το modal
+   πληροφοριών και το modal «📄 Βεβαιώσεις» της λίστας. #}
+<b class="sec">Βεβαιώσεις</b>
+<div class="btnrow">
+  <form method="get" target="_blank" style="display:flex;gap:6px;align-items:center"
+        action="{{ url_for('persons.certificate', person_id=person.person_id, kind='tax') }}">
+    <input type="number" name="year" min="2000" max="2100" step="1"
+           style="max-width:90px" value="{{ cert_year }}">
+    <button type="submit" class="ghost">Βεβαίωση αποδοχών (φορολογική)</button>
+  </form>
+  <a class="ghost" target="_blank"
+     href="{{ url_for('persons.certificate', person_id=person.person_id, kind='employment') }}">
+    Βεβαίωση εργασίας</a>
+</div>
