@@ -210,7 +210,7 @@ class ReportPDF(FPDF):
         self.cell(0, 7, title)
         self.set_xy(self.l_margin + 19, 13.4)
         self.font(8.2, color=MUTED)
-        who = c.legal_name if c else "—"
+        who = c.official_name if c else "—"
         ids = f"ΑΦΜ {c.afm} · ΑΜΕ {c.ame}" if c else ""
         self.cell(0, 4.4, f"{who}   {ids}")
         self.set_xy(self.l_margin + 19, 18.2)
@@ -720,8 +720,9 @@ def _slip_page(pdf: ReportPDF, r: dict, year: int, month: int,
     # -- ΑΠΟΔΟΧΕΣ ----------------------------------------------------------
     pdf.section("Αποδοχές", GREEN, "plus")
     if r["pay_type"] == "daily":
-        base_note = (f"ημερομίσθιο {eur(a.get('daily_wage') or 0)} × "
-                     f"{a.get('efka_days', 0)} ημέρες εργασίας")
+        base_note = (f"αμοιβή ημέρας {eur(a.get('day_pay') or a.get('daily_wage') or 0)}"
+                     f" (ημερομίσθιο × 6/40 × {a.get('day_hours', 0):g}ω) × "
+                     f"{a.get('pay_days', a.get('efka_days', 0))} ημέρες εργασίας")
     else:
         wk = emp.weekly_hours if emp is not None else 40.0
         bdays = a.get("base_days") or pe.monthly_insurance_days(wk or 40.0)
@@ -2039,7 +2040,7 @@ def _cert_parties(pdf: ReportPDF, person):
         f"{b.street} {b.street_no}".strip() if b else "",
         f"{b.postal_code} {b.city}".strip() if b else "") if x)
     cards = [
-        ("building", "ΕΡΓΟΔΟΤΗΣ", c.legal_name,
+        ("building", "ΕΡΓΟΔΟΤΗΣ", c.official_name,
          " · ".join(x for x in (f"ΑΦΜ {c.afm}", f"ΑΜΕ {c.ame}", addr) if x)),
         ("person", "ΕΡΓΑΖΟΜΕΝΟΣ/Η", person.full_name,
          " · ".join(x for x in (

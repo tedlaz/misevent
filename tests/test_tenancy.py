@@ -93,8 +93,8 @@ def test_tenancy():
     check("και ισχύει στους υπολογισμούς (config overrides)",
           config.minimum_wage_for(on).monthly == 1234.0)
 
-    local = a.store.count_by_type("MinimumWageDefined")
-    shared = reg.shared.count_by_type("MinimumWageDefined")
+    local = a.store.count_by_type("ParametersDefined")
+    shared = reg.shared.count_by_type("ParametersDefined")
     check("το κοινό event ΔΕΝ γράφτηκε στο τοπικό log", local == 0)
     check("γράφτηκε ΜΙΑ φορά στο κοινό log", shared >= 1)
 

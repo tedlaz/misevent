@@ -1691,7 +1691,9 @@ def _base_breakdown(emp, a: dict, on_date):
             "daily_wage": wage,
             "daily_rate": wage,
             "base_formula": (
-                f"{money(wage)} € ημερομίσθιο × {a.get('efka_days')} ημ. ασφάλισης "
+                f"{money(wage)} € ημερομίσθιο × 6/40 × {a.get('day_hours', 0):g}ω "
+                f"= {money(a.get('day_pay') or wage)} € αμοιβή ημέρας × "
+                f"{a.get('pay_days', a.get('efka_days'))} ημ. εργασίας "
                 f"= {money(a.get('base_gross') or 0)} €"
             ),
             "hourly_formula": f"{money(wage)} € × 6 / 40",
@@ -2330,9 +2332,14 @@ def _forecast_payroll_result(emp, y: int, m: int):
     )
     days = round(base_days * covered / ((last - first).days + 1))
     if terms.pay_type == "daily":
+        # Ημέρες ΠΡΟΓΡΑΜΜΑΤΟΣ (όχι τα 25 της ασφάλισης) × αμοιβή ημέρας
+        planned = len(emp.scheduled_days_in_month(y, m, whole_month=True))
+        days = round(planned * covered / ((last - first).days + 1))
         if days == 0:
             return None
-        return pe.calc_monthly_daily(terms.wage, days, emp.children_on(end),
+        day_pay = pe.daily_day_pay(terms.wage, terms.weekly_hours,
+                                   emp.scheduled_days_per_week())
+        return pe.calc_monthly_daily(day_pay, days, emp.children_on(end),
                                      end, rates=rates)
     return pe.calc_monthly(
         terms.wage, emp.children_on(end), end, unpaid_days=base_days - days,

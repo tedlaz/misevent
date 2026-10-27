@@ -159,9 +159,8 @@ proxies δείχνουν στην ΠΡΩΤΗ εταιρεία — αλλά **Π�
 
 ### ΤΙ ΕΙΝΑΙ ΚΟΙΝΟ — `events.SHARED_EVENT_TYPES`
 
-`MinimumWageDefined`, `EfkaRatesDefined`, `TekaRatesDefined`,
-`TaxScaleDefined`, `SickLeaveRulesDefined`, `AllowanceRulesDefined`,
-`WorkHourRulesDefined`, `ObligationTypeConfigured`.
+`ParametersDefined` (ΟΛΕΣ οι οικογένειες παραμέτρων), `ObligationTypeConfigured`,
+`KPKDefined`, `KPKRatesDefined`.
 
 ⚠️ Ο λόγος ΔΕΝ είναι μόνο σημασιολογικός («μια νέα ΓΣΣΕ αφορά όλους»): το
 παράγωγό τους ζει σε **ΚΑΘΟΛΙΚΟ state του process** (`config.set_overrides`,
@@ -808,6 +807,7 @@ unittest.)
 | `webapp/clock.py` | **Ημερομηνία αναφοράς** = το «σήμερα» του UI (cookie `ref_date`, control στο header). Καμία σελίδα δεν καλεί `datetime.now()` — όλες περνούν από `clock.today()`, ώστε να δοκιμάζεται όλος ο κύκλος με ταξίδι στον χρόνο |
 | `webapp/queries.py` | **Read-only** ερωτήματα στα projections. Καμία παρενέργεια. Το χρονολόγιο **κρύβει τις κλειδωμένες** υποχρεώσεις (`is_locked()`: ανεκπλήρωτο προαπαιτούμενο) — εμφανίζονται μόλις ενεργοποιηθεί το προαπαιτούμενο |
 | `webapp/actions.py` | **Εντολές** (ό,τι γράφει event): `COMMANDS` (μία ανά τύπο υποχρέωσης· το `trigger()` κάνει dispatch μέσω `obligation_types`), `seed_demo()` |
+| `webapp/demo_company.py` | **Εταιρεία DEMO** («Εταιρείες» / «Ξεκινώντας» → «Δημιουργία DEMO»): 5 εργαζόμενοι (μισθωτοί/ημερομίσθιοι, πλήρους/μερικής, ένας <25· οι ημερομίσθιοι με ΗΜΕΡΗΣΙΟ πρόγραμμα), ανάληψη μισθοδοσίας 1/1 (`payroll_from`), και η αλυσίδα υποχρεώσεων τρέχει με το `trigger()` για κάθε περίοδο πριν τον τρέχοντα μήνα. Μόνο οι ΙΔΙΕΣ εντολές του UI — test: `tests/test_demo_company.py` |
 | `webapp/helpers.py` | `run_command()` (κλείδωμα + ValueError→toast), `flash_to()` |
 | `webapp/labels.py` | **ΠΛΟΗΓΗΣΗ**: `NAV_TOP` (Επισκόπηση + Παρουσίες + Μισθοδοσία, εκτός ομάδων) + `NAV_GROUPS` (πτυσσόμενες ομάδες: Καθημερινά · Προσωπικό · Αμοιβές · Υποβολές · Ρυθμίσεις · Σύστημα) + `nav_for(is_admin, endpoint)` που φιλτράρει ανά δικαιώματα, σημειώνει την ενεργή σελίδα και ανοίγει την ομάδα της. ⚠️ Το `admin_only` κάθε σελίδας ΠΡΕΠΕΙ να συμφωνεί με το `ADMIN_ENDPOINTS` (ο guard κάνει `abort(403)` — σύνδεσμος χωρίς τη σημαία οδηγεί σε σφάλμα). Το κλειδί κάθε ομάδας είναι ΣΤΑΘΕΡΟ: πάνω του θυμάται ο browser τι είναι ανοιχτό (`nav-fold.js`). Το ίδιο το άνοιγμα/κλείσιμο είναι native `<details>` — **μηδέν JS**, ίδιο μοτίβο με τα CSS-only tabs + επανεξαγωγή ετικετών/εικονιδίων από το `obligation_types.py` + **`MONTHS_GEN`** (μήνες σε γενική — ΜΙΑ πηγή αλήθειας, τη διαβάζουν και οι εκτυπώσεις PDF) + **`DAY_NAMES`** (σύντομες ημέρες — grid Προγράμματος & Ζωντανά) |
 | `webapp/osyk.py` | **Μητρώα ΟΣΥΚ/ΤΟΠΙΚ για lookup στις φόρμες**, διαβασμένα από τα ΙΔΙΑ αρχεία του eΑΠΔ viewer (`webapp/eapd/*.js` — καθαρά JSON literals, `json.loads`, καμία αντιγραφή σε Python, καμία εξάρτηση σε JS runtime). Σήμερα: **ΤΟΠΙΚ** (Τοπικές Δ/νσεις e-ΕΦΚΑ) για τα «Κωδ./Ονομασία Τοπικής Δ/νσης» των στοιχείων εργοδότη = **ΑΠΔ No 3/No 4**. Αναζήτηση χωρίς τόνους μέσω `constraints.norm_name`. Τα `osyk_kad.js`/`osyk_eid.js` (ΚΑΔ No 31, ειδικότητα No 35 — χρήσιμα στη φόρμα ΕΙΔΙΚΟΤΗΤΩΝ) διαβάζονται με τον ΙΔΙΟ loader όποτε χρειαστούν |
@@ -1910,10 +1910,9 @@ events δεν επικυρώνονται αναδρομικά (§1), οπότε 
 
 ### Συντελεστές → ΜΗΤΡΩΟ ΠΑΡΑΜΕΤΡΩΝ από events (σελίδα `/settings`)
 
-**Πηγή αλήθειας είναι τα events** `*Defined` ανά οικογένεια
-(`MinimumWageDefined`, `EfkaRatesDefined`, `TekaRatesDefined`,
-`TaxScaleDefined`, `SickLeaveRulesDefined`, `AllowanceRulesDefined`,
-`WorkHourRulesDefined`) — μία εγγραφή ανά (οικογένεια, `valid_from`), ίδιο
+**Πηγή αλήθειας είναι ΕΝΑ event για όλες τις οικογένειες**:
+`ParametersDefined(family, valid_from, values, repealed)` — μία εγγραφή ανά
+(οικογένεια, `valid_from`), ίδιο
 `valid_from` = αντικατάσταση. Το projection τα μετατρέπει σε εγγραφές του
 config και τις περνά στο `config.set_overrides()` (παράγωγο state,
 ξαναχτίζεται με replay — το `Projections.__init__` κάνει
@@ -1926,14 +1925,13 @@ config και τις περνά στο `config.set_overrides()` (παράγωγ�
 αναδρομικοί επανυπολογισμοί βγαίνουν σωστοί.
 
 ➜ **ΜΗΤΡΩΟ `config.FAMILIES` — ΜΙΑ ΕΓΓΡΑΦΗ ΑΝΑ ΟΙΚΟΓΕΝΕΙΑ** (ίδιο πρότυπο με
-το `obligation_types.TYPES`). Κουβαλά κλάση, **όνομα** event, αρχικές τιμές,
+το `obligation_types.TYPES`). Κουβαλά κλάση, αρχικές τιμές,
 πεδία (`ParamField`: όνομα/ετικέτα/τύπος/ορατότητα), κείμενα UI, `critical`,
 `ui_mode`, `carry_over` και `check`. Απ' αυτό **ΠΑΡΑΓΟΝΤΑΙ**:
 `FAMILY_CLASSES`/`FAMILY_DEFAULTS`/`FAMILY_LABELS`/`CRITICAL_FAMILIES`,
-το `projections.PARAM_EVENT_FAMILY`, το `settings.FAMILY_FIELDS`/
-`CARD_LABELS`/`FAMILY_NOTES`και ο wizard.
-**ΝΕΑ ΟΙΚΟΓΕΝΕΙΑ = μία εγγραφή + ένα `*Defined` event + δύο ονόματα
-(`EVENT_TYPES`, `SHARED_EVENT_TYPES`).** Καμία νέα μέθοδος, καμία φόρμα.
+το `settings.FAMILY_FIELDS`/`CARD_LABELS`/`FAMILY_NOTES` και ο wizard.
+**ΝΕΑ ΟΙΚΟΓΕΝΕΙΑ = μία εγγραφή στο μητρώο.** Κανένα νέο event, καμία νέα
+μέθοδος, καμία φόρμα.
 
 ➜ **`ui_mode`**: `"generic"` = η κάρτα/φόρμα παράγεται αυτόματα από τα πεδία.
 `"custom"` = η οικογένεια κουβαλά **ΠΙΝΑΚΕΣ** που δεν χωρούν σε λίστα βαθμωτών
@@ -1944,21 +1942,20 @@ dispatcher `services._define_custom`, που είναι ΜΙΑ διαδρομή 
 `severance`, `work_hours`).
 
 ➜ **ΜΙΑ ΕΝΤΟΛΗ: `svc.define_parameters(family, valid_from, **values)`** —
-διαβάζει πεδία/όρια/διασταυρώσεις/event από το μητρώο. Τα επτά `define_*`
+διαβάζει πεδία/όρια/διασταυρώσεις από το μητρώο· χτίζει μία φορά την κλάση
+της οικογένειας ώστε ό,τι θα έσκαγε στο replay (υποχρεωτικό πεδίο που λείπει)
+να σκάσει ΠΡΙΝ γραφτεί το event. Τα επτά `define_*`
 μένουν ως **λεπτοί wrappers** (τα καλούν demo/seed/tests).
 
-➜ ⚠️ **ΤΟ EVENT ΑΝΑΦΕΡΕΤΑΙ ΜΕ ΤΟ ΟΝΟΜΑ ΤΟΥ (string), ΟΧΙ ΜΕ ΤΗΝ ΚΛΑΣΗ.** Το
-`config.py` είναι **φύλλο** του γράφου εξαρτήσεων και το `events.py` κάνει
-import το config — αναφορά σε κλάση εδώ θα έκανε **κύκλο**. Η ανάλυση
-ονόματος→κλάση γίνεται στο `projections.py`, το μόνο σημείο που βλέπει
-και τα δύο.
+➜ **`values` = τα πεδία της κλάσης της οικογένειας**, σε JSON. Το
+`projections.param_entry` ξαναχτίζει την κλάση· ό,τι λείπει παίρνει την
+προεπιλογή της κλάσης, ό,τι περισσεύει αγνοείται. Επειδή το event είναι ΕΝΑ
+και είναι στο `SHARED_EVENT_TYPES`, μια νέα οικογένεια **δεν μπορεί** να
+γίνει κατά λάθος ανά εταιρεία (§1α).
 
-➜ **ΔΥΟ `validate()` ΣΤΟ IMPORT**: `config.validate_families()` (πεδίο εκτός
-dataclass, άγνωστος τύπος, `carry_over` σε ορατό πεδίο, λάθος αρχική τιμή) και
-`projections._validate_param_registry()`. Ο δεύτερος πιάνει το **σοβαρό**:
-οικογένεια εκτός `SHARED_EVENT_TYPES` γινόταν **σιωπηλά ανά εταιρεία** ενώ το
-παράγωγό της ζει σε καθολικό state (`config.set_overrides`) — δύο εταιρείες
-πατούσε η μία την άλλη με λάθος συντελεστές και κανένα μήνυμα (§1α).
+➜ **`config.validate_families()` ΣΤΟ IMPORT**: πεδίο εκτός dataclass,
+άγνωστος τύπος, `carry_over` σε ορατό πεδίο, λάθος αρχική τιμή, **`repealed`
+που λείπει** από την κλάση.
 
 ➜ **`carry_over`**: πεδία που ΔΕΝ ρυθμίζονται από το UI και μεταφέρονται
 αυτούσια από την ισχύουσα εγγραφή. Σήμερα τα ποσοστά ΕΦΚΑ (τα πραγματικά
@@ -1989,17 +1986,14 @@ dataclass, άγνωστος τύπος, `carry_over` σε ορατό πεδίο,
 χρησιμοποιεί το `minimum_wage_entries()` ώστε μια κατάργηση **να μη γεννήσει
 `WAGE_ADJUSTMENT`** (δεν είναι νέα ΓΣΣΕ).
 
-➜ ⚠️ **ΤΟ `repealed` ΕΙΝΑΙ ΠΑΝΤΑ ΤΟ ΤΕΛΕΥΤΑΙΟ ΠΕΔΙΟ** στα events και στις
-dataclasses του config: αλλού θα άλλαζε τη σειρά των **θετικών** ορισμάτων.
-Η προσθήκη του σε υπάρχοντα events είναι ασφαλής για το replay, επειδή το
-`event_store._coerce` **παραλείπει τα απόντα πεδία** (παίρνουν το default) και
-**αγνοεί τα άγνωστα** — καμία migration, καμία αλλαγή schema.
+➜ ⚠️ **ΤΟ `repealed` ΕΙΝΑΙ ΠΑΝΤΑ ΤΟ ΤΕΛΕΥΤΑΙΟ ΠΕΔΙΟ** στις dataclasses του
+config: αλλού θα άλλαζε τη σειρά των **θετικών** ορισμάτων.
 
 ➜ ⚠️ Η κλίμακα ΦΜΥ (`ui_mode="custom"`) **δεν αντιγράφεται πεδίο-πεδίο**: τα
-`brackets` είναι `TaxBracket` στο config αλλά **dicts** στο event, και το
+`brackets` είναι `TaxBracket` στο config αλλά **dicts** στο `values`, και το
 καθεστώς (`model`/`model_params`) πρέπει να διατηρηθεί. Περνά από το
-`_define_tax_from_entry`, και το `projections.param_entry` μεταφέρει το
-`repealed` **ρητά** (το χτίζει πεδίο-πεδίο, δεν περνά από το γενικό μονοπάτι).
+`_define_tax_from_entry`· το `projections.param_entry` έχει δικό του κλάδο για
+`tax`/`severance` (πίνακες, `None` -> `inf`).
 Test: `tests/test_param_repeal.py`.
 
 - **Αρχικοποίηση (πρώτο τρέξιμο)**: κενό μητρώο → η `/settings` προτείνει
@@ -2020,14 +2014,14 @@ Test: `tests/test_param_repeal.py`.
   `run_monthly_payroll` **απορρίπτει** περίοδο χωρίς επιβεβαιωμένο μητρώο
   (`svc._require_parameters` — ΓΣΣΕ/ΕΦΚΑ/φορολογία), όπως τα ΚΠΚ.
   ➜ demo/seed/tests καλούν `confirm_default_parameters()` πριν από payroll.
-- **Νέα ΓΣΣΕ = event**: το `MinimumWageDefined` γεννά αντιδραστικά την
+- **Νέα ΓΣΣΕ = event**: το `ParametersDefined` της `minimum_wage` γεννά αντιδραστικά την
   υποχρέωση `WAGE_ADJUSTMENT` αν η περίοδος ισχύος έχει ήδη ανοίξει
   (scheduler)· ο scheduler διαβάζει `config.minimum_wage_entries()` (merged).
 - **Καθεστώτα ΦΜΥ** (`config.TAX_MODELS`): η ΛΟΓΙΚΗ κάθε φορολογικού
   καθεστώτος είναι ΚΛΑΣΗ με κοινή διεπαφή `annual_tax(taxable, children,
   birth_date, on)` — `TaxScale` (standard) και `TaxScaleYouth2026`
-  (κλίμακα **από 1/1/2026**, τιμές ΕΝΔΕΙΚΤΙΚΕΣ). Το `TaxScaleDefined.model`
-  επιλέγει καθεστώς, το `model_params` τις τιμές του. Νέος φορολογικός νόμος
+  (κλίμακα **από 1/1/2026**, τιμές ΕΝΔΕΙΚΤΙΚΕΣ). Το `values["model"]`
+  της `tax` επιλέγει καθεστώς, το `model_params` τις τιμές του. Νέος φορολογικός νόμος
   με νέα λογική = νέα κλάση + εγγραφή στο `TAX_MODELS` — τίποτα άλλο. Η
   ηλικία περνά ως `birth_date` σε ΟΛΑ τα `pe.calc_*`/`monthly_fmy`
   (`None` = συντελεστής ενηλίκου).
@@ -2123,7 +2117,7 @@ latest-wins) — η μόνη μόνιμη κατάσταση εδώ είναι �
 
 | Ο κανόνας… | Διαδρομή | Κόστος |
 |---|---|---|
-| έχει **ημερομηνία έναρξης ισχύος**, τον αλλάζει ο χρήστης | **Α** — `config.FAMILIES` | 6 μηχανικές αλλαγές· μηδέν UI |
+| έχει **ημερομηνία έναρξης ισχύος**, τον αλλάζει ο χρήστης | **Α** — `config.FAMILIES` | 4 αλλαγές, όλες στο `config.py`· μηδέν UI |
 | **απορρίπτει** καταχώρηση, άχρονος | **Β** — `constraints.py` | 2 σημεία, καμία φύλαξη |
 | είναι **προθεσμία** στο χρονολόγιο | **Γ** — `obligation_types.TYPES` | 2 δηλωτικά + εκπλήρωση |
 | καταγράφει **νέο γεγονός** | **Δ** — νέο event | 4–8 σημεία |
@@ -2139,11 +2133,10 @@ latest-wins) — η μόνη μόνιμη κατάσταση εδώ είναι �
 3. `rules/config.py` — reader `def x_for(d): return _pick("<key>", d, "<μήνυμα>")`.
    **ΠΑΝΤΑ μέσω `_pick`**: εκεί ζει η συμπεριφορά της κατάργησης.
 4. `rules/config.py` — **μία εγγραφή `ParamFamily`** στο `FAMILIES`.
-5. `domain/events.py` — το event dataclass, **ίδια ονόματα πεδίων** με το #1.
-6. `domain/events.py` — το όνομα στο `EVENT_TYPES` **και** στο `SHARED_EVENT_TYPES`.
 
-**Δωρεάν** (μην τα γράψεις): η εντολή `define_parameters`, το `repeal_parameters`,
-ο wizard, το arm στο `projections.handle` (ένα γενικό για όλες), **όλο το UI**
+**Δωρεάν** (μην τα γράψεις): το event (`ParametersDefined`, κοινό για όλες),
+η εντολή `define_parameters`, το `repeal_parameters`, ο wizard, ο χειρισμός
+στο projection, **όλο το UI**
 του `/settings`, το routing κοινού log, το audit. Μηδέν αλλαγές στο `webapp/`.
 
 ⚠️ Μόνο για `ui_mode="custom"` (φορολογική κλίμακα, αποζημίωση απόλυσης)
@@ -2167,17 +2160,19 @@ latest-wins) — η μόνη μόνιμη κατάσταση εδώ είναι �
 1. `rules/obligation_types.py` — μία εγγραφή `_t(...)`.
 2. `webapp/actions.py` — η υλοποίηση + καταχώρηση στο `COMMANDS`.
 3. **Η ΕΚΠΛΗΡΩΣΗ**: ποιο event την κλείνει. Το `closed_by` του docstring **ΔΕΝ
-   είναι πεδίο** — είναι χειρόγραφη κλήση `_fulfill` στον `scheduler.handle`
+   είναι πεδίο** — είναι χειρόγραφη κλήση `_fulfill` σε handler του scheduler
    (οι πληρωμές καλύπτονται από το `PAYMENT_TYPES`).
-4. Μόνο για `spawn="reactive"`: arm στον `scheduler.handle`.
+4. Μόνο για `spawn="reactive"`: handler `@_apply.register` στον scheduler.
 5. Arm στο `queries.detail_payload`, αλλιώς το modal βγαίνει άδειο.
 
 ### Δ. Νέο event + εντολή
 
 1. dataclass `X(DomainEvent)` · 2. στο `EVENT_TYPES` · 3. στο
 `SHARED_EVENT_TYPES` **μόνο** αν το παράγωγο πάει σε καθολικό state ·
-4. `elif isinstance(event, X)` arm στο `projections.handle` · 5. προαιρετικό
-arm στον `scheduler.handle` · 6. μέθοδος στο σωστό mixin ·
+4. handler `@_apply.register` / `def _on_x(self, event: X)` στο `Projections`
+(ή στο `_no_state` αν δεν κρατά κατάσταση — αλλιώς το `_apply` ΣΚΑΕΙ) ·
+5. προαιρετικός handler στον `Scheduler` (default: καμία αντίδραση) ·
+6. μέθοδος στο σωστό mixin ·
 7. `uv run tests/test_service_surface.py --update` · 8. view/query/template · 9. ελληνική ετικέτα στο `labels.EVENT_LABELS` (Audit log — το `tests/test_event_labels.py` σκάει αν λείπει).
 
 ⚠️ **Πεδία εκτός JSON**: το `_coerce` ξέρει ΜΟΝΟ `date` και `LeaveType`. Τα
@@ -2186,12 +2181,11 @@ tuples γυρίζουν ως **lists**, το `float("inf")` σπάει το JSON
 
 ### Τι σε πιάνει — και πού
 
-**Πέντε validators τρέχουν ΣΤΟ IMPORT** (λάθος = άμεσο σκάσιμο, ελληνικό μήνυμα):
+**Τέσσερις validators τρέχουν ΣΤΟ IMPORT** (λάθος = άμεσο σκάσιμο, ελληνικό μήνυμα):
 
 | Validator | Πιάνει |
 |---|---|
-| `config.validate_families()` | key mismatch, `cls` χωρίς `valid_from`, άγνωστο `kind`, `ParamField` εκτός κλάσης, κακό `ui_mode`, defaults λάθος τύπου |
-| `projections._validate_param_registry()` | event εκτός `EVENT_TYPES`/`SHARED_EVENT_TYPES`, πεδία μητρώου ή κλάσης που λείπουν από το event, **`repealed` που λείπει** |
+| `config.validate_families()` | key mismatch, `cls` χωρίς `valid_from`/**`repealed`**, άγνωστο `kind`, `ParamField` εκτός κλάσης, κακό `ui_mode`, defaults λάθος τύπου |
 | `events._validate_event_registry()` | **event εκτός `EVENT_TYPES`** |
 | `obligation_types.validate()` | άγνωστο προαπαιτούμενο/`payout_source`/`track`, **κύκλοι εξαρτήσεων** |
 | `webapp/actions.py` (COMMANDS guard) | τύπος υποχρέωσης χωρίς εντολή |
@@ -2201,17 +2195,17 @@ tuples γυρίζουν ως **lists**, το `float("inf")` σπάει το JSON
 ζωντανοί subscribers το βλέπουν, όλα δείχνουν σωστά — και σκάει με `KeyError`
 στο **επόμενο restart**, με τη βάση ήδη γεμάτη events που δεν διαβάζονται.
 
-**Τα υπόλοιπα τα πιάνει το `tests/test_registries.py`** — όσα δεν φαίνονται με
-introspection, γιατί η ερώτηση είναι «τα καλεί κανείς;» (διαβάζει το AST):
+**Τα υπόλοιπα τα πιάνει το `tests/test_registries.py`** — κυρίως όσα δεν
+φαίνονται με introspection, γιατί η ερώτηση είναι «τα καλεί κανείς;» (AST):
 
 | Έλεγχος | Το σιωπηλό σφάλμα που αποτρέπει |
 |---|---|
-| κάθε event έχει arm στο `projections.handle` | η αλυσίδα **δεν έχει τελικό `else`** — άγνωστο event αγνοείται για πάντα, και στο replay |
+| κάθε event έχει handler στο `Projections._apply` (introspection του dispatcher) | το `_apply` σκάει — αλλά μόνο όταν το event γραφτεί, δηλαδή αφού είναι ήδη στο log |
 | κάθε οικογένεια έχει reader `_pick("<key>")` | νεκρή οικογένεια: μητρώο/εντολή/UI δουλεύουν, αλλά κανείς δεν διαβάζει την παράμετρο |
 | κάθε `FIELD_KINDS["ui"]` ζωγραφίζεται | άγνωστο widget πέφτει στο money — και για ποσοστό αλλάζει και η κλίμακα (×100) |
 | κάθε τύπος υποχρέωσης εκπληρώνεται | υποχρέωση που δεν κλείνει ΠΟΤΕ και **μπλοκάρει όσες εξαρτώνται από αυτήν** |
 
-Σκόπιμες εξαιρέσεις μπαίνουν στο `NO_PROJECTION` του ίδιου αρχείου, με σχόλιο.
+Events που σκόπιμα δεν κρατούν κατάσταση δηλώνονται στο `Projections._no_state`, με σχόλιο.
 
 ---
 
@@ -2249,8 +2243,24 @@ introspection, γιατί η ερώτηση είναι «τα καλεί καν�
   **Ημερομίσθιο μερικής** (π.χ. τριήμερο ασθενείας): ωρομίσθιο (ίδιος
   τύπος με την πλήρη — `work_hours.hourly_rate`) × μέσες συμβατικές ώρες
   ημέρας (`weekly_hours / scheduled_days_per_week()`) — ΟΧΙ `μισθός/25`.
-  **Ημερομίσθιοι**: ημερομίσθιο × πραγματικές ημέρες παρουσίας.
-  Διαφορετικοί κανόνες και στα Δώρα.
+  **Ημερομίσθιοι**: **αμοιβή ημέρας × ημέρες εργασίας**, όπου αμοιβή ημέρας
+  = ωρομίσθιο (ημερομίσθιο × 6/40) × ώρες ημέρας (συμβατικές εβδομαδιαίες /
+  ημέρες προγράμματος) — `pe.daily_day_pay`. Το συμβατικό ημερομίσθιο είναι
+  του ΕΞΑΗΜΕΡΟΥ (6:40), άρα: εξαήμερο ×1, πενθήμερο 8ωρο ×1,2, 4ωρο ×0,6. ⚠️
+  Ημερομίσθιος 20ω = ΑΚΡΙΒΩΣ μισά μικτά του πλήρους (`tests/test_demo_company.py`).
+  Ίδια αμοιβή ημέρας και στην αποτίμηση ασθενείας (`_sick_daily_rate`).
+  ➜ **ΗΜΕΡΕΣ ΑΣΦΑΛΙΣΗΣ ημερομισθίου ≠ ημέρες αμοιβής**: πλήρης πενθήμερο =
+  ημέρες εργασίας **+1 ανά εβδομάδα με ≥3 ημέρες** (πλήρης εβδομάδα = 6· ΚΑ ΙΚΑ
+  άρθρο 18 παρ. 2, Εγκ. ΙΚΑ 44/1975 & 114/1981) — ο μήνας δίνει 24–27 (Φεβ.
+  2026 = 24, Ιαν. 2026 = 27). Η εβδομάδα ανήκει στον μήνα του ΣΑΒΒΑΤΟΥ της· οι
+  ημέρες της στον προηγούμενο μήνα κρίνονται κατά το πρόγραμμα
+  (`svc._daily_worked_dates`, `pe.daily_insurance_days`). Εξαήμερο/μερική =
+  πραγματικές ημέρες (Εγκ. 34/2018). Η
+  αμοιβή = αμοιβή ημέρας × ημέρες ΕΡΓΑΣΙΑΣ (`line["worked"]`) — ΠΟΤΕ × ημέρες
+  ΕΦΚΑ, αλλιώς το ×6/5 μετρά δύο φορές.
+  **Δώρα & Επίδομα αδείας ημερομισθίου μερικής: ΑΝΑΛΟΓΙΑ ΑΠΟΔΟΧΩΝ** — τα
+  15/25/13 ημερομίσθια × `pe.daily_gift_ratio` (ώρες/40), μαζί με τον κανόνα
+  1/8 ημερολογιακών ημερών για ελλιπή περίοδο.
   ➜ **ΕΛΛΙΠΗΣ ΜΗΝΑΣ (πρόσληψη ή αποχώρηση στη μέση)**: η βάση δίνεται
   **ΑΝΑΛΟΓΙΚΑ** — `βάση × ημέρες προγράμματος εντός απασχόλησης / ημέρες
   προγράμματος ΟΛΟΥ του μήνα` (`svc.expected_efka_days`). ⚠️ Ο **παρονομαστής

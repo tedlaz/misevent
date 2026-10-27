@@ -7,7 +7,7 @@
 να χρησιμοποιούν τους σωστούς συντελεστές της κάθε περιόδου.
 
 ➜ ΠΗΓΗ ΑΛΗΘΕΙΑΣ είναι το ΜΗΤΡΩΟ ΠΑΡΑΜΕΤΡΩΝ από events (σελίδα «Παράμετροι»
-του UI — events *Defined ανά οικογένεια). Οι λίστες αυτού του αρχείου είναι
+του UI — events `ParametersDefined`). Οι λίστες αυτού του αρχείου είναι
 ΠΡΟΤΕΙΝΟΜΕΝΕΣ ΑΡΧΙΚΕΣ ΤΙΜΕΣ: προσυμπληρώνουν το wizard πρώτου τρεξίματος.
 Μόλις μια οικογένεια αποκτήσει events, ΑΥΤΑ υπερισχύουν πλήρως — το
 projection ενημερώνει το παρόν module μέσω set_overrides() (παράγωγο state,
@@ -216,7 +216,7 @@ class TaxScaleYouth2026(TaxScale):
 
     ⚠️ Οι προεπιλεγμένες τιμές είναι ΕΝΔΕΙΚΤΙΚΕΣ — επιβεβαιώστε τις από την
     ΑΑΔΕ πριν από παραγωγική χρήση και καταχωρήστε τις από τη σελίδα
-    «Παράμετροι» (event TaxScaleDefined με model="youth2026")."""
+    «Παράμετροι» (`ParametersDefined` της «tax» με model="youth2026")."""
 
     # Συντελεστές ανά αριθμό τέκνων (0,1,2,3,4+) — η τελευταία τιμή ισχύει
     # και για περισσότερα τέκνα (εκτός του 3ου κλιμακίου, βλ. band3_step).
@@ -270,7 +270,7 @@ class TaxScaleYouth2026(TaxScale):
         return rate
 
 
-# Registry καθεστώτων ΦΜΥ: κλειδί (TaxScaleDefined.model) -> κλάση.
+# Registry καθεστώτων ΦΜΥ: κλειδί (`values["model"]` της «tax») -> κλάση.
 # Η ΛΟΓΙΚΗ κάθε καθεστώτος είναι κώδικας — ο χρήστης επιλέγει από τη σελίδα
 # «Παράμετροι» ΠΟΙΟ καθεστώς ισχύει από πότε και με ποιες ΤΙΜΕΣ.
 TAX_MODELS: dict[str, type] = {
@@ -344,8 +344,7 @@ def tax_scale_for(d: date) -> TaxScale:
 # έρχονται ΠΑΝΤΑ από το ΚΠΚ της κάλυψης (Μητρώο ΚΠΚ, π.χ. 4169) — όπως και
 # του ΕΦΚΑ. Υπήρχε καρτέλα με «fallback συντελεστές ΤΕΚΑ» που ΔΕΝ τη διάβαζε
 # κανένας υπολογισμός: ζητούσε από τον χρήστη τιμές που δεν χρησιμοποιούνταν
-# πουθενά. Το event `TekaRatesDefined` μένει στο μητρώο τύπων ΜΟΝΟ για να
-# διαβάζονται παλιά logs (το replay το αγνοεί).
+# πουθενά.
 
 
 # --- Ασφαλιστικά ταμεία (καλύψεις ειδικοτήτων) ---
@@ -1098,16 +1097,14 @@ def work_hour_rules_for(d: date) -> WorkHourRules:
 # ήταν αντιγραμμένη σε πέντε σημεία (config, events, projections, services x2,
 # settings) και μια νέα οικογένεια σήμαινε πέντε συντονισμένες αλλαγές.
 #
-# ΕΔΩ ζει ό,τι είναι **ΔΕΔΟΜΕΝΟ**: ποια κλάση, ποιο event, ποια πεδία με τι
+# ΕΔΩ ζει ό,τι είναι **ΔΕΔΟΜΕΝΟ**: ποια κλάση, ποια πεδία με τι
 # τύπο/ετικέτα/όρια, ποιες αρχικές τιμές, τι λέει η κάρτα του UI.
 # ΚΩΔΙΚΑΣ μένει ό,τι είναι **ΣΥΜΠΕΡΙΦΟΡΑ**: πώς υπολογίζεται ο φόρος
 # (TAX_MODELS), πώς διαβάζεται ο κανόνας (`*_for`).
 #
-# ⚠️ ΤΟ EVENT ΑΝΑΦΕΡΕΤΑΙ ΜΕ ΤΟ ΟΝΟΜΑ ΤΟΥ (string), ΟΧΙ ΜΕ ΤΗΝ ΚΛΑΣΗ. Το
-# `config.py` είναι **φύλλο** του γράφου εξαρτήσεων: δεν κάνει import τίποτε
-# από τον πυρήνα. Το `events.py` όμως κάνει import ΤΟ CONFIG — άρα μια αναφορά
-# σε κλάση event εδώ θα έκανε κύκλο. Η ανάλυση ονόματος→κλάση γίνεται στο
-# `projections.py`, το μόνο σημείο που βλέπει και τα δύο.
+# ➜ ΟΛΕΣ οι οικογένειες γράφονται με ΕΝΑ event, το `ParametersDefined(family,
+# valid_from, values, repealed)`. Νέα οικογένεια = μία εγγραφή εδώ — καμία
+# αλλαγή στο `events.py`.
 
 
 # Κλειστό λεξιλόγιο τύπων πεδίου (πρότυπο: `obligation_types.DUE_KINDS`).
@@ -1126,13 +1123,13 @@ FIELD_KINDS: dict[str, dict] = {
 
 @dataclass(frozen=True)
 class ParamField:
-    """Ένα πεδίο μιας οικογένειας. Το `name` ΠΡΕΠΕΙ να υπάρχει και στη
-    dataclass και στο event (το επιβάλλει το `validate_families`)."""
+    """Ένα πεδίο μιας οικογένειας. Το `name` ΠΡΕΠΕΙ να υπάρχει στη
+    dataclass (το επιβάλλει το `validate_families`)."""
 
     name: str
     label: str  # ετικέτα UI, ελληνικά
     kind: str  # κλειδί του FIELD_KINDS
-    ui: bool = True  # False = υπάρχει στο event αλλά ΔΕΝ ζητείται στη φόρμα
+    ui: bool = True  # False = αποθηκεύεται αλλά ΔΕΝ ζητείται στη φόρμα
 
 
 @dataclass(frozen=True)
@@ -1140,7 +1137,6 @@ class ParamFamily:
     key: str
     label: str
     cls: type
-    event: str  # ΟΝΟΜΑ της event class — βλ. σχόλιο παραπάνω
     defaults: list
     fields: tuple
     note: str = ""  # περιγραφή κάρτας στο /settings
@@ -1166,7 +1162,7 @@ def _pf(name, label, kind, ui=True):
 FAMILIES: dict[str, ParamFamily] = {f.key: f for f in [
     ParamFamily(
         "minimum_wage", "ΓΣΣΕ / Κατώτατος μισθός", MinimumWage,
-        "MinimumWageDefined", MINIMUM_WAGE_HISTORY, critical=True,
+        MINIMUM_WAGE_HISTORY, critical=True,
         note="νέα ΓΣΣΕ/ΚΥΑ = νέα γραμμή· γεννά αυτόματα υποχρέωση "
              "προσαρμογής (WAGE_ADJUSTMENT) στην περίοδο ισχύος",
         fields=(
@@ -1176,7 +1172,7 @@ FAMILIES: dict[str, ParamFamily] = {f.key: f for f in [
     ),
     ParamFamily(
         "efka", "ΕΦΚΑ — καθολικοί συντελεστές", EfkaRates,
-        "EfkaRatesDefined", EFKA_HISTORY, critical=True,
+        EFKA_HISTORY, critical=True,
         card_label="Πλαφόν ασφαλιστέων αποδοχών (ΕΦΚΑ)",
         note="τα ποσοστά κρατήσεων έρχονται ΠΑΝΤΑ από το ΚΠΚ της κάλυψης "
              "(Μητρώο ΚΠΚ, σελίδα Παράμετροι) — εδώ μόνο το μηνιαίο πλαφόν",
@@ -1191,7 +1187,7 @@ FAMILIES: dict[str, ParamFamily] = {f.key: f for f in [
     ),
     ParamFamily(
         "tax", "Φορολογική κλίμακα (ΦΜΥ)", TaxScale,
-        "TaxScaleDefined", TAX_HISTORY, critical=True,
+        TAX_HISTORY, critical=True,
         # Δική του φόρμα: κλιμάκια, μειώσεις, επιλογή καθεστώτος (TAX_MODELS).
         # Η ΛΟΓΙΚΗ κάθε καθεστώτος είναι κλάση — δεν παραμετροποιείται.
         ui_mode="custom",
@@ -1205,7 +1201,7 @@ FAMILIES: dict[str, ParamFamily] = {f.key: f for f in [
     ),
     ParamFamily(
         "sick_leave", "Ασθένεια (τριήμερο / όρια)", SickLeaveRules,
-        "SickLeaveRulesDefined", SICK_LEAVE_HISTORY,
+        SICK_LEAVE_HISTORY,
         note="τριήμερο εργοδότη (μισό ημερομίσθιο) + ετήσιο όριο "
              "πληρωμένων ημερών ασθενείας",
         fields=(
@@ -1222,7 +1218,7 @@ FAMILIES: dict[str, ParamFamily] = {f.key: f for f in [
     ),
     ParamFamily(
         "allowance", "Προσαυξήσεις κατώτατου", AllowanceRules,
-        "AllowanceRulesDefined", ALLOWANCE_HISTORY,
+        ALLOWANCE_HISTORY,
         note="προσαυξήσεις του κατώτατου ορίου: τριετίες + γάμος "
              "(οι λοιπές δηλώνονται ανά πρόσληψη)",
         fields=(
@@ -1235,7 +1231,7 @@ FAMILIES: dict[str, ParamFamily] = {f.key: f for f in [
     ),
     ParamFamily(
         "labor_subsidy", "Επιδότηση εργατικής εισφοράς", LaborSubsidy,
-        "LaborSubsidyDefined", LABOR_SUBSIDY_HISTORY,
+        LABOR_SUBSIDY_HISTORY,
         note="αρ. 14 ν. 2837/2000: μισθός ΑΚΡΙΒΩΣ ίσος με τον κατώτατο "
              "(+ προσαυξήσεις) → ποσοστό επί του σκέτου κατώτατου, ΑΠΔ κωδ. 102",
         fields=(
@@ -1244,7 +1240,7 @@ FAMILIES: dict[str, ParamFamily] = {f.key: f for f in [
     ),
     ParamFamily(
         "mother_subsidy", "Μείωση εισφοράς μητέρας", MotherSubsidy,
-        "MotherSubsidyDefined", MOTHER_SUBSIDY_HISTORY,
+        MOTHER_SUBSIDY_HISTORY,
         note="αρ. 141§2 ν. 3655/2008: 12 μήνες απασχόλησης μετά τον μήνα "
              "τοκετού, ½ σύνταξης εργαζομένου, ΑΠΔ κωδ. 103",
         fields=(
@@ -1253,7 +1249,7 @@ FAMILIES: dict[str, ParamFamily] = {f.key: f for f in [
     ),
     ParamFamily(
         "youth_subsidy", "Επιδότηση εισφοράς νέων έως 25", YouthSubsidy,
-        "YouthSubsidyDefined", YOUTH_SUBSIDY_HISTORY,
+        YOUTH_SUBSIDY_HISTORY,
         note="αρ. 86 ν. 4583/2018: έως την ημέρα των 25ων γενεθλίων, "
              "εργοδοτική σύνταξης επί ασφαλιστέων, ΑΠΔ κωδ. 107",
         fields=(
@@ -1262,7 +1258,7 @@ FAMILIES: dict[str, ParamFamily] = {f.key: f for f in [
     ),
     ParamFamily(
         "premium_exemption", "Απαλλαγή εισφορών προσαυξήσεων", PremiumExemption,
-        "PremiumExemptionDefined", PREMIUM_EXEMPTION_HISTORY,
+        PREMIUM_EXEMPTION_HISTORY,
         note="αρ. 41 ν. 5184/2025, Εγκ. e-ΕΦΚΑ 21/2025: πλήρης απασχόληση — "
              "οι προσαυξήσεις νύχτας/υπερεργασίας/υπερωρίας/αργιών χωρίς "
              "εισφορές (η απλή αξία της ώρας έχει)",
@@ -1272,7 +1268,7 @@ FAMILIES: dict[str, ParamFamily] = {f.key: f for f in [
     ),
     ParamFamily(
         "severance", "Αποζημίωση απόλυσης", SeveranceRules,
-        "SeveranceRulesDefined", SEVERANCE_HISTORY,
+        SEVERANCE_HISTORY,
         # Δικό της modal: δύο ΠΙΝΑΚΕΣ (μήνες ανά έτη, κλιμάκια φόρου) δεν
         # χωρούν σε λίστα βαθμωτών πεδίων — ίδιος λόγος με την κλίμακα ΦΜΥ.
         ui_mode="custom",
@@ -1286,7 +1282,7 @@ FAMILIES: dict[str, ParamFamily] = {f.key: f for f in [
     ),
     ParamFamily(
         "work_hours", "Όρια & προσαυξήσεις ωρών", WorkHourRules,
-        "WorkHourRulesDefined", WORK_HOUR_HISTORY,
+        WORK_HOUR_HISTORY,
         note="όρια & προσαυξήσεις της κατάταξης ωρών (νύχτα/αργία/"
              "πρόσθετη/υπερεργασία/υπερωρίες)",
         fields=(
@@ -1362,6 +1358,10 @@ def validate_families() -> None:
         names = {f.name for f in _dc_fields(spec.cls)}
         if "valid_from" not in names:
             raise ValueError(f"{key}: η κλάση {spec.cls.__name__} δεν έχει valid_from")
+        # Χωρίς `repealed` η κατάργηση κανόνα (`_pick`) δεν μπορεί να
+        # δουλέψει — και η αστοχία της είναι ΛΑΘΟΣ ΠΟΣΟ, όχι σφάλμα.
+        if "repealed" not in names:
+            raise ValueError(f"{key}: λείπει το πεδίο `repealed` από την {spec.cls.__name__}")
         for f in spec.fields:
             if f.kind not in FIELD_KINDS:
                 raise ValueError(f"{key}.{f.name}: άγνωστος τύπος «{f.kind}»")

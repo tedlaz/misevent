@@ -28,12 +28,17 @@
   <h2>Οι εταιρείες μου <span class="norm">— η ενεργή ορίζει τι βλέπεις σε
     ΟΛΕΣ τις σελίδες</span></h2>
   <table class="tbl">
-    <thead><tr><th>Εταιρεία</th><th>Χώρος</th><th></th><th></th></tr></thead>
+    <thead><tr><th>Όνομα στο μενού</th><th>Επίσημη ονομασία (στοιχεία εργοδότη)</th><th></th><th></th></tr></thead>
     <tbody>
       {% for r in rows %}
         <tr>
-          <td><b>{{ r.name }}</b></td>
-          <td class="muted">{{ r.space_name }}</td>
+          <td>
+            <form style="display:flex;gap:6px;align-items:center" method="post" action="{{ url_for('companies.rename', company_id=r.company_id) }}">
+              <input name="name" value="{{ r.name }}" required aria-label="Όνομα στο μενού">
+              <button class="ghost sm" type="submit">Μετονομασία</button>
+            </form>
+          </td>
+          <td class="muted">{{ r.official or '— δεν έχουν καταχωρηθεί —' }}</td>
           <td class="rt">
             {% if user.is_admin and rows|length > 1 %}{{ delete_form(r.company_id, r.name) }}{% endif %}
           </td>
@@ -76,13 +81,21 @@
 
 {% if may_create %}
   <div class="card">
-    <h2>Νέα εταιρεία <span class="norm">— δημιουργείται κενός χώρος· τα
-      στοιχεία του εργοδότη καταχωρούνται μετά, στη σελίδα «Εταιρεία»</span></h2>
+    <h2>Νέα εταιρεία <span class="norm">— το όνομα είναι μόνο για το μενού·
+      η επίσημη ονομασία καταχωρείται μετά, στα στοιχεία εργοδότη (σελίδα «Εταιρεία»)</span></h2>
     <form class="frm" method="post" action="{{ url_for('companies.create') }}">
-      <label>Ονομασία
-        <input name="name" required placeholder="π.χ. ΑΛΦΑ ΕΜΠΟΡΙΚΗ ΑΕ"></label>
+      <label>Όνομα στο μενού
+        <input name="name" required placeholder="π.χ. Άλφα"></label>
       <div class="btnrow"><button class="run" type="submit">Δημιουργία</button></div>
     </form>
   </div>
+<div class="card">
+  <h2>DEMO εταιρεία <span class="norm">— 5 εργαζόμενοι (μισθωτοί &amp;
+    ημερομίσθιοι, πλήρους &amp; μερικής, ένας κάτω των 25) με μισθοδοσίες,
+    ΑΠΔ, ΦΜΥ και Δώρα από τον Ιανουάριο ως τον τρέχοντα μήνα</span></h2>
+  <form method="post" action="{{ url_for('companies.create_demo') }}">
+    <div class="btnrow"><button class="ghost" type="submit">Δημιουργία DEMO</button></div>
+  </form>
+</div>
 {% endif %}
 {% endblock %}

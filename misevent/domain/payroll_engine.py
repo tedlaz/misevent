@@ -232,6 +232,55 @@ def calc_monthly(
     )
 
 
+def daily_day_pay(daily_wage: float, weekly_hours: float, days_per_week: int) -> float:
+    """ΑΜΟΙΒΗ ΗΜΕΡΑΣ ημερομισθίου = ωρομίσθιο × ώρες ημέρας.
+
+    Το συμβατικό ημερομίσθιο είναι του ΕΞΑΗΜΕΡΟΥ (6 × 6:40 = 40ω), άρα
+    ωρομίσθιο = ημερομίσθιο × 6/40 (`work_hours.hourly_rate`) και ώρες ημέρας
+    = συμβατικές εβδομαδιαίες / ημέρες προγράμματος. Έτσι: εξαήμερο ×1,
+    πενθήμερο 8ωρο ×1,2 (6/5), 4ωρο ×0,6, 3 οκτάωρα/εβδ. ×1,2."""
+    hours = (weekly_hours or 40.0) / (days_per_week or 5)
+    return round(daily_wage * 6.0 / 40.0 * hours, 4)
+
+
+# Ανώτατες ημέρες ασφάλισης ημερομισθίου/μήνα: 31 ημέρες − 4 Κυριακές.
+DAILY_MAX_INSURANCE_DAYS = 27
+
+
+def daily_insurance_days(
+    worked: set, year: int, month: int, weekly_hours: float, days_per_week: int
+) -> int:
+    """Ημέρες ασφάλισης ΗΜΕΡΟΜΙΣΘΙΟΥ του μήνα.
+
+    Πλήρης απασχόληση σε ΠΕΝΘΗΜΕΡΟ: οι ημέρες εργασίας **+1 ανά εβδομάδα**
+    στην οποία δούλεψε ≥3 ημέρες — πλήρης εβδομάδα = 6 (5 + 1 προσαύξηση).
+    Πηγή: Κανονισμός Ασφάλισης ΙΚΑ άρθρο 18 παρ. 2, Εγκ. ΙΚΑ 44/1975 και
+    114/1981. Άρα ο μήνας δίνει 24–27 (Φεβ. 20+4 = 24, 5 Σάββατα → 27).
+    Εξαήμερο ή μερική: οι πραγματικές ημέρες (Εγκ. e-ΕΦΚΑ 34/2018 §2(1)).
+
+    `worked`: οι ΗΜΕΡΟΜΗΝΙΕΣ εργασίας — του μήνα, ΚΑΙ όσες της εβδομάδας του
+    1ου Σαββάτου πέφτουν στον προηγούμενο μήνα (κρίνουν το «≥3»). Η εβδομάδα
+    (Δευ–Παρ) ανήκει στον μήνα του Σαββάτου της.
+    ⚠️ ΔΕΝ οδηγούν την αμοιβή: αυτή είναι αμοιβή ημέρας × ημέρες ΕΡΓΑΣΙΑΣ
+    (`daily_day_pay`) — αλλιώς η προσαύξηση θα μετρούσε δύο φορές."""
+    days = sum(1 for d in worked if (d.year, d.month) == (year, month))
+    if (weekly_hours and weekly_hours < 40) or (days_per_week or 5) >= 6:
+        return days
+    first = date(year, month, 1)
+    sat = first + timedelta((5 - first.weekday()) % 7)
+    while sat.month == month:
+        if sum(1 for k in range(1, 6) if sat - timedelta(k) in worked) >= 3:
+            days += 1
+        sat += timedelta(7)
+    return min(days, DAILY_MAX_INSURANCE_DAYS)
+
+
+def daily_gift_ratio(weekly_hours: float) -> float:
+    """Δώρα/Επίδομα αδείας ημερομισθίου μερικής: ΑΝΑΛΟΓΙΑ ΑΠΟΔΟΧΩΝ προς την
+    πλήρη απασχόληση (40ω) — τα 15/25/13 ημερομίσθια × αυτόν τον λόγο."""
+    return min(weekly_hours or 40.0, 40.0) / 40.0
+
+
 def calc_monthly_daily(
     daily_wage: float,
     days_worked: int,
@@ -243,8 +292,10 @@ def calc_monthly_daily(
     birth_date: date | None = None,
     exempt: float = 0.0,
 ) -> PayrollResult:
-    """Μηνιαίος υπολογισμός ημερομισθίου: μικτά = ημερομίσθιο × ημέρες
-    − ασθένεια + προσαυξήσεις ωρών. `rates`/`exempt`: βλ. calc_monthly."""
+    """Μηνιαίος υπολογισμός ημερομισθίου: μικτά = αμοιβή ημέρας × ημέρες
+    − ασθένεια + προσαυξήσεις ωρών. ⚠️ Το `daily_wage` εδώ είναι η ΑΜΟΙΒΗ
+    ΗΜΕΡΑΣ (`daily_day_pay`), όχι το συμβατικό ημερομίσθιο.
+    `rates`/`exempt`: βλ. calc_monthly."""
     base = daily_wage * days_worked
     gross = r2(max(0.0, base - sick) + premiums)
     rates = rates or efka_rates_for(period_end)

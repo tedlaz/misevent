@@ -26,6 +26,7 @@
  "_check_valid_from",
  "_clean_person_fields",
  "_daily_from_template",
+ "_daily_worked_dates",
  "_declare_standing_weekly",
  "_declare_weekly",
  "_define_custom",

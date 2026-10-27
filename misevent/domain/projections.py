@@ -13,17 +13,17 @@ import calendar
 from dataclasses import dataclass, field
 from dataclasses import fields as dc_fields
 from datetime import date, timedelta
+from functools import singledispatchmethod
 from typing import NamedTuple
 
 import misevent.rules.obligation_types as ot
 from misevent.domain.events import (
-    EVENT_TYPES,
-    SHARED_EVENT_TYPES,
     APDFileGenerated,
     APDSubmitted,
     AttendanceRecorded,
     AttendanceSheetApproved,
     CardMonthChecked,
+    CardPeriodChecked,
     CardPunchCancelled,
     CardPunchRecorded,
     ChildBirthRecorded,
@@ -59,20 +59,21 @@ from misevent.domain.events import (
     ObligationFulfilled,
     ObligationScheduled,
     ObligationTypeConfigured,
+    ParametersDefined,
     PaymentMade,
     PayrollPeriodReopened,
     PersonDetailsChanged,
     PersonDetailsCorrected,
     PersonRegistered,
     RetroAbsenceReasonSet,
+    RetroScheduleSubmitted,
     ScheduleDaysSubmitted,
     ScheduleDeclaredToErgani,
     ScheduleSystemDeclared,
     SeveranceCalculated,
-    SeveranceRulesDefined,
     SicknessBenefitRecorded,
     SubmissionWithdrawn,
-    TaxScaleDefined,
+    WageAdjustmentApplied,
     WorkScheduleAssigned,
 )
 from misevent.rules import config
@@ -85,61 +86,6 @@ def _add_months(d: date, n: int) -> date:
     return date(y, m + 1, min(d.day, calendar.monthrange(y, m + 1)[1]))
 
 
-# Οικογένεια παραμέτρων ανά event — ΠΑΡΑΓΩΓΟ του μητρώου `config.FAMILIES`.
-# Το config αναφέρει το event με το ΟΝΟΜΑ του (είναι φύλλο του γράφου και δεν
-# κάνει import το events.py)· εδώ είναι το μόνο σημείο που βλέπει και τα δύο,
-# οπότε εδώ γίνεται η ανάλυση ονόματος→κλάση ΚΑΙ ο έλεγχος συνέπειας.
-PARAM_EVENT_FAMILY = {EVENT_TYPES[f.event]: k for k, f in config.FAMILIES.items()}
-
-
-def _validate_param_registry() -> None:
-    """⚠️ ΤΡΕΧΕΙ ΣΤΟ IMPORT. Χωρίς αυτό, μια νέα οικογένεια παραμέτρων μπορεί
-    να ξεχαστεί από το `SHARED_EVENT_TYPES` και να γίνει **σιωπηλά ανά
-    εταιρεία** — ενώ το παράγωγό της ζει σε ΚΑΘΟΛΙΚΟ state του process
-    (`config.set_overrides`). Δύο εταιρείες θα πατούσε η μία την άλλη, με
-    λάθος συντελεστές και κανένα μήνυμα (ARCH_REF.md §1α)."""
-    from dataclasses import fields as _dc_fields
-
-    for key, spec in config.FAMILIES.items():
-        if spec.event not in EVENT_TYPES:
-            raise ValueError(
-                f"{key}: το event «{spec.event}» δεν είναι στο EVENT_TYPES"
-            )
-        if spec.event not in SHARED_EVENT_TYPES:
-            raise ValueError(
-                f"{key}: το event «{spec.event}» ΠΡΕΠΕΙ να είναι στο "
-                "SHARED_EVENT_TYPES — οι παράμετροι είναι ΚΟΙΝΕΣ σε όλες τις "
-                "εταιρείες και το παράγωγό τους ζει σε καθολικό state"
-            )
-        ev_names = {f.name for f in _dc_fields(EVENT_TYPES[spec.event])}
-        missing = {f.name for f in spec.fields} - ev_names
-        if missing:
-            raise ValueError(
-                f"{key}: πεδία του μητρώου που λείπουν από το «{spec.event}»: "
-                + ", ".join(sorted(missing))
-            )
-
-        # ⚠️ Η ΚΛΑΣΗ ΤΗΣ ΠΑΡΑΜΕΤΡΟΥ ΚΑΙ ΤΟ EVENT ΕΙΝΑΙ ΔΥΟ ΑΝΤΙΓΡΑΦΑ ΤΩΝ ΙΔΙΩΝ
-        # ΠΕΔΙΩΝ. Το `param_entry` χτίζει την κλάση με `getattr(event, …)` για
-        # ΚΑΘΕ πεδίο της: ένα πεδίο που υπάρχει στην κλάση αλλά όχι στο event
-        # δεν σκάει εδώ — σκάει με `AttributeError` στο REPLAY, δηλαδή αφού
-        # έχουν ήδη γραφτεί events.
-        cls_names = {f.name for f in _dc_fields(spec.cls)}
-        absent = cls_names - ev_names - {"repealed"}
-        if absent:
-            raise ValueError(
-                f"{key}: πεδία της «{spec.cls.__name__}» που λείπουν από το "
-                f"«{spec.event}» (θα έσκαγαν στο replay): " + ", ".join(sorted(absent))
-            )
-
-        # Χωρίς `repealed` και στα δύο, η κατάργηση κανόνα (`_pick`) δεν
-        # μπορεί να δουλέψει — και η αστοχία της είναι ΛΑΘΟΣ ΠΟΣΟ, όχι σφάλμα.
-        for owner, names in ((spec.cls.__name__, cls_names), (spec.event, ev_names)):
-            if "repealed" not in names:
-                raise ValueError(f"{key}: λείπει το πεδίο `repealed` από το «{owner}»")
-
-
-_validate_param_registry()
 
 # Λειτουργικές προτιμήσεις («Διάφορα») + οι προεπιλογές τους. Δεν είναι
 # νομοθετικές παράμετροι — μόνο η ΜΟΡΦΗ/τιμή τους ζει εδώ (bool). Το event
@@ -178,53 +124,48 @@ MISC_DEFAULTS = {
 }
 
 
-def param_entry(event):
+def param_entry(event: ParametersDefined):
     """Μετατρέπει event παραμέτρων στην αντίστοιχη εγγραφή του config
-    (π.χ. MinimumWageDefined -> config.MinimumWage). Για την κλίμακα ΦΜΥ
-    διαλέγεται η κλάση του ΚΑΘΕΣΤΩΤΟΣ (config.TAX_MODELS[model])."""
-    if isinstance(event, TaxScaleDefined):
-        cls = config.TAX_MODELS.get(event.model, config.TaxScale)
-        brackets = tuple(
-            config.TaxBracket(
-                float("inf") if b.get("up_to") in (None, "") else float(b["up_to"]),
-                float(b["rate"]),
-            )
-            for b in event.brackets
-        )
+    (π.χ. family «minimum_wage» -> config.MinimumWage). Για την κλίμακα ΦΜΥ
+    διαλέγεται η κλάση του ΚΑΘΕΣΤΩΤΟΣ (config.TAX_MODELS[model]).
+
+    ⚠️ ΠΙΝΑΚΕΣ ΑΠΟ JSON: το replay δίνει λίστες αντί για tuples, και το
+    ανοιχτό κλιμάκιο ως `None` (το JSON δεν έχει άπειρο). Εδώ ξαναγίνονται
+    tuples και `inf`, όπως τα περιμένει το config."""
+    v = event.values
+    if event.family == "tax":
+        cls = config.TAX_MODELS.get(v.get("model", "standard"), config.TaxScale)
         kwargs = {
-            "valid_from": event.valid_from,
-            "brackets": brackets,
-            "reductions": tuple(event.reductions),
-            "extra_child_reduction": event.extra_child_reduction,
-            "phaseout_threshold": event.phaseout_threshold,
-            "phaseout_per_1000": event.phaseout_per_1000,
-            # ⚠️ Η κλίμακα ΦΜΥ χτίζεται πεδίο-πεδίο (δεν περνά από το γενικό
-            # μονοπάτι παρακάτω) — το `repealed` πρέπει να μεταφερθεί ΡΗΤΑ,
-            # αλλιώς η κατάργηση γράφεται στο log αλλά δεν ισχύει ποτέ.
-            "repealed": getattr(event, "repealed", False),
-        }
-        allowed = {f.name for f in dc_fields(cls)}
-        for k, v in (event.model_params or {}).items():
-            if k in allowed:
-                kwargs[k] = tuple(v) if isinstance(v, list) else v
-        return cls(**kwargs)
-    if isinstance(event, SeveranceRulesDefined):
-        # ⚠️ ΠΙΝΑΚΕΣ ΑΠΟ JSON: το replay τους δίνει ως λίστες από λίστες, και
-        # το ανοιχτό κλιμάκιο ως `None` (το JSON δεν έχει άπειρο). Εδώ
-        # ξαναγίνονται tuples και `inf`, όπως τα περιμένει το config.
-        return config.SeveranceRules(
-            valid_from=event.valid_from,
-            months=tuple((int(y), int(m)) for y, m in event.months),
-            gift_factor=event.gift_factor,
-            tax_brackets=tuple(
-                (float("inf") if up in (None, "") else float(up), float(rate))
-                for up, rate in event.tax_brackets
+            "brackets": tuple(
+                config.TaxBracket(
+                    float("inf") if b.get("up_to") in (None, "") else float(b["up_to"]),
+                    float(b["rate"]),
+                )
+                for b in v["brackets"]
             ),
-            repealed=getattr(event, "repealed", False),
-        )
-    family = PARAM_EVENT_FAMILY[type(event)]
-    cls = config.FAMILY_CLASSES[family]
-    return cls(**{f.name: getattr(event, f.name) for f in dc_fields(cls)})
+        }
+        for k in ("reductions", "extra_child_reduction", "phaseout_threshold",
+                  "phaseout_per_1000"):
+            if k in v:
+                kwargs[k] = v[k]
+        kwargs.update(v.get("model_params") or {})
+    elif event.family == "severance":
+        cls = config.SeveranceRules
+        kwargs = {
+            "months": tuple((int(y), int(m)) for y, m in v["months"]),
+            "gift_factor": v["gift_factor"],
+            "tax_brackets": tuple(
+                (float("inf") if up in (None, "") else float(up), float(rate))
+                for up, rate in v["tax_brackets"]
+            ),
+        }
+    else:
+        cls = config.FAMILY_CLASSES[event.family]
+        kwargs = dict(v)
+    allowed = {f.name for f in dc_fields(cls)} - {"valid_from", "repealed"}
+    kwargs = {k: tuple(x) if isinstance(x, list) else x
+              for k, x in kwargs.items() if k in allowed}
+    return cls(valid_from=event.valid_from, repealed=event.repealed, **kwargs)
 
 
 @dataclass
@@ -1431,516 +1372,584 @@ class Projections:
 
     # -- pub/sub entrypoint ------------------------------------------------
     def handle(self, aggregate_id: str, event):
-        if isinstance(event, tuple(PARAM_EVENT_FAMILY)):
-            # Παράμετροι εφαρμογής: ίδιο (οικογένεια, valid_from) =
-            # αντικατάσταση. Το config ενημερώνεται ως ΠΑΡΑΓΩΓΟ state.
-            family = PARAM_EVENT_FAMILY[type(event)]
-            self.parameters.setdefault(family, {})[event.valid_from] = event
-            config.set_overrides(
-                family,
-                [param_entry(e) for e in self.parameters[family].values()],
-            )
+        self._apply(event)
 
-        elif isinstance(event, ObligationTypeConfigured):
-            self.obligation_config[event.code] = event
-            ot.set_override(
-                event.code,
-                {"due": tuple(event.due), "extension": dict(event.extension)},
-            )
+    @singledispatchmethod
+    def _apply(self, event):
+        """Event ΧΩΡΙΣ χειρισμό: ΣΚΑΕΙ. Μια σιωπηλή παράλειψη θα ήταν
+        κατάσταση που λείπει — για πάντα, και στο replay. Event που σκόπιμα
+        δεν κρατά κατάσταση δηλώνεται ρητά στο `_no_state`."""
+        raise TypeError(f"Projections: κανένας χειρισμός για {type(event).__name__}")
 
-        elif isinstance(event, ObligationExtended):
-            ob = self.obligations.get(event.obligation_id)
-            if ob:
-                ob.due_date = event.new_due_date
-                ob.extended = True
+    # Σκόπιμα ΧΩΡΙΣ κατάσταση: κλείνουν ΜΟΝΟ μια υποχρέωση (scheduler.py).
+    # WageAdjustmentApplied: οι προσαρμογές είναι ξεχωριστά ContractChanged.
+    # RetroScheduleSubmitted: οι ημέρες είναι DailyScheduleAssigned +
+    # ScheduleDaysSubmitted. CardPeriodChecked: τα χτυπήματα είναι
+    # CardPunchRecorded. AttendanceRecorded: ΠΑΛΑΙΟ event (πριν οι παρουσίες
+    # γίνουν παράγωγο της κάρτας) — δεν μετρά.
+    @_apply.register(WageAdjustmentApplied)
+    @_apply.register(RetroScheduleSubmitted)
+    @_apply.register(CardPeriodChecked)
+    @_apply.register(AttendanceRecorded)
+    def _no_state(self, event):
+        pass
 
-        elif isinstance(event, MiscSettingsChanged):
-            # ενημερώνει μόνο τα κλειδιά που φέρει το event (latest-wins)
-            for k, v in event.fields.items():
-                if k in MISC_DEFAULTS:  # ίδιος τύπος με το default (bool/int)
-                    self.misc_settings[k] = type(MISC_DEFAULTS[k])(v)
+    @_apply.register
+    def _on_parameters_defined(self, event: ParametersDefined):
+        # Παράμετροι εφαρμογής: ίδιο (οικογένεια, valid_from) =
+        # αντικατάσταση. Το config ενημερώνεται ως ΠΑΡΑΓΩΓΟ state.
+        family = event.family
+        self.parameters.setdefault(family, {})[event.valid_from] = event
+        config.set_overrides(
+            family,
+            [param_entry(e) for e in self.parameters[family].values()],
+        )
 
-        elif isinstance(event, CompanyRegistered):
-            self.company = event
+    @_apply.register
+    def _on_obligation_type_configured(self, event: ObligationTypeConfigured):
+        self.obligation_config[event.code] = event
+        ot.set_override(
+            event.code,
+            {"due": tuple(event.due), "extension": dict(event.extension)},
+        )
 
-        elif isinstance(event, CompanyBranchDefined):
-            self.branches[event.code] = event
+    @_apply.register
+    def _on_obligation_extended(self, event: ObligationExtended):
+        ob = self.obligations.get(event.obligation_id)
+        if ob:
+            ob.due_date = event.new_due_date
+            ob.extended = True
 
-        elif isinstance(event, CompanySpecialtyDefined):
-            self.specialties[event.name] = event  # ίδιο όνομα = αντικατάσταση
+    @_apply.register
+    def _on_misc_settings_changed(self, event: MiscSettingsChanged):
+        # ενημερώνει μόνο τα κλειδιά που φέρει το event (latest-wins)
+        for k, v in event.fields.items():
+            if k in MISC_DEFAULTS:  # ίδιος τύπος με το default (bool/int)
+                self.misc_settings[k] = type(MISC_DEFAULTS[k])(v)
 
-        elif isinstance(event, KPKDefined):
-            # ίδιο (ταμείο, ΚΠΚ) = αντικατάσταση της ταυτότητας
-            self.kpk_identity[(event.fund, event.kpk)] = event
+    @_apply.register
+    def _on_company_registered(self, event: CompanyRegistered):
+        self.company = event
 
-        elif isinstance(event, KPKRatesDefined):
-            # ίδιο (ταμείο, ΚΠΚ, ισχύς από) = αντικατάσταση
-            self.kpk_rates[(event.fund, event.kpk, event.valid_from)] = event
+    @_apply.register
+    def _on_company_branch_defined(self, event: CompanyBranchDefined):
+        self.branches[event.code] = event
 
-        elif isinstance(event, PersonRegistered):
-            p = self.persons.setdefault(event.person_id, PersonState())
-            p.person_id = event.person_id
-            p.last_name = event.last_name
-            p.first_name = event.first_name
-            p.father_name = event.father_name
-            p.mother_name = event.mother_name
-            p.birth_date = event.birth_date
-            p.afm, p.amka, p.ama = event.afm, event.amka, event.ama
-            p.children = event.children
-            p.children_history = [(None, event.children)]
-            p.email = event.email
-            p.sex = event.sex
-            p.nationality_code = event.nationality_code
-            p.identity_type = event.identity_type
-            p.identity_number = event.identity_number
-            p.identity_issuer = event.identity_issuer
-            p.identity_issue_date = event.identity_issue_date
-            p.identity_expiry_date = event.identity_expiry_date
-            for k in (
-                "marital_status",
-                "education_level",
-                "res_permit_inst",
-                "res_permit_inst_type",
-                "res_permit_inst_number",
-                "res_permit_inst_expiry_date",
-                "res_permit_ap",
-                "res_permit_ap_type",
-                "res_permit_ap_number",
-                "res_permit_ap_expiry_date",
-                "res_permit_visa",
-                "res_permit_visa_number",
-                "res_permit_visa_from",
-                "res_permit_visa_to",
-                *PERSON_TEXT_FIELDS,
-            ):
-                setattr(p, k, getattr(event, k))
+    @_apply.register
+    def _on_company_specialty_defined(self, event: CompanySpecialtyDefined):
+        self.specialties[event.name] = event  # ίδιο όνομα = αντικατάσταση
 
-        elif isinstance(event, PersonDetailsCorrected):
-            p = self.persons[event.person_id]
-            _apply_person_fields(p, event.fields)
-            if "children" in event.fields:
-                # Διόρθωση = λάθος στην ΤΡΕΧΟΥΣΑ τιμή -> τελευταία εγγραφή
-                eff, _ = p.children_history[-1]
-                p.children_history[-1] = (eff, p.children)
+    @_apply.register
+    def _on_kpk_defined(self, event: KPKDefined):
+        # ίδιο (ταμείο, ΚΠΚ) = αντικατάσταση της ταυτότητας
+        self.kpk_identity[(event.fund, event.kpk)] = event
 
-        elif isinstance(event, PersonDetailsChanged):
-            p = self.persons[event.person_id]
-            eff = event.effective_from
-            # Ανά πεδίο: η μεταβολή γίνεται «τρέχουσα» τιμή ΜΟΝΟ αν καμία
-            # νεότερη (σε ισχύ) μεταβολή δεν έχει ήδη αλλάξει το ίδιο πεδίο —
-            # μια αναδρομική καταχώρηση δεν πατά νεότερη.
-            current = {
-                k: v for k, v in event.fields.items()
-                if not any(eff < c["effective_from"] and k in c["fields"]
-                           for c in p.changes)
-            }
-            p.changes.append({
-                "effective_from": eff,
-                "fields": {k: (getattr(p, k, None), v)
-                           for k, v in event.fields.items()},
-            })
-            p.changes.sort(key=lambda c: c["effective_from"])
-            _apply_person_fields(p, current)
-            if "children" in event.fields:
-                p.children_history.append((eff, int(event.fields["children"])))
-                p.children_history.sort(key=lambda h: h[0] or date.min)
+    @_apply.register
+    def _on_kpk_rates_defined(self, event: KPKRatesDefined):
+        # ίδιο (ταμείο, ΚΠΚ, ισχύς από) = αντικατάσταση
+        self.kpk_rates[(event.fund, event.kpk, event.valid_from)] = event
 
-        elif isinstance(event, EmploymentStarted):
-            emp = self.employments.setdefault(event.employment_id, EmploymentState())
-            emp.employee_id = event.employment_id
-            emp.person_id = event.person_id
-            emp.person = self.persons.get(event.person_id)
-            emp.hire_date = event.hire_date
-            emp.payroll_from = event.payroll_from
-            emp.pay_type = event.pay_type
-            emp.monthly_gross = event.monthly_gross
-            emp.daily_wage = event.daily_wage
-            emp.weekly_hours = event.weekly_hours
-            emp.contract_weekly_system = event.weekly_system
-            emp.service_years = event.service_years
-            emp.frozen_service_years = event.frozen_service_years
-            emp.married = event.married
-            emp.extra_allowances_pct = event.extra_allowances_pct
-            emp.employment_relationship = event.employment_relationship
-            emp.fixed_term_from = event.fixed_term_from
-            emp.fixed_term_to = event.fixed_term_to
-            for field_name in (
-                "oaed_placement",
-                "oaed_program",
-                "oaed_replacement",
-                "oaed_replaced_afm",
-                "oaed_replaced_amka",
-                "trial_period",
-                "trial_date_to",
-                "minor_booklet_number",
-                "unemployment_card_number",
-                "working_card",
-                "flexible_arrival_minutes",
-                "break_within_schedule",
-                "break_minutes",
-            ):
-                setattr(emp, field_name, getattr(event, field_name))
-            # Η πρόσληψη ΔΕΝ θεωρείται ολοκληρωμένη με την καταχώρηση: γίνεται
-            # ολοκληρωμένη ΜΟΝΟ με την αναγγελία στο ΕΡΓΑΝΗ (Ε3/WebE3N ή
-            # καταγραφή «external» στη μεταφορά). Το `draft` του event μένει ως
-            # ιστορικό του πώς καταχωρήθηκε, ΔΕΝ δηλώνει υποβολή.
-            emp.hire_submitted = False
-            emp.contract_history = [_terms_of(event, event.hire_date)]
-            if emp.person and event.employment_id not in emp.person.employment_ids:
-                emp.person.employment_ids.append(event.employment_id)
-
-        elif isinstance(event, EmploymentHireDetailsCorrected):
-            emp = self.employments[event.employment_id]
-            emp.hire_date = event.hire_date
-            emp.pay_type = event.pay_type
-            emp.monthly_gross = event.monthly_gross
-            emp.daily_wage = event.daily_wage
-            emp.weekly_hours = event.weekly_hours
-            emp.contract_weekly_system = event.weekly_system
-            emp.service_years = event.service_years
-            emp.frozen_service_years = event.frozen_service_years
-            emp.married = event.married
-            emp.extra_allowances_pct = event.extra_allowances_pct
-            emp.employment_relationship = event.employment_relationship
-            emp.fixed_term_from = event.fixed_term_from
-            emp.fixed_term_to = event.fixed_term_to
-            for field_name in (
-                "oaed_placement",
-                "oaed_program",
-                "oaed_replacement",
-                "oaed_replaced_afm",
-                "oaed_replaced_amka",
-                "trial_period",
-                "trial_date_to",
-                "minor_booklet_number",
-                "unemployment_card_number",
-                "working_card",
-                "flexible_arrival_minutes",
-                "break_within_schedule",
-                "break_minutes",
-            ):
-                setattr(emp, field_name, getattr(event, field_name))
-            # Η διόρθωση της φόρμας πρόσληψης αλλάζει την ΑΡΧΙΚΗ έκδοση της
-            # σύμβασης — οι μεταγενέστερες μεταβολές μένουν άθικτες.
-            initial = _terms_of(event, event.hire_date)
-            if emp.contract_history:
-                emp.contract_history[0] = initial
-            else:
-                emp.contract_history = [initial]
-            emp.contract_history.sort(key=lambda t: t.effective_from or date.min)
-            if emp.person and event.employment_id not in emp.person.employment_ids:
-                emp.person.employment_ids.append(event.employment_id)
-            emp.schedule = dict(event.weekly_pattern)
-            emp.schedule_history = [
-                (
-                    event.hire_date,
-                    dict(event.weekly_pattern),
-                    event.schedule_end_date,
-                )
-            ]
-            emp.schedule_mode = event.schedule_mode
-            emp.standing_history = []
-            emp.pending_weekly = []
-            emp.daily_schedule = {
-                date.fromisoformat(iso): hours
-                for iso, hours in event.daily_schedule.items()
-            }
-            emp.declared_days = {}
-
-        elif isinstance(event, ContractChanged):
-            emp = self.employments[event.employee_id]
-            emp.pay_type = event.pay_type
-            emp.monthly_gross = event.monthly_gross
-            emp.daily_wage = event.daily_wage
-            emp.weekly_hours = event.weekly_hours
-            # None = η μεταβολή δεν άγγιξε το σύστημα εργασίας -> μένει ως έχει
-            if event.weekly_system is not None:
-                emp.contract_weekly_system = event.weekly_system
-            emp.contract_history.append(_terms_of(event, event.effective_from))
-            emp.contract_history.sort(key=lambda t: t.effective_from or date.min)
-            emp.contract_changes.append(
-                (_terms_of(event, event.effective_from), emp.hire_submitted))
-
-        elif isinstance(event, EmploymentDeleted):
-            # Εκ παραδρομής καταχώρηση: η απασχόληση φεύγει ΟΛΟΚΛΗΡΗ από τα
-            # projections (το event log μένει άθικτο). Ό,τι κρατά κλειδί
-            # απασχόλησης καθαρίζεται μαζί, ώστε το replay να δίνει το ίδιο
-            # αποτέλεσμα με μια βάση που δεν την είδε ποτέ.
-            emp = self.employments.pop(event.employee_id, None)
-            if emp is not None and emp.person is not None:
-                person = emp.person
-                person.employment_ids = [
-                    eid for eid in person.employment_ids if eid != event.employee_id
-                ]
-            for store in (self._payrolls, self._gifts, self._allowances):
-                for key in [k for k in store if k[0] == event.employee_id]:
-                    del store[key]
-            self._leave_compensations.pop(event.employee_id, None)
-            self._severances.pop(event.employee_id, None)
-            self.ergani_submissions = [
-                s
-                for s in self.ergani_submissions
-                if getattr(s, "employee_id", None) != event.employee_id
-            ]
-
-        elif isinstance(event, LeaveCancelled):
-            self.employments[event.employee_id].cancelled_leaves.add(event.leave_id)
-
-        elif isinstance(event, LeaveDeclarationSubmitted):
-            for eid, days in event.days.items():
-                if eid in self.employments:   # διαγραμμένη απασχόληση: αγνοείται
-                    self.employments[eid].leave_declared.update(
-                        {date.fromisoformat(iso): code for iso, code in days.items()})
-
-        elif isinstance(event, ErganiSubmissionRecorded):
-            self.ergani_submissions.append(event)
-            if (
-                event.doc_type in ("WebE3N", "E3")
-                and event.status != "failed"
-                and event.employee_id in self.employments
-            ):
-                self.employments[event.employee_id].hire_submitted = True
-
-        elif isinstance(event, EmployeeTerminated):
-            emp = self.employments[event.employee_id]
-            emp.termination_date = event.termination_date
-            emp.termination_reason = event.reason
-
-        elif isinstance(event, InsuranceProfileAssigned):
-            emp = self.employments[event.employee_id]
-            emp.insurance_profile = event
-
-        elif isinstance(event, WorkScheduleAssigned):
-            emp = self.employments[event.employee_id]
-            emp.schedule_history.append(
-                (event.effective_from, dict(event.weekly_pattern), event.end_date)
-            )
-            latest = max(
-                enumerate(emp.schedule_history),
-                key=lambda item: (item[1][0], item[0]),
-            )[1]
-            emp.schedule = dict(latest[1])
-            if emp.schedule_mode != "variable":  # μεταβλητό: μόνο template
-                emp.pending_weekly = [
-                    p for p in emp.pending_weekly if p[0] != event.effective_from
-                ] + [(event.effective_from, dict(event.weekly_pattern), event.end_date)]
-            # Η τελευταία υποβολή επικρατεί: το νέο εβδομαδιαίο ακυρώνει τις
-            # παλαιότερες ημερήσιες μεταβολές του διαστήματος ισχύος του.
-            emp.daily_schedule = {
-                d: h for d, h in emp.daily_schedule.items()
-                if not _within(d, event.effective_from, event.end_date)
-            }
-
-        elif isinstance(event, DailyScheduleAssigned):
-            # Νέα υποβολή αντικαθιστά τις ίδιες ημέρες (last-write-wins)
-            sched = self.employments[event.employee_id].daily_schedule
-            for iso, hours in event.days.items():
-                sched[date.fromisoformat(iso)] = hours
-
-        elif isinstance(event, EmploymentScheduleModeSet):
-            emp = self.employments[event.employee_id]
-            emp.schedule_mode = event.mode
-            if event.mode == "variable":
-                emp.pending_weekly = []
-
-        elif isinstance(event, ScheduleDeclaredToErgani):
-            # STANDING εβδομαδιαίο (fixed): νεότερο από κάθε προηγούμενη
-            # ημερήσια δήλωση του διαστήματός του — αυτές παύουν να ισχύουν.
-            emp = self.employments[event.employee_id]
-            emp.standing_history.append(
-                (event.effective_from, event.end_date, dict(event.days))
-            )
-            emp.pending_weekly = [  # παλιά events χωρίς ημερομηνία: όλα
-                p for p in emp.pending_weekly
-                if event.effective_from is not None and p[0] != event.effective_from
-            ]
-            emp.declared_days = {
-                d: h for d, h in emp.declared_days.items()
-                if not _within(d, event.effective_from, event.end_date)
-            }
-
-        elif isinstance(event, ScheduleDaysSubmitted):
-            emp = self.employments[event.employee_id]
-            for iso, hours in event.days.items():
-                emp.declared_days[date.fromisoformat(iso)] = hours or ""
-            emp.days_declared_here |= event.batch_no > 0
-            batch = self.schedule_batches.setdefault(
-                event.batch_no, {"count": 0, "employees": set()}
-            )
-            batch["count"] += len(event.days)
-            batch["employees"].add(event.employee_id)
-
-        elif isinstance(event, AttendanceSheetApproved):
-            self.attendance_sheets[(event.period_year, event.period_month)] = event
-
-        elif isinstance(event, ScheduleSystemDeclared):
-            self.schedule_systems[event.effective_from] = event.system
-
-        elif isinstance(event, AttendanceRecorded):
-            # ΠΑΛΑΙΟ event (πριν οι παρουσίες γίνουν παράγωγο της κάρτας):
-            # μένει μόνο για να διαβάζονται τα παλιά logs — ΔΕΝ μετρά.
-            pass
-
-        elif isinstance(event, CardPunchRecorded):
-            # ΩΜΗ διέλευση: μπαίνει στη θέση της κατά ώρα (η κάρτα μπορεί να
-            # στείλει εκπρόθεσμα ή ο χρήστης να συμπληρώσει χτύπημα που ξεχάστηκε)
-            emp = self.employments[event.employee_id]
-            day = emp.card_punches.setdefault(event.punch_date, [])
-            day.append(
-                {
-                    "m": int(event.minute),
-                    "kind": event.kind,
-                    "id": event.punch_id,
-                    "source": event.source,
-                    "note": event.note,
-                    "blind": event.blind,
-                }
-            )
-            day.sort(key=lambda p: (p["m"], 0 if p["kind"] == "in" else 1))
-            emp._sync_attendance(event.punch_date)
-            emp.card_checked.discard((event.punch_date.year, event.punch_date.month))
-
-        elif isinstance(event, CardPunchCancelled):
-            emp = self.employments.get(event.employee_id)
-            if emp is not None:
-                for d, day in list(emp.card_punches.items()):
-                    kept = [p for p in day if p["id"] != event.punch_id]
-                    if len(kept) == len(day):
-                        continue
-                    if kept:
-                        emp.card_punches[d] = kept
-                    else:
-                        del emp.card_punches[d]
-                    emp._sync_attendance(d)
-                    emp.card_checked.discard((d.year, d.month))
-                    break
-
-        elif isinstance(event, CardMonthChecked):
-            self.employments[event.employee_id].card_checked.add(
-                (event.year, event.month)
-            )
-
-        elif isinstance(event, MonthPayBasisChosen):
-            self.employments[event.employee_id].pay_basis[
-                (event.year, event.month)] = (event.basis, bool(event.retro))
-
-        elif isinstance(event, RetroAbsenceReasonSet):
-            reasons = self.employments[event.employee_id].absence_reasons
-            if event.code:
-                reasons[event.day] = event.code
-            else:
-                reasons.pop(event.day, None)
-
-        elif isinstance(event, LeaveRecorded):
-            self.employments[event.employee_id].leaves.append(event)
-
-        elif isinstance(event, LeaveRescheduled):
-            emp = self.employments[event.employee_id]
-            for index, leave in enumerate(emp.leaves):
-                if leave.leave_id == event.leave_id:
-                    emp.leaves[index] = LeaveRecorded(
-                        event.employee_id,
-                        event.leave_type,
-                        event.date_from,
-                        event.date_to,
-                        event.notes,
-                        event.leave_id,
-                    )
-                    break
-
-        elif isinstance(event, ChildcareReductionSet):
-            emp = self.employments[event.employee_id]
-            emp.childcare_reduction = []
-            start = event.date_from
-            _, steps = config.CHILDCARE_REDUCTION_OPTIONS.get(event.option, ("", ()))
-            for months, hours in steps:
-                end = _add_months(start, months)
-                emp.childcare_reduction.append((start, end - timedelta(days=1), hours))
-                start = end
-
-        elif isinstance(event, ChildBirthRecorded):
-            self.employments[event.employee_id].child_birth_date = event.birth_date
-
-        elif isinstance(event, SicknessBenefitRecorded):
-            # Νέα καταχώρηση αντικαθιστά την προηγούμενη (διόρθωση ποσού)
-            self.employments[event.employee_id].sickness_benefits[event.leave_id] = (
-                event.amount
-            )
-
-        elif isinstance(event, MonthlyPayrollCalculated):
-            self._payrolls[
-                (event.employee_id, event.period_year, event.period_month)
-            ] = event
-
-        elif isinstance(event, GiftCalculated):
-            self._gifts[(event.employee_id, event.gift_type, event.year)] = event
-
-        elif isinstance(event, LeaveAllowanceCalculated):
-            self._allowances[(event.employee_id, event.year)] = event
-            emp = self.employments.get(event.employee_id)
-            if emp is not None:
-                emp.allowance_months[event.year] = emp.allowance_period_month(event.year)
-
-        elif isinstance(event, LeaveCompensationCalculated):
-            self._leave_compensations[event.employee_id] = event
-
-        elif isinstance(event, SeveranceCalculated):
-            self._severances[event.employee_id] = event
-
-        elif isinstance(event, APDFileGenerated):
-            self.apd_files.append(event)
-
-        elif isinstance(event, APDSubmitted):
-            self.apd_submissions.append(event)
-
-        elif isinstance(event, FMYFileGenerated):
-            self.fmy_files.append(event)
-
-        elif isinstance(event, FMYSubmitted):
-            self.fmy_submissions.append(event)
-
-        elif isinstance(event, PaymentMade):
-            self.payments.append(event)
-
-        elif isinstance(event, ObligationScheduled):
-            self.obligations[event.obligation_id] = Obligation(
-                event.obligation_id,
-                event.obligation_type,
-                event.due_date,
-                event.employee_id,
-                event.period_year,
-                event.period_month,
-                original_due=event.due_date,
-            )
-
-        elif isinstance(event, ObligationFulfilled) and (
-            event.obligation_id in self.obligations
+    @_apply.register
+    def _on_person_registered(self, event: PersonRegistered):
+        p = self.persons.setdefault(event.person_id, PersonState())
+        p.person_id = event.person_id
+        p.last_name = event.last_name
+        p.first_name = event.first_name
+        p.father_name = event.father_name
+        p.mother_name = event.mother_name
+        p.birth_date = event.birth_date
+        p.afm, p.amka, p.ama = event.afm, event.amka, event.ama
+        p.children = event.children
+        p.children_history = [(None, event.children)]
+        p.email = event.email
+        p.sex = event.sex
+        p.nationality_code = event.nationality_code
+        p.identity_type = event.identity_type
+        p.identity_number = event.identity_number
+        p.identity_issuer = event.identity_issuer
+        p.identity_issue_date = event.identity_issue_date
+        p.identity_expiry_date = event.identity_expiry_date
+        for k in (
+            "marital_status",
+            "education_level",
+            "res_permit_inst",
+            "res_permit_inst_type",
+            "res_permit_inst_number",
+            "res_permit_inst_expiry_date",
+            "res_permit_ap",
+            "res_permit_ap_type",
+            "res_permit_ap_number",
+            "res_permit_ap_expiry_date",
+            "res_permit_visa",
+            "res_permit_visa_number",
+            "res_permit_visa_from",
+            "res_permit_visa_to",
+            *PERSON_TEXT_FIELDS,
         ):
+            setattr(p, k, getattr(event, k))
+
+    @_apply.register
+    def _on_person_details_corrected(self, event: PersonDetailsCorrected):
+        p = self.persons[event.person_id]
+        _apply_person_fields(p, event.fields)
+        if "children" in event.fields:
+            # Διόρθωση = λάθος στην ΤΡΕΧΟΥΣΑ τιμή -> τελευταία εγγραφή
+            eff, _ = p.children_history[-1]
+            p.children_history[-1] = (eff, p.children)
+
+    @_apply.register
+    def _on_person_details_changed(self, event: PersonDetailsChanged):
+        p = self.persons[event.person_id]
+        eff = event.effective_from
+        # Ανά πεδίο: η μεταβολή γίνεται «τρέχουσα» τιμή ΜΟΝΟ αν καμία
+        # νεότερη (σε ισχύ) μεταβολή δεν έχει ήδη αλλάξει το ίδιο πεδίο —
+        # μια αναδρομική καταχώρηση δεν πατά νεότερη.
+        current = {
+            k: v for k, v in event.fields.items()
+            if not any(eff < c["effective_from"] and k in c["fields"]
+                       for c in p.changes)
+        }
+        p.changes.append({
+            "effective_from": eff,
+            "fields": {k: (getattr(p, k, None), v)
+                       for k, v in event.fields.items()},
+        })
+        p.changes.sort(key=lambda c: c["effective_from"])
+        _apply_person_fields(p, current)
+        if "children" in event.fields:
+            p.children_history.append((eff, int(event.fields["children"])))
+            p.children_history.sort(key=lambda h: h[0] or date.min)
+
+    @_apply.register
+    def _on_employment_started(self, event: EmploymentStarted):
+        emp = self.employments.setdefault(event.employment_id, EmploymentState())
+        emp.employee_id = event.employment_id
+        emp.person_id = event.person_id
+        emp.person = self.persons.get(event.person_id)
+        emp.hire_date = event.hire_date
+        emp.payroll_from = event.payroll_from
+        emp.pay_type = event.pay_type
+        emp.monthly_gross = event.monthly_gross
+        emp.daily_wage = event.daily_wage
+        emp.weekly_hours = event.weekly_hours
+        emp.contract_weekly_system = event.weekly_system
+        emp.service_years = event.service_years
+        emp.frozen_service_years = event.frozen_service_years
+        emp.married = event.married
+        emp.extra_allowances_pct = event.extra_allowances_pct
+        emp.employment_relationship = event.employment_relationship
+        emp.fixed_term_from = event.fixed_term_from
+        emp.fixed_term_to = event.fixed_term_to
+        for field_name in (
+            "oaed_placement",
+            "oaed_program",
+            "oaed_replacement",
+            "oaed_replaced_afm",
+            "oaed_replaced_amka",
+            "trial_period",
+            "trial_date_to",
+            "minor_booklet_number",
+            "unemployment_card_number",
+            "working_card",
+            "flexible_arrival_minutes",
+            "break_within_schedule",
+            "break_minutes",
+        ):
+            setattr(emp, field_name, getattr(event, field_name))
+        # Η πρόσληψη ΔΕΝ θεωρείται ολοκληρωμένη με την καταχώρηση: γίνεται
+        # ολοκληρωμένη ΜΟΝΟ με την αναγγελία στο ΕΡΓΑΝΗ (Ε3/WebE3N ή
+        # καταγραφή «external» στη μεταφορά). Το `draft` του event μένει ως
+        # ιστορικό του πώς καταχωρήθηκε, ΔΕΝ δηλώνει υποβολή.
+        emp.hire_submitted = False
+        emp.contract_history = [_terms_of(event, event.hire_date)]
+        if emp.person and event.employment_id not in emp.person.employment_ids:
+            emp.person.employment_ids.append(event.employment_id)
+
+    @_apply.register
+    def _on_employment_hire_details_corrected(self, event: EmploymentHireDetailsCorrected):
+        emp = self.employments[event.employment_id]
+        emp.hire_date = event.hire_date
+        emp.pay_type = event.pay_type
+        emp.monthly_gross = event.monthly_gross
+        emp.daily_wage = event.daily_wage
+        emp.weekly_hours = event.weekly_hours
+        emp.contract_weekly_system = event.weekly_system
+        emp.service_years = event.service_years
+        emp.frozen_service_years = event.frozen_service_years
+        emp.married = event.married
+        emp.extra_allowances_pct = event.extra_allowances_pct
+        emp.employment_relationship = event.employment_relationship
+        emp.fixed_term_from = event.fixed_term_from
+        emp.fixed_term_to = event.fixed_term_to
+        for field_name in (
+            "oaed_placement",
+            "oaed_program",
+            "oaed_replacement",
+            "oaed_replaced_afm",
+            "oaed_replaced_amka",
+            "trial_period",
+            "trial_date_to",
+            "minor_booklet_number",
+            "unemployment_card_number",
+            "working_card",
+            "flexible_arrival_minutes",
+            "break_within_schedule",
+            "break_minutes",
+        ):
+            setattr(emp, field_name, getattr(event, field_name))
+        # Η διόρθωση της φόρμας πρόσληψης αλλάζει την ΑΡΧΙΚΗ έκδοση της
+        # σύμβασης — οι μεταγενέστερες μεταβολές μένουν άθικτες.
+        initial = _terms_of(event, event.hire_date)
+        if emp.contract_history:
+            emp.contract_history[0] = initial
+        else:
+            emp.contract_history = [initial]
+        emp.contract_history.sort(key=lambda t: t.effective_from or date.min)
+        if emp.person and event.employment_id not in emp.person.employment_ids:
+            emp.person.employment_ids.append(event.employment_id)
+        emp.schedule = dict(event.weekly_pattern)
+        emp.schedule_history = [
+            (
+                event.hire_date,
+                dict(event.weekly_pattern),
+                event.schedule_end_date,
+            )
+        ]
+        emp.schedule_mode = event.schedule_mode
+        emp.standing_history = []
+        emp.pending_weekly = []
+        emp.daily_schedule = {
+            date.fromisoformat(iso): hours
+            for iso, hours in event.daily_schedule.items()
+        }
+        emp.declared_days = {}
+
+    @_apply.register
+    def _on_contract_changed(self, event: ContractChanged):
+        emp = self.employments[event.employee_id]
+        emp.pay_type = event.pay_type
+        emp.monthly_gross = event.monthly_gross
+        emp.daily_wage = event.daily_wage
+        emp.weekly_hours = event.weekly_hours
+        # None = η μεταβολή δεν άγγιξε το σύστημα εργασίας -> μένει ως έχει
+        if event.weekly_system is not None:
+            emp.contract_weekly_system = event.weekly_system
+        emp.contract_history.append(_terms_of(event, event.effective_from))
+        emp.contract_history.sort(key=lambda t: t.effective_from or date.min)
+        emp.contract_changes.append(
+            (_terms_of(event, event.effective_from), emp.hire_submitted))
+
+    @_apply.register
+    def _on_employment_deleted(self, event: EmploymentDeleted):
+        # Εκ παραδρομής καταχώρηση: η απασχόληση φεύγει ΟΛΟΚΛΗΡΗ από τα
+        # projections (το event log μένει άθικτο). Ό,τι κρατά κλειδί
+        # απασχόλησης καθαρίζεται μαζί, ώστε το replay να δίνει το ίδιο
+        # αποτέλεσμα με μια βάση που δεν την είδε ποτέ.
+        emp = self.employments.pop(event.employee_id, None)
+        if emp is not None and emp.person is not None:
+            person = emp.person
+            person.employment_ids = [
+                eid for eid in person.employment_ids if eid != event.employee_id
+            ]
+        for store in (self._payrolls, self._gifts, self._allowances):
+            for key in [k for k in store if k[0] == event.employee_id]:
+                del store[key]
+        self._leave_compensations.pop(event.employee_id, None)
+        self._severances.pop(event.employee_id, None)
+        self.ergani_submissions = [
+            s
+            for s in self.ergani_submissions
+            if getattr(s, "employee_id", None) != event.employee_id
+        ]
+
+    @_apply.register
+    def _on_leave_cancelled(self, event: LeaveCancelled):
+        self.employments[event.employee_id].cancelled_leaves.add(event.leave_id)
+
+    @_apply.register
+    def _on_leave_declaration_submitted(self, event: LeaveDeclarationSubmitted):
+        for eid, days in event.days.items():
+            if eid in self.employments:   # διαγραμμένη απασχόληση: αγνοείται
+                self.employments[eid].leave_declared.update(
+                    {date.fromisoformat(iso): code for iso, code in days.items()})
+
+    @_apply.register
+    def _on_ergani_submission_recorded(self, event: ErganiSubmissionRecorded):
+        self.ergani_submissions.append(event)
+        if (
+            event.doc_type in ("WebE3N", "E3")
+            and event.status != "failed"
+            and event.employee_id in self.employments
+        ):
+            self.employments[event.employee_id].hire_submitted = True
+
+    @_apply.register
+    def _on_employee_terminated(self, event: EmployeeTerminated):
+        emp = self.employments[event.employee_id]
+        emp.termination_date = event.termination_date
+        emp.termination_reason = event.reason
+
+    @_apply.register
+    def _on_insurance_profile_assigned(self, event: InsuranceProfileAssigned):
+        emp = self.employments[event.employee_id]
+        emp.insurance_profile = event
+
+    @_apply.register
+    def _on_work_schedule_assigned(self, event: WorkScheduleAssigned):
+        emp = self.employments[event.employee_id]
+        emp.schedule_history.append(
+            (event.effective_from, dict(event.weekly_pattern), event.end_date)
+        )
+        latest = max(
+            enumerate(emp.schedule_history),
+            key=lambda item: (item[1][0], item[0]),
+        )[1]
+        emp.schedule = dict(latest[1])
+        if emp.schedule_mode != "variable":  # μεταβλητό: μόνο template
+            emp.pending_weekly = [
+                p for p in emp.pending_weekly if p[0] != event.effective_from
+            ] + [(event.effective_from, dict(event.weekly_pattern), event.end_date)]
+        # Η τελευταία υποβολή επικρατεί: το νέο εβδομαδιαίο ακυρώνει τις
+        # παλαιότερες ημερήσιες μεταβολές του διαστήματος ισχύος του.
+        emp.daily_schedule = {
+            d: h for d, h in emp.daily_schedule.items()
+            if not _within(d, event.effective_from, event.end_date)
+        }
+
+    @_apply.register
+    def _on_daily_schedule_assigned(self, event: DailyScheduleAssigned):
+        # Νέα υποβολή αντικαθιστά τις ίδιες ημέρες (last-write-wins)
+        sched = self.employments[event.employee_id].daily_schedule
+        for iso, hours in event.days.items():
+            sched[date.fromisoformat(iso)] = hours
+
+    @_apply.register
+    def _on_employment_schedule_mode_set(self, event: EmploymentScheduleModeSet):
+        emp = self.employments[event.employee_id]
+        emp.schedule_mode = event.mode
+        if event.mode == "variable":
+            emp.pending_weekly = []
+
+    @_apply.register
+    def _on_schedule_declared_to_ergani(self, event: ScheduleDeclaredToErgani):
+        # STANDING εβδομαδιαίο (fixed): νεότερο από κάθε προηγούμενη
+        # ημερήσια δήλωση του διαστήματός του — αυτές παύουν να ισχύουν.
+        emp = self.employments[event.employee_id]
+        emp.standing_history.append(
+            (event.effective_from, event.end_date, dict(event.days))
+        )
+        emp.pending_weekly = [  # παλιά events χωρίς ημερομηνία: όλα
+            p for p in emp.pending_weekly
+            if event.effective_from is not None and p[0] != event.effective_from
+        ]
+        emp.declared_days = {
+            d: h for d, h in emp.declared_days.items()
+            if not _within(d, event.effective_from, event.end_date)
+        }
+
+    @_apply.register
+    def _on_schedule_days_submitted(self, event: ScheduleDaysSubmitted):
+        emp = self.employments[event.employee_id]
+        for iso, hours in event.days.items():
+            emp.declared_days[date.fromisoformat(iso)] = hours or ""
+        emp.days_declared_here |= event.batch_no > 0
+        batch = self.schedule_batches.setdefault(
+            event.batch_no, {"count": 0, "employees": set()}
+        )
+        batch["count"] += len(event.days)
+        batch["employees"].add(event.employee_id)
+
+    @_apply.register
+    def _on_attendance_sheet_approved(self, event: AttendanceSheetApproved):
+        self.attendance_sheets[(event.period_year, event.period_month)] = event
+
+    @_apply.register
+    def _on_schedule_system_declared(self, event: ScheduleSystemDeclared):
+        self.schedule_systems[event.effective_from] = event.system
+
+    @_apply.register
+    def _on_card_punch_recorded(self, event: CardPunchRecorded):
+        # ΩΜΗ διέλευση: μπαίνει στη θέση της κατά ώρα (η κάρτα μπορεί να
+        # στείλει εκπρόθεσμα ή ο χρήστης να συμπληρώσει χτύπημα που ξεχάστηκε)
+        emp = self.employments[event.employee_id]
+        day = emp.card_punches.setdefault(event.punch_date, [])
+        day.append(
+            {
+                "m": int(event.minute),
+                "kind": event.kind,
+                "id": event.punch_id,
+                "source": event.source,
+                "note": event.note,
+                "blind": event.blind,
+            }
+        )
+        day.sort(key=lambda p: (p["m"], 0 if p["kind"] == "in" else 1))
+        emp._sync_attendance(event.punch_date)
+        emp.card_checked.discard((event.punch_date.year, event.punch_date.month))
+
+    @_apply.register
+    def _on_card_punch_cancelled(self, event: CardPunchCancelled):
+        emp = self.employments.get(event.employee_id)
+        if emp is not None:
+            for d, day in list(emp.card_punches.items()):
+                kept = [p for p in day if p["id"] != event.punch_id]
+                if len(kept) == len(day):
+                    continue
+                if kept:
+                    emp.card_punches[d] = kept
+                else:
+                    del emp.card_punches[d]
+                emp._sync_attendance(d)
+                emp.card_checked.discard((d.year, d.month))
+                break
+
+    @_apply.register
+    def _on_card_month_checked(self, event: CardMonthChecked):
+        self.employments[event.employee_id].card_checked.add(
+            (event.year, event.month)
+        )
+
+    @_apply.register
+    def _on_month_pay_basis_chosen(self, event: MonthPayBasisChosen):
+        self.employments[event.employee_id].pay_basis[
+            (event.year, event.month)] = (event.basis, bool(event.retro))
+
+    @_apply.register
+    def _on_retro_absence_reason_set(self, event: RetroAbsenceReasonSet):
+        reasons = self.employments[event.employee_id].absence_reasons
+        if event.code:
+            reasons[event.day] = event.code
+        else:
+            reasons.pop(event.day, None)
+
+    @_apply.register
+    def _on_leave_recorded(self, event: LeaveRecorded):
+        self.employments[event.employee_id].leaves.append(event)
+
+    @_apply.register
+    def _on_leave_rescheduled(self, event: LeaveRescheduled):
+        emp = self.employments[event.employee_id]
+        for index, leave in enumerate(emp.leaves):
+            if leave.leave_id == event.leave_id:
+                emp.leaves[index] = LeaveRecorded(
+                    event.employee_id,
+                    event.leave_type,
+                    event.date_from,
+                    event.date_to,
+                    event.notes,
+                    event.leave_id,
+                )
+                break
+
+    @_apply.register
+    def _on_childcare_reduction_set(self, event: ChildcareReductionSet):
+        emp = self.employments[event.employee_id]
+        emp.childcare_reduction = []
+        start = event.date_from
+        _, steps = config.CHILDCARE_REDUCTION_OPTIONS.get(event.option, ("", ()))
+        for months, hours in steps:
+            end = _add_months(start, months)
+            emp.childcare_reduction.append((start, end - timedelta(days=1), hours))
+            start = end
+
+    @_apply.register
+    def _on_child_birth_recorded(self, event: ChildBirthRecorded):
+        self.employments[event.employee_id].child_birth_date = event.birth_date
+
+    @_apply.register
+    def _on_sickness_benefit_recorded(self, event: SicknessBenefitRecorded):
+        # Νέα καταχώρηση αντικαθιστά την προηγούμενη (διόρθωση ποσού)
+        self.employments[event.employee_id].sickness_benefits[event.leave_id] = (
+            event.amount
+        )
+
+    @_apply.register
+    def _on_monthly_payroll_calculated(self, event: MonthlyPayrollCalculated):
+        self._payrolls[
+            (event.employee_id, event.period_year, event.period_month)
+        ] = event
+
+    @_apply.register
+    def _on_gift_calculated(self, event: GiftCalculated):
+        self._gifts[(event.employee_id, event.gift_type, event.year)] = event
+
+    @_apply.register
+    def _on_leave_allowance_calculated(self, event: LeaveAllowanceCalculated):
+        self._allowances[(event.employee_id, event.year)] = event
+        emp = self.employments.get(event.employee_id)
+        if emp is not None:
+            emp.allowance_months[event.year] = emp.allowance_period_month(event.year)
+
+    @_apply.register
+    def _on_leave_compensation_calculated(self, event: LeaveCompensationCalculated):
+        self._leave_compensations[event.employee_id] = event
+
+    @_apply.register
+    def _on_severance_calculated(self, event: SeveranceCalculated):
+        self._severances[event.employee_id] = event
+
+    @_apply.register
+    def _on_apd_file_generated(self, event: APDFileGenerated):
+        self.apd_files.append(event)
+
+    @_apply.register
+    def _on_apd_submitted(self, event: APDSubmitted):
+        self.apd_submissions.append(event)
+
+    @_apply.register
+    def _on_fmy_file_generated(self, event: FMYFileGenerated):
+        self.fmy_files.append(event)
+
+    @_apply.register
+    def _on_fmy_submitted(self, event: FMYSubmitted):
+        self.fmy_submissions.append(event)
+
+    @_apply.register
+    def _on_payment_made(self, event: PaymentMade):
+        self.payments.append(event)
+
+    @_apply.register
+    def _on_obligation_scheduled(self, event: ObligationScheduled):
+        self.obligations[event.obligation_id] = Obligation(
+            event.obligation_id,
+            event.obligation_type,
+            event.due_date,
+            event.employee_id,
+            event.period_year,
+            event.period_month,
+            original_due=event.due_date,
+        )
+
+    @_apply.register
+    def _on_obligation_fulfilled(self, event: ObligationFulfilled):
+        if event.obligation_id in self.obligations:
             self.obligations[event.obligation_id].fulfilled = True
 
-        elif isinstance(event, PayrollPeriodReopened):
-            # Η μισθοδοσία ξαναγίνεται ΕΚΚΡΕΜΗΣ. Δεν σβήνεται κανένας
-            # υπολογισμός: τα MonthlyPayrollCalculated αντικαθίστανται από
-            # μόνα τους στο ίδιο φυσικό κλειδί όταν ξανατρέξει (κανόνας #2).
-            self._reopen("MONTHLY_PAYROLL", event.period_year, event.period_month)
+    @_apply.register
+    def _on_payroll_period_reopened(self, event: PayrollPeriodReopened):
+        # Η μισθοδοσία ξαναγίνεται ΕΚΚΡΕΜΗΣ. Δεν σβήνεται κανένας
+        # υπολογισμός: τα MonthlyPayrollCalculated αντικαθίστανται από
+        # μόνα τους στο ίδιο φυσικό κλειδί όταν ξανατρέξει (κανόνας #2).
+        self._reopen("MONTHLY_PAYROLL", event.period_year, event.period_month)
 
-        elif isinstance(event, SubmissionWithdrawn):
-            # Η υποβολή ΠΑΥΕΙ ΝΑ ΣΤΕΚΕΙ: η υποχρέωση ξανανοίγει και η δήλωση
-            # φεύγει από τις τρέχουσες (το event μένει στο log ως ιστορικό).
-            self._reopen(
-                event.obligation_type, event.period_year, event.period_month)
-            if event.obligation_type == "FMY_SUBMISSION":
-                self.fmy_submissions = [
-                    s for s in self.fmy_submissions
-                    if (s.period_year, s.period_month)
-                    != (event.period_year, event.period_month)
-                ]
-            else:
-                self.apd_submissions = [
-                    s for s in self.apd_submissions
-                    if (s.fund, s.period_year, s.period_month)
-                    != (event.fund, event.period_year, event.period_month)
-                ]
+    @_apply.register
+    def _on_submission_withdrawn(self, event: SubmissionWithdrawn):
+        # Η υποβολή ΠΑΥΕΙ ΝΑ ΣΤΕΚΕΙ: η υποχρέωση ξανανοίγει και η δήλωση
+        # φεύγει από τις τρέχουσες (το event μένει στο log ως ιστορικό).
+        self._reopen(
+            event.obligation_type, event.period_year, event.period_month)
+        if event.obligation_type == "FMY_SUBMISSION":
+            self.fmy_submissions = [
+                s for s in self.fmy_submissions
+                if (s.period_year, s.period_month)
+                != (event.period_year, event.period_month)
+            ]
+        else:
+            self.apd_submissions = [
+                s for s in self.apd_submissions
+                if (s.fund, s.period_year, s.period_month)
+                != (event.fund, event.period_year, event.period_month)
+            ]
 
     def _reopen(self, otype: str, py: int, pm: int) -> None:
         """Εκπληρωμένη υποχρέωση ξαναγίνεται εκκρεμής (αντίστροφο του

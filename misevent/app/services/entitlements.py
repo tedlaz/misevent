@@ -31,7 +31,7 @@ class EntitlementsMixin:
         Ο μισθωτός πληρώνεται `μισθός x ημέρες ΕΦΚΑ / συμβατική βάση` (25 σε
         πλήρη απασχόληση, οι ημέρες προγράμματος του μήνα σε μερική —
         `pe.monthly_insurance_days`),
-        ο ημερομίσθιος `ημερομίσθιο x ημέρες ΕΦΚΑ`.
+        ο ημερομίσθιος `αμοιβή ημέρας x ημέρες ΕΦΚΑ` (`pe.daily_day_pay`).
 
         """
         efka = int(line["efka_days"])
@@ -66,7 +66,8 @@ class EntitlementsMixin:
         πηγή αλήθειας για την περικοπή (`sick_deduction`) ΚΑΙ για τις
         «Αποδοχές ασθενείας» της ΑΠΔ (`sickness_apd_lines`)."""
         if emp.pay_type == "daily":
-            return emp.daily_wage
+            return pe.daily_day_pay(emp.daily_wage, emp.weekly_hours,
+                                    emp.scheduled_days_per_week())
         if emp.weekly_hours and emp.weekly_hours < 40:
             # Μερική απασχόληση: ημερομίσθιο = ωρομίσθιο (ίδιος τύπος με την
             # πλήρη) x μέσες συμβατικές ώρες ημέρας προγράμματος.

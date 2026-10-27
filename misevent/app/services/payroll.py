@@ -646,10 +646,15 @@ class PayrollMixin:
         base_days = pe.monthly_insurance_days(
             emp.weekly_hours, line.get("month_planned")
         )
+        day_pay = pe.daily_day_pay(emp.daily_wage, emp.weekly_hours,
+                                   emp.scheduled_days_per_week())
+        # Ημερομίσθιος: αμοιβή ημέρας × ημέρες ΕΡΓΑΣΙΑΣ — οι ημέρες ΕΦΚΑ είναι
+        # ανηγμένες σε εξαήμερο (`pe.daily_insurance_days`), όχι ημέρες αμοιβής.
+        pay_days = int(line.get("worked", ins_days))
         if emp.pay_type == "daily":
             res = pe.calc_monthly_daily(
-                emp.daily_wage,
-                ins_days,
+                day_pay,
+                pay_days,
                 emp.children_on(period_end),
                 period_end,
                 sick=sick,
@@ -679,6 +684,10 @@ class PayrollMixin:
             "pay_type": emp.pay_type,
             "monthly_gross": emp.monthly_gross,
             "daily_wage": emp.daily_wage,
+            # αμοιβή ημέρας ημερομισθίου = ωρομίσθιο × ώρες ημέρας
+            "day_pay": day_pay,
+            "pay_days": pay_days,
+            "day_hours": round(emp.weekly_hours / emp.scheduled_days_per_week(), 2),
             "hourly_rate": hourly,
             "efka_days": ins_days,
             "base_days": base_days,  # ημέρες ΕΦΚΑ πλήρους μήνα (μισθωτός)
@@ -847,6 +856,7 @@ class PayrollMixin:
             line["efka_days"] = min(
                 int(line.get("efka_days", 0)), int(draft["efka_days"])
             )
+            line["worked"] = min(int(line.get("worked", 0)), int(draft["worked"]))
         calc = self.payroll_calc_for(emp, year, month, line)
         if calc is None:
             out["blocked"] = "Καμία ημέρα ασφάλισης στον μήνα της αποχώρησης"

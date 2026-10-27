@@ -186,11 +186,11 @@ def test_company_backup_restore(fresh_system):
     docs_b = registry.documents.scope(tb.store_name)
     docs_a.put("P1", "other", "a.pdf", b"%PDF-a")
     docs_b.put("P1", "other", "b.pdf", b"%PDF-b")
-    assert "ΑΛΦΑ ΑΕ" in client.get("/backup/").get_data(as_text=True)
+    assert "ΑΛΦΑ" in client.get("/backup/").get_data(as_text=True)  # όνομα μενού
 
     r = client.get(f"/backup/company/{a}/download")
     assert r.status_code == 200
-    assert "misevent-%CE%91%CE%9B%CE%A6%CE%91_%CE%91%CE%95-" in r.headers["Content-Disposition"]
+    assert "misevent-%CE%91%CE%9B%CE%A6%CE%91-" in r.headers["Content-Disposition"]
     with zipfile.ZipFile(BytesIO(r.data)) as z:
         assert sorted(z.namelist()) == ["documents.db", "events.json"]
     snapshot = r.data

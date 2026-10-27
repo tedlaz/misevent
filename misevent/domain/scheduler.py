@@ -53,6 +53,7 @@ InsuranceProfileAssigned με teka_member=True, προστίθενται (εφό
 
 import uuid
 from datetime import UTC, date, datetime
+from functools import singledispatchmethod
 
 import misevent.rules.config as config
 import misevent.rules.obligation_types as ot
@@ -70,11 +71,11 @@ from misevent.domain.events import (
     LeaveDeclarationSubmitted,
     LeaveRecorded,
     LeaveRescheduled,
-    MinimumWageDefined,
     MiscSettingsChanged,
     MonthlyPayrollCalculated,
     ObligationFulfilled,
     ObligationScheduled,
+    ParametersDefined,
     PaymentMade,
     RetroScheduleSubmitted,
     WageAdjustmentApplied,
@@ -167,132 +168,157 @@ class ObligationScheduler:
 
     # ------------------------------------------------------------------
     def handle(self, aggregate_id: str, event):
-        if isinstance(event, EmploymentStarted):
-            # Η UI πρόσληψη είναι draft μέχρι να ολοκληρωθεί το WebE3N.
-            # ➜ Οι περίοδοι ξεκινούν από την ΑΝΑΛΗΨΗ της μισθοδοσίας, όχι από
-            #   την πρόσληψη: μεταφερμένος εργαζόμενος με παλιά πρόσληψη δεν
-            #   γεννά υποχρεώσεις για χρήσεις άλλου προγράμματος.
-            if not event.draft:
-                self._on_hired(event.payroll_from or event.hire_date)
+        self._apply(event)
 
-        elif isinstance(event, ErganiSubmissionRecorded):
-            if event.doc_type in ("WebE3N", "E3") and event.status != "failed":
-                emp = self.proj.employments.get(event.employee_id)
-                if emp and emp.payroll_start:
-                    start = emp.payroll_start
-                    self._on_hired(start)
-                    if emp.insurance_profile and emp.insurance_profile.teka_member:
-                        self._ensure_teka(since=(start.year, start.month))
+    @singledispatchmethod
+    def _apply(self, event):
+        """Οι περισσότεροι τύποι δεν αφορούν υποχρεώσεις: καμία αντίδραση."""
 
-        elif isinstance(event, InsuranceProfileAssigned):
+    @_apply.register
+    def _on_employment_started(self, event: EmploymentStarted):
+        # Η UI πρόσληψη είναι draft μέχρι να ολοκληρωθεί το WebE3N.
+        # ➜ Οι περίοδοι ξεκινούν από την ΑΝΑΛΗΨΗ της μισθοδοσίας, όχι από
+        #   την πρόσληψη: μεταφερμένος εργαζόμενος με παλιά πρόσληψη δεν
+        #   γεννά υποχρεώσεις για χρήσεις άλλου προγράμματος.
+        if not event.draft:
+            self._on_hired(event.payroll_from or event.hire_date)
+
+    @_apply.register
+    def _on_ergani_submission_recorded(self, event: ErganiSubmissionRecorded):
+        if event.doc_type in ("WebE3N", "E3") and event.status != "failed":
             emp = self.proj.employments.get(event.employee_id)
-            if event.teka_member and emp and emp.hire_submitted:
-                start = (
-                    emp.payroll_start
-                    if emp and emp.payroll_start
-                    else datetime.now(UTC).date()
-                )
-                self._ensure_teka(since=(start.year, start.month))
+            if emp and emp.payroll_start:
+                start = emp.payroll_start
+                self._on_hired(start)
+                if emp.insurance_profile and emp.insurance_profile.teka_member:
+                    self._ensure_teka(since=(start.year, start.month))
 
-        elif isinstance(event, AttendanceSheetApproved):
-            y, m = event.period_year, event.period_month
-            self._fulfill("ATTENDANCE_APPROVAL", y, m)
-            # Απολογιστικό σύστημα τον μήνα -> δήλωση των αποκλίσεων της κάρτας
-            if (self.proj.schedule_system_on(date(y, m, 1)) == "retro"
-                    and (y, m) not in self._retro_periods):
-                self._retro_periods.add((y, m))
-                self._schedule("RETRO_SCHEDULE", ot.due_date("RETRO_SCHEDULE", y, m), y, m)
+    @_apply.register
+    def _on_insurance_profile_assigned(self, event: InsuranceProfileAssigned):
+        emp = self.proj.employments.get(event.employee_id)
+        if event.teka_member and emp and emp.hire_submitted:
+            start = (
+                emp.payroll_start
+                if emp and emp.payroll_start
+                else datetime.now(UTC).date()
+            )
+            self._ensure_teka(since=(start.year, start.month))
 
-        elif isinstance(event, RetroScheduleSubmitted):
-            self._fulfill("RETRO_SCHEDULE", event.period_year, event.period_month)
+    @_apply.register
+    def _on_attendance_sheet_approved(self, event: AttendanceSheetApproved):
+        y, m = event.period_year, event.period_month
+        self._fulfill("ATTENDANCE_APPROVAL", y, m)
+        # Απολογιστικό σύστημα τον μήνα -> δήλωση των αποκλίσεων της κάρτας
+        if (self.proj.schedule_system_on(date(y, m, 1)) == "retro"
+                and (y, m) not in self._retro_periods):
+            self._retro_periods.add((y, m))
+            self._schedule("RETRO_SCHEDULE", ot.due_date("RETRO_SCHEDULE", y, m), y, m)
 
-        elif isinstance(event, CardPeriodChecked):
-            self._fulfill("CARD_IMPORT", event.year, event.month)
+    @_apply.register
+    def _on_retro_schedule_submitted(self, event: RetroScheduleSubmitted):
+        self._fulfill("RETRO_SCHEDULE", event.period_year, event.period_month)
 
-        elif (isinstance(event, MiscSettingsChanged) and "digital_card" in event.fields
-              and bool(event.fields["digital_card"]) != self._digital_card):
+    @_apply.register
+    def _on_card_period_checked(self, event: CardPeriodChecked):
+        self._fulfill("CARD_IMPORT", event.year, event.month)
+
+    @_apply.register
+    def _on_misc_settings_changed(self, event: MiscSettingsChanged):
+        if ("digital_card" in event.fields
+                and bool(event.fields["digital_card"]) != self._digital_card):
             self._digital_card = bool(event.fields["digital_card"])
             self._digital_card_toggled(self._digital_card)
 
-        elif isinstance(event, MonthlyPayrollCalculated):
-            y, m = event.period_year, event.period_month
-            # ⚠️ Η μισθοδοσία ΑΠΟΧΩΡΗΣΗΣ αφορά ΕΝΑΝ εργαζόμενο: δεν εκπληρώνει
-            # τη μισθοδοσία της περιόδου (οι υπόλοιποι εκκρεμούν) ούτε ανοίγει
-            # τον επόμενο μήνα — αλλιώς η αλυσίδα θα προχωρούσε χωρίς αυτούς.
+    @_apply.register
+    def _on_monthly_payroll_calculated(self, event: MonthlyPayrollCalculated):
+        y, m = event.period_year, event.period_month
+        # ⚠️ Η μισθοδοσία ΑΠΟΧΩΡΗΣΗΣ αφορά ΕΝΑΝ εργαζόμενο: δεν εκπληρώνει
+        # τη μισθοδοσία της περιόδου (οι υπόλοιποι εκκρεμούν) ούτε ανοίγει
+        # τον επόμενο μήνα — αλλιώς η αλυσίδα θα προχωρούσε χωρίς αυτούς.
+        if not event.exit_settlement:
+            self._fulfill("MONTHLY_PAYROLL", y, m)
+            # Κυλιόμενη αλυσίδα: η μισθοδοσία του μήνα «ανοίγει» τον επόμενο
+            self._ensure_period(*_next(y, m))
+            if m == 11:  # κλείνει ο Νοέμβριος -> υποχρεωτικό επίδομα Δεκ.
+                self._ensure_year_end_allowance(y)
+
+    @_apply.register
+    def _on_leave_recorded_or_leave_rescheduled(self, event: LeaveRecorded | LeaveRescheduled):
+        # και η διόρθωση άδειας: μπορεί να ήταν ή να γίνει κανονική
+        self._sync_allowances({event.date_from.year} | self._open_allowance_years())
+        # Δήλωση αδειών ΕΡΓΑΝΗ για κάθε μήνα της άδειας — ΝΕΑ και σε μήνα
+        # που δηλώθηκε ήδη (ξεχασμένη άδεια -> εκπρόθεσμη υποχρέωση)
+        for y, m in _months(event.date_from, event.date_to):
+            if not any(o.obligation_type == "LEAVE_DECLARATION" and not o.fulfilled
+                       and (o.period_year, o.period_month) == (y, m)
+                       for o in self.proj.obligations.values()):
+                self._schedule("LEAVE_DECLARATION",
+                               ot.due_date("LEAVE_DECLARATION", y, m), y, m)
+
+    @_apply.register
+    def _on_leave_declaration_submitted(self, event: LeaveDeclarationSubmitted):
+        self._fulfill("LEAVE_DECLARATION", event.period_year, event.period_month)
+
+    @_apply.register
+    def _on_leave_cancelled(self, event: LeaveCancelled):
+        self._sync_allowances(self._open_allowance_years())
+
+    @_apply.register
+    def _on_gift_calculated(self, event: GiftCalculated):
+        t = "CHRISTMAS_GIFT" if event.gift_type == "christmas" else "EASTER_GIFT"
+        # ⚠️ Η ΕΚΚΑΘΑΡΙΣΗ ΑΠΟΧΩΡΗΣΗΣ ΔΕΝ ΚΛΕΙΝΕΙ ΤΗΝ ΕΤΑΙΡΙΚΗ ΥΠΟΧΡΕΩΣΗ:
+        # αφορά ΜΟΝΟ αυτόν που αποχωρεί — οι υπόλοιποι δεν έχουν
+        # υπολογιστεί ακόμη και το Δώρο τους θα χανόταν.
+        if not event.exit_settlement:
+            self._fulfill(t, event.year, 0)
+        # Ο υπολογισμός του Δώρου γεννά την ΚΑΤΑΒΟΛΗ του (όπως η μισθοδοσία
+        # γεννά την πληρωμή μισθών) — και στην αποχώρηση, αφού οφείλεται
+        self._ensure_payouts(t, event.year, 0)
+
+    @_apply.register
+    def _on_leave_allowance_calculated(self, event: LeaveAllowanceCalculated):
+        # Κλείνει η υποχρέωση της περιόδου του επιδόματος: μήνας πρώτης
+        # άδειας Ή (αν αποχώρησε χωρίς άδεια) μήνας αποχώρησης. Στη 2η
+        # περίπτωση η υποχρέωση μπορεί να μην έχει γεννηθεί (δεν υπήρξε
+        # LeaveRecorded) — τη δημιουργούμε τώρα ώστε να φαίνεται στη /payroll.
+        emp = self.proj.employments.get(event.employee_id)
+        month = emp.allowance_period_month(event.year) if emp else None
+        if month:
+            self._ensure_allowance_period(event.year, month)
+            # Ίδιος κανόνας με τα Δώρα: η εκκαθάριση αποχώρησης δεν
+            # εκπληρώνει την υποχρέωση των υπόλοιπων δικαιούχων του μήνα.
             if not event.exit_settlement:
-                self._fulfill("MONTHLY_PAYROLL", y, m)
-                # Κυλιόμενη αλυσίδα: η μισθοδοσία του μήνα «ανοίγει» τον επόμενο
-                self._ensure_period(*_next(y, m))
-                if m == 11:  # κλείνει ο Νοέμβριος -> υποχρεωτικό επίδομα Δεκ.
-                    self._ensure_year_end_allowance(y)
+                self._fulfill("LEAVE_ALLOWANCE", event.year, month)
+            self._ensure_payouts("LEAVE_ALLOWANCE", event.year, month)
 
-        elif isinstance(event, LeaveRecorded | LeaveRescheduled):
-            # και η διόρθωση άδειας: μπορεί να ήταν ή να γίνει κανονική
-            self._sync_allowances({event.date_from.year} | self._open_allowance_years())
-            # Δήλωση αδειών ΕΡΓΑΝΗ για κάθε μήνα της άδειας — ΝΕΑ και σε μήνα
-            # που δηλώθηκε ήδη (ξεχασμένη άδεια -> εκπρόθεσμη υποχρέωση)
-            for y, m in _months(event.date_from, event.date_to):
-                if not any(o.obligation_type == "LEAVE_DECLARATION" and not o.fulfilled
-                           and (o.period_year, o.period_month) == (y, m)
-                           for o in self.proj.obligations.values()):
-                    self._schedule("LEAVE_DECLARATION",
-                                   ot.due_date("LEAVE_DECLARATION", y, m), y, m)
+    @_apply.register
+    def _on_apd_submitted(self, event: APDSubmitted):
+        t = "APD_SUBMISSION" if event.fund == "efka" else "APD_TEKA_SUBMISSION"
+        self._fulfill(t, event.period_year, event.period_month)
 
-        elif isinstance(event, LeaveDeclarationSubmitted):
-            self._fulfill("LEAVE_DECLARATION", event.period_year, event.period_month)
+    @_apply.register
+    def _on_fmy_submitted(self, event: FMYSubmitted):
+        self._fulfill("FMY_SUBMISSION", event.period_year, event.period_month)
 
-        elif isinstance(event, LeaveCancelled):
-            self._sync_allowances(self._open_allowance_years())
+    @_apply.register
+    def _on_parameters_defined(self, event: ParametersDefined):
+        # Νέα ΓΣΣΕ από τη σελίδα Παραμέτρων: αν η περίοδος ισχύος της
+        # έχει ήδη ανοίξει, γεννιέται ΤΩΡΑ η υποχρέωση προσαρμογής.
+        key = (event.valid_from.year, event.valid_from.month)
+        if event.family == "minimum_wage" and key in self._company_periods:
+            self._ensure_wage_adjustment(*key)
 
-        elif isinstance(event, GiftCalculated):
-            t = "CHRISTMAS_GIFT" if event.gift_type == "christmas" else "EASTER_GIFT"
-            # ⚠️ Η ΕΚΚΑΘΑΡΙΣΗ ΑΠΟΧΩΡΗΣΗΣ ΔΕΝ ΚΛΕΙΝΕΙ ΤΗΝ ΕΤΑΙΡΙΚΗ ΥΠΟΧΡΕΩΣΗ:
-            # αφορά ΜΟΝΟ αυτόν που αποχωρεί — οι υπόλοιποι δεν έχουν
-            # υπολογιστεί ακόμη και το Δώρο τους θα χανόταν.
-            if not event.exit_settlement:
-                self._fulfill(t, event.year, 0)
-            # Ο υπολογισμός του Δώρου γεννά την ΚΑΤΑΒΟΛΗ του (όπως η μισθοδοσία
-            # γεννά την πληρωμή μισθών) — και στην αποχώρηση, αφού οφείλεται
-            self._ensure_payouts(t, event.year, 0)
+    @_apply.register
+    def _on_wage_adjustment_applied(self, event: WageAdjustmentApplied):
+        self._fulfill(
+            "WAGE_ADJUSTMENT", event.period_year, event.period_month
+        )
 
-        elif isinstance(event, LeaveAllowanceCalculated):
-            # Κλείνει η υποχρέωση της περιόδου του επιδόματος: μήνας πρώτης
-            # άδειας Ή (αν αποχώρησε χωρίς άδεια) μήνας αποχώρησης. Στη 2η
-            # περίπτωση η υποχρέωση μπορεί να μην έχει γεννηθεί (δεν υπήρξε
-            # LeaveRecorded) — τη δημιουργούμε τώρα ώστε να φαίνεται στη /payroll.
-            emp = self.proj.employments.get(event.employee_id)
-            month = emp.allowance_period_month(event.year) if emp else None
-            if month:
-                self._ensure_allowance_period(event.year, month)
-                # Ίδιος κανόνας με τα Δώρα: η εκκαθάριση αποχώρησης δεν
-                # εκπληρώνει την υποχρέωση των υπόλοιπων δικαιούχων του μήνα.
-                if not event.exit_settlement:
-                    self._fulfill("LEAVE_ALLOWANCE", event.year, month)
-                self._ensure_payouts("LEAVE_ALLOWANCE", event.year, month)
-
-        elif isinstance(event, APDSubmitted):
-            t = "APD_SUBMISSION" if event.fund == "efka" else "APD_TEKA_SUBMISSION"
+    @_apply.register
+    def _on_payment_made(self, event: PaymentMade):
+        t = PAYMENT_TYPES.get(event.payment_type)
+        if t:
             self._fulfill(t, event.period_year, event.period_month)
-
-        elif isinstance(event, FMYSubmitted):
-            self._fulfill("FMY_SUBMISSION", event.period_year, event.period_month)
-
-        elif isinstance(event, MinimumWageDefined):
-            # Νέα ΓΣΣΕ από τη σελίδα Παραμέτρων: αν η περίοδος ισχύος της
-            # έχει ήδη ανοίξει, γεννιέται ΤΩΡΑ η υποχρέωση προσαρμογής.
-            key = (event.valid_from.year, event.valid_from.month)
-            if key in self._company_periods:
-                self._ensure_wage_adjustment(*key)
-
-        elif isinstance(event, WageAdjustmentApplied):
-            self._fulfill(
-                "WAGE_ADJUSTMENT", event.period_year, event.period_month
-            )
-
-        elif isinstance(event, PaymentMade):
-            t = PAYMENT_TYPES.get(event.payment_type)
-            if t:
-                self._fulfill(t, event.period_year, event.period_month)
 
     # ------------------------------------------------------------------
     def _schedule(self, otype: str, due: date, py: int, pm: int):

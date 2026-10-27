@@ -224,9 +224,8 @@ def create_app():
             "NAV_TOP": NAV_TOP,
             "nav": nav_for(bool(user and user.is_admin), request.endpoint or ""),
             "current_user": user,
-            # Η ετικέτα κάθε εταιρείας είναι η ΕΠΩΝΥΜΙΑ που καταχωρήθηκε μέσα
-            # της (`display_name`) — η ονομασία του χώρου είναι απλώς το
-            # εφεδρικό όνομα όσο δεν έχουν μπει στοιχεία εργοδότη.
+            # Η ετικέτα κάθε εταιρείας είναι το ΟΝΟΜΑ ΜΕΝΟΥ (`display_name`)·
+            # η επίσημη ονομασία των εκτυπώσεων ζει στα στοιχεία εργοδότη.
             "my_companies": (
                 [
                     {"company_id": c.company_id, "name": registry.display_name(c.company_id)}

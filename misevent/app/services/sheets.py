@@ -7,7 +7,7 @@
 μεταξύ mixins, θα φτιάξεις κύκλους.
 """
 
-from datetime import date
+from datetime import date, timedelta
 
 import misevent.domain.payroll_engine as pe
 import misevent.domain.work_hours as work_hours
@@ -108,7 +108,8 @@ class SheetsMixin:
             },
             # ΠΡΟΒΛΕΠΟΜΕΝΕΣ ημέρες ΕΦΚΑ — αυτές οδηγούν τη μισθοδοσία
             "efka_days": self.expected_efka_days(
-                emp, worked, on_leave, unpaid, month_planned
+                emp, worked, on_leave, unpaid, month_planned,
+                worked_dates=self._daily_worked_dates(emp, year, month, unpunched),
             ),
             "source": source,
             "no_punch_days": no_punch,
@@ -288,7 +289,29 @@ class SheetsMixin:
         return out
 
     @staticmethod
-    def expected_efka_days(emp, worked, leave, unpaid, month_planned) -> int:
+    def _daily_worked_dates(emp, year, month, unpunched) -> list:
+        """Ημερομηνίες εργασίας ημερομισθίου για τις ημέρες ασφάλισης: του μήνα
+        (παρουσίες + ημέρες προγράμματος χωρίς χτύπημα), και οι εργάσιμες του
+        προηγούμενου μήνα στην εβδομάδα του 1ου Σαββάτου — κατά το πρόγραμμα,
+        αφού ανήκουν σε άλλη (ή καμία) περίοδο του συστήματος."""
+        if emp.pay_type != "daily":
+            return []
+        first = date(year, month, 1)
+        dates = {d for d in emp.attendance if (d.year, d.month) == (year, month)}
+        dates |= set(unpunched)
+        if not dates:
+            return []
+        # ημέρες Δευ–Παρ του προηγούμενου μήνα στην εβδομάδα του 1ου Σαββάτου
+        before = {5: 5, 6: 0}.get(first.weekday(), first.weekday())
+        for k in range(1, before + 1):
+            d = first - timedelta(k)
+            if emp.hire_date and emp.hire_date <= d and emp.is_scheduled(d, as_of=first):
+                dates.add(d)
+        return sorted(dates, key=lambda d: (d.month != month, d))
+
+    @staticmethod
+    def expected_efka_days(emp, worked, leave, unpaid, month_planned,
+                           worked_dates=()) -> int:
         """Οι ΠΡΟΒΛΕΠΟΜΕΝΕΣ ημέρες ασφάλισης (ΕΦΚΑ) της περιόδου.
 
         Μισθωτός: 25 ημέρες/μήνα σε πλήρη απασχόληση (**παραδοχή** — όποιες
@@ -297,9 +320,14 @@ class SheetsMixin:
         από τη βάση ΑΝΑΛΟΓΙΚΑ προς τον μήνα: ο στόχος είναι να τηρούνται
         μισθός + ημέρες ασφάλισης, και κάθε υπόλειμμα να τεκμηριώνεται
         (άδεια με ή χωρίς αποδοχές).
-        Ημερομίσθιος: οι πραγματικές ημέρες εργασίας."""
+        Ημερομίσθιος: οι ημέρες εργασίας, σε πλήρη πενθήμερο +1 ανά εβδομάδα
+        με ≥3 ημέρες (`pe.daily_insurance_days`, 24–27)."""
         if emp.pay_type == "daily":
-            return int(worked)
+            if not worked_dates:
+                return int(worked)
+            first = worked_dates[0]  # ημέρα του μήνα (βλ. `_daily_worked_dates`)
+            return pe.daily_insurance_days(set(worked_dates), first.year, first.month,
+                                           emp.weekly_hours, emp.scheduled_days_per_week())
         if not month_planned:
             return 0
         paid = min(worked + leave, max(month_planned - unpaid, 0))
@@ -366,9 +394,10 @@ class SheetsMixin:
                 )
             if worked > 31 or worked + unpaid + leave > 31:
                 raise ValueError(f"Πάνω από 31 ημέρες για {d['name']}")
-            if efka > 25:
+            cap = pe.DAILY_MAX_INSURANCE_DAYS if d["pay_type"] == "daily" else 25
+            if efka > cap:
                 raise ValueError(
-                    f"Ημέρες ΕΦΚΑ > 25 για {d['name']} — ο μήνας δεν έχει "
+                    f"Ημέρες ΕΦΚΑ > {cap} για {d['name']} — ο μήνας δεν έχει "
                     "περισσότερες από 25 ημέρες ασφάλισης"
                 )
             manual = (worked, unpaid, leave, efka, s_half, s_full, s_ben) != (

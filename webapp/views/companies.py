@@ -10,7 +10,7 @@
 from flask import Blueprint, abort, redirect, render_template, request, session, url_for
 
 from ..helpers import run_command
-from ..system import auth, lock, registry
+from ..system import auth, lock, registry, set_tenant
 from .auth import current_user
 
 bp = Blueprint("companies", __name__, url_prefix="/companies")
@@ -29,7 +29,7 @@ def _rows(user) -> list:
         {
             "company_id": c.company_id,
             "name": registry.display_name(c.company_id),
-            "space_name": c.name,
+            "official": registry.official_name(c.company_id),
             "active": c.company_id == session.get("company_id"),
         }
         for c in accessible(user)
@@ -86,10 +86,36 @@ def create():
     return redirect(url_for("company.index"))
 
 
+@bp.post("/demo")
+def create_demo():
+    """Εταιρεία «DEMO» με εργαζόμενους και ιστορικό του τρέχοντος έτους."""
+    user = current_user()
+    if not may_create(user):
+        abort(403)
+    try:
+        with lock:
+            company_id = registry.create_company("DEMO", created_by=user.user_id)
+    except ValueError as exc:
+        return _page(user, status=400, error=str(exc))
+    return open_demo(company_id)
+
+
+def open_demo(company_id):
+    """Γεμίζει τη (νέα, κενή) εταιρεία με τα δεδομένα DEMO και την ανοίγει."""
+    from ..demo_company import seed_demo_company
+
+    session["company_id"] = company_id
+    set_tenant(company_id)
+    ok, msg = run_command(seed_demo_company)
+    if not ok:
+        return _page(current_user(), status=400, error=f"DEMO: {msg}")
+    return redirect(url_for("dashboard.index"))
+
+
 @bp.post("/rename/<company_id>")
 def rename(company_id):
-    """Μετονομασία του ΧΩΡΟΥ (όχι της επωνυμίας — αυτή ζει στα στοιχεία
-    εργοδότη). Χρήσιμο όσο η εταιρεία είναι ακόμη κενή."""
+    """Μετονομασία του ΟΝΟΜΑΤΟΣ ΜΕΝΟΥ (όχι της επίσημης ονομασίας — αυτή
+    ζει στα στοιχεία εργοδότη)."""
     user = current_user()
     if not user or not (user.is_admin or user.can_access(company_id)):
         abort(403)
@@ -106,8 +132,8 @@ def delete(company_id):
         abort(403)
     if company_id not in auth.companies:
         abort(404)
-    # Η επωνυμία ή ο χώρος: η display_name αλλάζει μόλις φορτωθεί η εταιρεία.
-    names = {registry.display_name(company_id), auth.companies[company_id].name}
+    # Δεκτό και το όνομα μενού και η επίσημη ονομασία.
+    names = {registry.display_name(company_id), registry.official_name(company_id)} - {""}
     if (request.form.get("confirm") or "").strip() not in names:
         return _page(user, status=400, error="Λάθος επιβεβαίωση — τίποτα δεν διαγράφηκε")
     try:

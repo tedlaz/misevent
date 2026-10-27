@@ -1,12 +1,11 @@
 """
 ΔΙΧΤΥ ΤΩΝ ΜΗΤΡΩΩΝ — πιάνει ό,τι σήμερα σπάει ΣΙΩΠΗΛΑ όταν προστίθεται κανόνας.
 
-Το repo έχει ήδη τέσσερις validators που τρέχουν ΣΤΟ IMPORT και πιάνουν τα
+Το repo έχει ήδη validators που τρέχουν ΣΤΟ IMPORT και πιάνουν τα
 περισσότερα λάθη θορυβωδώς:
 
     config.validate_families()                 μητρώο παραμέτρων
     obligation_types.validate()                μητρώο υποχρεώσεων (+ κύκλοι)
-    projections._validate_param_registry()     παράμετροι <-> events
     events._validate_event_registry()          events <-> EVENT_TYPES
     webapp.actions (COMMANDS guard)            τύπος υποχρέωσης <-> εντολή
 
@@ -26,7 +25,7 @@ import _bootstrap  # noqa: F401
 import misevent.rules.config as config
 import misevent.rules.obligation_types as ot
 from misevent.domain.events import EVENT_TYPES
-from misevent.domain.projections import PARAM_EVENT_FAMILY
+from misevent.domain.projections import Projections
 
 ROOT = Path(_bootstrap.ROOT)
 
@@ -36,54 +35,18 @@ def _tree(relative_path: str) -> ast.Module:
 
 
 # ------------------------------------------------------------------ 1. events
-# Events που ΣΚΟΠΙΜΑ δεν έχουν arm στο projections: δεν κρατούν κατάσταση.
-NO_PROJECTION = {
-    # Σύνοψη που κλείνει ΜΟΝΟ την υποχρέωση WAGE_ADJUSTMENT (scheduler.py).
-    # Οι ίδιες οι προσαρμογές είναι ξεχωριστά ContractChanged events.
-    "WageAdjustmentApplied",
-    # Ίδιο μοτίβο: κλείνει ΜΟΝΟ την RETRO_SCHEDULE — οι ημέρες είναι
-    # DailyScheduleAssigned + ScheduleDaysSubmitted.
-    "RetroScheduleSubmitted",
-    # Ίδιο μοτίβο: κλείνει ΜΟΝΟ την CARD_IMPORT — τα χτυπήματα είναι
-    # CardPunchRecorded.
-    "CardPeriodChecked",
-    # ΙΣΤΟΡΙΚΟ: η οικογένεια παραμέτρων «teka» καταργήθηκε (τα ποσοστά
-    # επικουρικής έρχονται πάντα από το ΚΠΚ της κάλυψης). Το event μένει στο
-    # μητρώο ΜΟΝΟ για να αποκωδικοποιούνται παλιά logs — καμία κατάσταση.
-    "TekaRatesDefined",
-}
-
-
 def test_every_event_is_handled_by_projections():
-    """ΣΙΩΠΗΛΟ #1: η αλυσίδα `Projections.handle` ΔΕΝ έχει τελικό `else`.
+    """Το `Projections._apply` ΣΚΑΕΙ σε event χωρίς χειρισμό — αλλά μόνο όταν
+    το event ΓΡΑΦΤΕΙ, δηλαδή αφού είναι ήδη στο log. Εδώ πιάνεται νωρίτερα.
 
-    Event χωρίς arm γράφεται κανονικά στο log και αγνοείται — για πάντα, και
-    στο replay. Καμία εξαίρεση, κανένα μήνυμα, απλώς κατάσταση που λείπει.
+    Event που σκόπιμα δεν κρατά κατάσταση δηλώνεται στο `Projections._no_state`.
     """
-    tree = _tree("misevent/domain/projections.py")
-    handled = {
-        name.id
-        for node in ast.walk(tree)
-        if isinstance(node, ast.Call) and getattr(node.func, "id", "") == "isinstance"
-        for arg in node.args[1:]
-        for name in ast.walk(arg)
-        if isinstance(name, ast.Name)
-    }
-    # Οι παράμετροι πιάνονται από ΕΝΑ γενικό arm μέσω του μητρώου.
-    handled |= {cls.__name__ for cls in PARAM_EVENT_FAMILY}
-
-    orphans = sorted(set(EVENT_TYPES) - handled - NO_PROJECTION)
+    handled = set(Projections.__dict__["_apply"].dispatcher.registry)
+    orphans = sorted(n for n, cls in EVENT_TYPES.items() if cls not in handled)
     assert not orphans, (
-        "Events χωρίς arm στο `Projections.handle` — θα αγνοούνταν σιωπηλά: "
-        + ", ".join(orphans)
-        + ".\nΑν είναι σκόπιμο (δεν κρατούν κατάσταση), βάλ' τα στο NO_PROJECTION."
+        "Events χωρίς χειρισμό στο `Projections._apply`: " + ", ".join(orphans)
+        + ".\nΑν είναι σκόπιμο (δεν κρατούν κατάσταση), δήλωσέ τα στο `_no_state`."
     )
-
-
-def test_no_projection_allowlist_has_no_leftovers():
-    """Το allowlist να μη μείνει να καλύπτει event που δεν υπάρχει πια."""
-    unknown = sorted(NO_PROJECTION - set(EVENT_TYPES))
-    assert not unknown, "Άγνωστα events στο NO_PROJECTION: " + ", ".join(unknown)
 
 
 # -------------------------------------------------------------- 2. παράμετροι

@@ -16,13 +16,11 @@ from pathlib import Path
 import misevent.rules.config as config
 import misevent.rules.obligation_types as ot
 from misevent.domain.events import (
-    EVENT_TYPES,
     MiscSettingsChanged,
     ObligationExtended,
     ObligationTypeConfigured,
-    SeveranceRulesDefined,
+    ParametersDefined,
     SubmissionWithdrawn,
-    TaxScaleDefined,
 )
 
 from ._base import _decode_import, _parse_import_date
@@ -86,9 +84,9 @@ class ParametersMixin:
 
         Τα πεδία, οι τύποι, τα όρια, οι διασταυρώσεις και το event έρχονται
         από το μητρώο `config.FAMILIES` — δεν επαναλαμβάνονται εδώ. Νέα
-        οικογένεια = μία εγγραφή στο μητρώο + ένα event, ΧΩΡΙΣ νέα μέθοδο.
+        οικογένεια = μία εγγραφή στο μητρώο, ΧΩΡΙΣ νέα μέθοδο ή event.
 
-        Πεδίο που δεν δόθηκε παίρνει την προεπιλογή του event· τα πεδία
+        Πεδίο που δεν δόθηκε παίρνει την προεπιλογή της κλάσης· τα πεδία
         `carry_over` της οικογένειας μεταφέρονται αυτούσια από την εγγραφή
         που ισχύει την `valid_from` (π.χ. τα fallback ποσοστά ΕΦΚΑ)."""
         spec = config.FAMILIES.get(family)
@@ -113,7 +111,11 @@ class ParametersMixin:
         if spec.check is not None and (msg := spec.check(clean)):
             raise ValueError(msg)
 
-        self.store.append("COMPANY", EVENT_TYPES[spec.event](valid_from, **clean))
+        try:  # ό,τι θα έσκαγε στο replay (π.χ. υποχρεωτικό πεδίο), σκάει ΤΩΡΑ
+            spec.cls(valid_from=valid_from, **clean)
+        except TypeError as e:
+            raise ValueError(f"«{spec.label}»: ελλιπή πεδία ({e})") from None
+        self.store.append("COMPANY", ParametersDefined(family, valid_from, clean))
 
     def repeal_parameters(self, family, valid_from):
         """ΚΑΤΑΡΓΗΣΗ κανόνα από μια ημερομηνία και μετά.
@@ -153,13 +155,14 @@ class ParametersMixin:
             # TaxBracket vs dict). Περνούν από την ΙΔΙΑ διαδρομή με τον wizard.
             self._define_custom(family, cur, valid_from=valid_from, repealed=True)
             return
-        ev_cls = EVENT_TYPES[spec.event]
         values = {
             f.name: getattr(cur, f.name)
-            for f in dc_fields(ev_cls)
-            if f.name not in ("valid_from", "repealed") and hasattr(cur, f.name)
+            for f in dc_fields(spec.cls)
+            if f.name not in ("valid_from", "repealed")
         }
-        self.store.append("COMPANY", ev_cls(valid_from, repealed=True, **values))
+        self.store.append(
+            "COMPANY", ParametersDefined(family, valid_from, values, repealed=True)
+        )
 
     def _carried_value(self, spec, name, valid_from):
         """Η τιμή ενός `carry_over` πεδίου από την εγγραφή που ισχύει."""
@@ -261,7 +264,7 @@ class ParametersMixin:
             raise ValueError(
                 "Το τελευταίο κλιμάκιο πρέπει να είναι ανοιχτό (χωρίς άνω όριο)"
             )
-        defaults = TaxScaleDefined(valid_from, ())
+        defaults = config.TaxScale(valid_from, ())
         params = dict(model_params or {})
         allowed = set(config.tax_model_param_fields(model))
         unknown = set(params) - allowed
@@ -271,21 +274,25 @@ class ParametersMixin:
             )
         self.store.append(
             "COMPANY",
-            TaxScaleDefined(
+            ParametersDefined(
+                "tax",
                 valid_from,
-                tuple(clean),
-                tuple(reductions) if reductions is not None else defaults.reductions,
-                float(extra_child_reduction)
-                if extra_child_reduction is not None
-                else defaults.extra_child_reduction,
-                float(phaseout_threshold)
-                if phaseout_threshold is not None
-                else defaults.phaseout_threshold,
-                float(phaseout_per_1000)
-                if phaseout_per_1000 is not None
-                else defaults.phaseout_per_1000,
-                model,
-                params,
+                {
+                    "brackets": clean,
+                    "reductions": list(reductions if reductions is not None
+                                       else defaults.reductions),
+                    "extra_child_reduction": float(extra_child_reduction)
+                    if extra_child_reduction is not None
+                    else defaults.extra_child_reduction,
+                    "phaseout_threshold": float(phaseout_threshold)
+                    if phaseout_threshold is not None
+                    else defaults.phaseout_threshold,
+                    "phaseout_per_1000": float(phaseout_per_1000)
+                    if phaseout_per_1000 is not None
+                    else defaults.phaseout_per_1000,
+                    "model": model,
+                    "model_params": params,
+                },
                 bool(repealed),
             ),
         )
@@ -323,7 +330,7 @@ class ParametersMixin:
     def define_work_hour_rules(self, valid_from, **kw):
         """Όρια & προσαυξήσεις ωρών (νύχτα/αργία/υπερεργασία/υπερωρίες).
         Δεκτά ΜΟΝΟ τα πεδία του μητρώου — ό,τι λείπει παίρνει την προεπιλογή
-        του event."""
+        της κλάσης."""
         self.define_parameters("work_hours", valid_from, **kw)
 
     def parameter_entries(self, family):
@@ -409,16 +416,19 @@ class ParametersMixin:
 
         self.store.append(
             "COMPANY",
-            SeveranceRulesDefined(
+            ParametersDefined(
+                "severance",
                 valid_from,
-                tuple(clean_months),
-                float(gift_factor),
-                # ⚠️ ΣΤΟ EVENT ΓΡΑΦΕΤΑΙ `None`, ΟΧΙ `inf`: το JSON δεν έχει
-                # άπειρο και το log πρέπει να διαβάζεται από παντού.
-                tuple(
-                    (None if up == float("inf") else up, rate)
-                    for up, rate in clean_tax
-                ),
+                {
+                    "months": [list(m) for m in clean_months],
+                    "gift_factor": float(gift_factor),
+                    # ⚠️ ΣΤΟ EVENT ΓΡΑΦΕΤΑΙ `None`, ΟΧΙ `inf`: το JSON δεν έχει
+                    # άπειρο και το log πρέπει να διαβάζεται από παντού.
+                    "tax_brackets": [
+                        [None if up == float("inf") else up, rate]
+                        for up, rate in clean_tax
+                    ],
+                },
                 bool(repealed),
             ),
         )

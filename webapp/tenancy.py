@@ -250,15 +250,19 @@ class Registry:
         return company_id
 
     def display_name(self, company_id: str) -> str:
-        """Η επωνυμία όπως καταχωρήθηκε ΜΕΣΑ στην εταιρεία, αλλιώς η ονομασία
-        του χώρου (μια νεοσύστατη δεν έχει ακόμη στοιχεία εργοδότη)."""
+        """Το όνομα της εταιρείας ΣΤΟ ΜΕΝΟΥ της εφαρμογής — αυτό που δόθηκε
+        στη δημιουργία (μετονομάζεται από τη σελίδα «Εταιρείες»). ΔΕΝ είναι
+        η επίσημη ονομασία: αυτή ζει στα στοιχεία εργοδότη
+        (`CompanyRegistered.official_name`) και τη χρησιμοποιούν οι εκτυπώσεις."""
         ref = self.auth.companies.get(company_id)
-        if ref is None:
+        return ref.name if ref else ""
+
+    def official_name(self, company_id: str) -> str:
+        """Η επίσημη ονομασία από τα στοιχεία εργοδότη ("" αν δεν έχουν μπει)."""
+        if company_id not in self.auth.companies:
             return ""
-        tenant = self._tenants.get(company_id)
-        if tenant and tenant.proj.company:
-            return tenant.proj.company.legal_name or ref.name
-        return ref.name
+        company = self.tenant(company_id).proj.company
+        return company.official_name if company else ""
 
     def _ensure_default_company(self):
         """Ποτέ κενό σύστημα: χωρίς εταιρεία δεν υπάρχει τίποτα να δει ο

@@ -16,6 +16,14 @@
     <div class="btnrow"><button class="run" type="submit">Δημιουργία</button></div>
   </form>
 </div>
+<div class="card">
+  <h2>DEMO εταιρεία <span class="norm">— 5 εργαζόμενοι (μισθωτοί &amp;
+    ημερομίσθιοι, πλήρους &amp; μερικής, ένας κάτω των 25) με μισθοδοσίες,
+    ΑΠΔ, ΦΜΥ και Δώρα από τον Ιανουάριο ως τον τρέχοντα μήνα</span></h2>
+  <form method="post" action="{{ url_for('welcome.demo_company') }}">
+    <div class="btnrow"><button class="ghost" type="submit">Δημιουργία DEMO</button></div>
+  </form>
+</div>
 {% endif %}
 
 {% if is_admin %}

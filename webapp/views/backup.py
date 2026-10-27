@@ -208,7 +208,7 @@ def company_download(company_id):
     tenant = _company(company_id)
     with lock:
         data = _company_bundle(tenant)
-    # Η επωνυμία, χωρίς ό,τι δεν χωρά σε όνομα αρχείου (τα ελληνικά μένουν).
+    # Το όνομα μενού, χωρίς ό,τι δεν χωρά σε όνομα αρχείου (τα ελληνικά μένουν).
     name = re.sub(r"[^\w.-]+", "_", registry.display_name(company_id)).strip("_.")
     return send_file(
         BytesIO(data),

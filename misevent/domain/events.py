@@ -654,6 +654,14 @@ class CompanyRegistered(DomainEvent):
     # Αντικείμενο δραστηριότητας — πεδίο 2.6 του JL10 (ΦΜΥ).
     activity: str = ""
 
+    @property
+    def official_name(self) -> str:
+        """Η ΕΠΙΣΗΜΗ ονομασία των εκτυπώσεων: επωνυμία εταιρίας, ή για
+        ατομική «ΕΠΩΝΥΜΟ ΟΝΟΜΑ (πατρώνυμο ΠΑΤΡΩΝΥΜΟ)». Το όνομα του μενού είναι
+        άλλο πράγμα (`Registry.display_name`)."""
+        name = " ".join(x for x in (self.legal_name, self.first_name) if x)
+        return f"{name} (πατρώνυμο {self.father_name})" if self.father_name else name
+
 
 @dataclass(frozen=True)
 class CompanyBranchDefined(DomainEvent):
@@ -932,200 +940,26 @@ class ErganiSubmissionRecorded(DomainEvent):
 
 
 # ------------------------------------------------- Παράμετροι εφαρμογής
-# Όλες οι «νομοθετικές» παράμετροι (ΓΣΣΕ, ΕΦΚΑ, ΤΕΚΑ, φορολογική κλίμακα,
-# ασθένεια, προσαυξήσεις, όρια ωρών) καταχωρούνται ως events — μία εγγραφή
-# ανά (οικογένεια, ημερομηνία ισχύος). Ίδιο valid_from = αντικατάσταση της
-# προηγούμενης δήλωσης (αντισταθμιστικό event). Οι τιμές του config.py είναι
-# ΜΟΝΟ προτεινόμενες αρχικές τιμές για το wizard πρώτου τρεξίματος.
-
-
 @dataclass(frozen=True)
-class MinimumWageDefined(DomainEvent):
-    """Κατώτατος μισθός/ημερομίσθιο ΓΣΣΕ/ΚΥΑ με ημερομηνία ισχύος.
-    Η καταχώρηση νέας ΓΣΣΕ γεννά αντιδραστικά υποχρέωση WAGE_ADJUSTMENT
-    στην περίοδο ισχύος (scheduler)."""
+class ParametersDefined(DomainEvent):
+    """«Νομοθετική» παράμετρος (ΓΣΣΕ, ΕΦΚΑ, φορολογική κλίμακα, ασθένεια,
+    προσαυξήσεις, όρια ωρών…) με ημερομηνία ισχύος — ΕΝΑ event για ΟΛΕΣ τις
+    οικογένειες του μητρώου `config.FAMILIES`. Ίδιο (family, valid_from) =
+    αντικατάσταση της προηγούμενης δήλωσης (latest-wins).
 
+    `values`: τα πεδία της dataclass της οικογένειας (`config.FAMILIES[family]
+    .cls`) σε μορφή JSON· ό,τι λείπει παίρνει την προεπιλογή της κλάσης. Οι
+    «custom» οικογένειες (tax/severance) κουβαλούν πίνακες — βλ.
+    `projections.param_entry`.
+
+    `repealed`: ΚΑΤΑΡΓΗΣΗ — «από αυτή την ημερομηνία ΔΕΝ υπάρχει κανόνας».
+    Δεν είναι διαγραφή (κανόνας #2) — είναι κανονική εγγραφή με valid_from.
+    Το config._pick σκάει αντί να υποχωρήσει σιωπηλά στην προηγούμενη γραμμή
+    (θα ήταν μισθοδοσία με καταργημένο κανόνα)."""
+
+    family: str  # κλειδί του config.FAMILIES
     valid_from: date
-    monthly: float  # κατώτατος μισθός υπαλλήλων (πλήρης απασχόληση)
-    daily: float  # κατώτατο ημερομίσθιο εργατοτεχνιτών
-    # ΚΑΤΑΡΓΗΣΗ: εγγραφή που σημαίνει «από αυτή την ημερομηνία ΔΕΝ υπάρχει
-    # κανόνας». Δεν είναι διαγραφή (κανόνας #2) — είναι κανονική εγγραφή με
-    # valid_from. Το config._pick σκάει αντί να υποχωρήσει σιωπηλά στην
-    # προηγούμενη γραμμή (θα ήταν μισθοδοσία με καταργημένο κανόνα).
-    repealed: bool = False
-
-
-@dataclass(frozen=True)
-class EfkaRatesDefined(DomainEvent):
-    """Καθολικές παράμετροι ΕΦΚΑ και πλαφόν ασφαλιστέων αποδοχών."""
-
-    valid_from: date
-    employee: float  # κλάσμα, π.χ. 0.1337
-    employer: float
-    monthly_cap: float  # πλαφόν ασφαλιστέων αποδοχών / μήνα
-    # ΚΑΤΑΡΓΗΣΗ: εγγραφή που σημαίνει «από αυτή την ημερομηνία ΔΕΝ υπάρχει
-    # κανόνας». Δεν είναι διαγραφή (κανόνας #2) — είναι κανονική εγγραφή με
-    # valid_from. Το config._pick σκάει αντί να υποχωρήσει σιωπηλά στην
-    # προηγούμενη γραμμή (θα ήταν μισθοδοσία με καταργημένο κανόνα).
-    repealed: bool = False
-
-
-@dataclass(frozen=True)
-# ⚠️ ΙΣΤΟΡΙΚΟ EVENT — ΔΕΝ ΓΡΑΦΕΤΑΙ ΠΙΑ. Η οικογένεια παραμέτρων «teka»
-# καταργήθηκε (τα ποσοστά επικουρικής έρχονται πάντα από το ΚΠΚ της
-# κάλυψης). Μένει εδώ ΜΟΝΟ για να αποκωδικοποιούνται παλιά logs — το
-# projection δεν το αντιστοιχεί σε καμία οικογένεια, άρα το αγνοεί.
-class TekaRatesDefined(DomainEvent):
-    """Καθολικές παράμετροι ΤΕΚΑ."""
-
-    valid_from: date
-    employee: float
-    employer: float
-    # ΚΑΤΑΡΓΗΣΗ: εγγραφή που σημαίνει «από αυτή την ημερομηνία ΔΕΝ υπάρχει
-    # κανόνας». Δεν είναι διαγραφή (κανόνας #2) — είναι κανονική εγγραφή με
-    # valid_from. Το config._pick σκάει αντί να υποχωρήσει σιωπηλά στην
-    # προηγούμενη γραμμή (θα ήταν μισθοδοσία με καταργημένο κανόνα).
-    repealed: bool = False
-
-
-@dataclass(frozen=True)
-class TaxScaleDefined(DomainEvent):
-    """Φορολογική κλίμακα ΦΜΥ με ημερομηνία ισχύος.
-
-    `brackets`: ({"up_to": 10000, "rate": 0.09}, ..., {"up_to": None, ...})
-    — up_to None = τελευταίο (ανοιχτό) κλιμάκιο.
-    `model`: το ΚΑΘΕΣΤΩΣ υπολογισμού (config.TAX_MODELS) — η λογική κάθε
-    καθεστώτος είναι κώδικας· εδώ επιλέγεται ποιο ισχύει και με τι
-    παραμέτρους (`model_params`, π.χ. συντελεστές ανά ηλικία/τέκνα του
-    καθεστώτος 2026)."""
-
-    valid_from: date
-    brackets: tuple
-    reductions: tuple = (777.0, 900.0, 1120.0, 1340.0, 1580.0)
-    extra_child_reduction: float = 220.0
-    phaseout_threshold: float = 12000.0
-    phaseout_per_1000: float = 20.0
-    model: str = "standard"  # κλειδί του config.TAX_MODELS
-    model_params: dict = field(default_factory=dict)
-    # ΚΑΤΑΡΓΗΣΗ: εγγραφή που σημαίνει «από αυτή την ημερομηνία ΔΕΝ υπάρχει
-    # κανόνας». Δεν είναι διαγραφή (κανόνας #2) — είναι κανονική εγγραφή με
-    # valid_from. Το config._pick σκάει αντί να υποχωρήσει σιωπηλά στην
-    # προηγούμενη γραμμή (θα ήταν μισθοδοσία με καταργημένο κανόνα).
-    repealed: bool = False
-
-
-@dataclass(frozen=True)
-class SickLeaveRulesDefined(DomainEvent):
-    """Κανόνες ασθενείας: τριήμερο εργοδότη + ετήσιο όριο 13/26."""
-
-    valid_from: date
-    half_wage_days: int
-    limit_under_year: int
-    limit_over_year: int
-    # ΚΑΤΑΡΓΗΣΗ: εγγραφή που σημαίνει «από αυτή την ημερομηνία ΔΕΝ υπάρχει
-    # κανόνας». Δεν είναι διαγραφή (κανόνας #2) — είναι κανονική εγγραφή με
-    # valid_from. Το config._pick σκάει αντί να υποχωρήσει σιωπηλά στην
-    # προηγούμενη γραμμή (θα ήταν μισθοδοσία με καταργημένο κανόνα).
-    repealed: bool = False
-
-
-@dataclass(frozen=True)
-class AllowanceRulesDefined(DomainEvent):
-    """Προσαυξήσεις κατώτατου: τριετίες (μισθωτοί/ημερομίσθιοι) + γάμος."""
-
-    valid_from: date
-    monthly_triennium_pct: float = 0.10
-    monthly_max_triennia: int = 3
-    daily_triennium_pct: float = 0.05
-    daily_max_triennia: int = 6
-    marriage_pct: float = 0.10
-    # ΚΑΤΑΡΓΗΣΗ: εγγραφή που σημαίνει «από αυτή την ημερομηνία ΔΕΝ υπάρχει
-    # κανόνας». Δεν είναι διαγραφή (κανόνας #2) — είναι κανονική εγγραφή με
-    # valid_from. Το config._pick σκάει αντί να υποχωρήσει σιωπηλά στην
-    # προηγούμενη γραμμή (θα ήταν μισθοδοσία με καταργημένο κανόνα).
-    repealed: bool = False
-
-
-@dataclass(frozen=True)
-class LaborSubsidyDefined(DomainEvent):
-    """Επιδότηση εργατικής εισφοράς (αρ. 14 ν. 2837/2000) — ποσοστό."""
-
-    valid_from: date
-    pct: float = 0.0667
-    repealed: bool = False
-
-
-@dataclass(frozen=True)
-class MotherSubsidyDefined(DomainEvent):
-    """Μείωση εισφοράς μητέρας (αρ. 141§2 ν. 3655/2008) — ποσοστό."""
-
-    valid_from: date
-    pct: float = 0.03335
-    repealed: bool = False
-
-
-@dataclass(frozen=True)
-class YouthSubsidyDefined(DomainEvent):
-    """Επιδότηση εργοδοτικής εισφοράς νέων έως 25 (αρ. 86 ν. 4583/2018)."""
-
-    valid_from: date
-    pct: float = 0.0666
-    repealed: bool = False
-
-
-@dataclass(frozen=True)
-class PremiumExemptionDefined(DomainEvent):
-    """Απαλλαγή εισφορών προσαυξήσεων (αρ. 41 ν. 5184/2025) — μερίδιο."""
-
-    valid_from: date
-    share: float = 1.0
-    repealed: bool = False
-
-
-@dataclass(frozen=True)
-class SeveranceRulesDefined(DomainEvent):
-    """Αποζημίωση απόλυσης: πίνακας μηνών ανά έτη υπηρεσίας, προσαύξηση 1/6
-    και κλίμακα αυτοτελούς φόρου — με ημερομηνία ισχύος.
-
-    `months`: ((έτη, μήνες), …) — αύξοντα κατώφλια.
-    `tax_brackets`: ((άνω όριο, συντελεστής), …) — το τελευταίο ανοιχτό
-    (`None` = χωρίς άνω όριο, όπως στα κλιμάκια ΦΜΥ)."""
-
-    valid_from: date
-    months: tuple = ()
-    gift_factor: float = 7.0 / 6.0
-    tax_brackets: tuple = ()
-    repealed: bool = False
-
-
-@dataclass(frozen=True)
-class WorkHourRulesDefined(DomainEvent):
-    """Κατάταξη ωρών & προσαυξήσεις: νύχτα/αργία/υπερεργασία/υπερωρίες."""
-
-    valid_from: date
-    night_start: int = 22
-    night_end: int = 6
-    night_premium: float = 0.25
-    holiday_premium: float = 0.75
-    extra_premium: float = 0.12
-    overwork_premium: float = 0.20
-    overtime_premium: float = 0.40
-    illegal_premium: float = 0.80
-    weekly_legal_5: int = 45
-    weekly_legal_6: int = 48
-    daily_legal_5: int = 9
-    daily_legal_6: int = 8
-    daily_overwork_start: int = 8
-    overtime_day_cap: int = 3
-    overtime_year_cap: int = 150
-    orphan_month_cap: int = 3
-    retro_declare_orphans: int = 1
-    card_rounding_minutes: int = 0
-    card_tolerance_minutes: int = 0
-    # ΚΑΤΑΡΓΗΣΗ: εγγραφή που σημαίνει «από αυτή την ημερομηνία ΔΕΝ υπάρχει
-    # κανόνας». Δεν είναι διαγραφή (κανόνας #2) — είναι κανονική εγγραφή με
-    # valid_from. Το config._pick σκάει αντί να υποχωρήσει σιωπηλά στην
-    # προηγούμενη γραμμή (θα ήταν μισθοδοσία με καταργημένο κανόνα).
+    values: dict
     repealed: bool = False
 
 
@@ -1302,18 +1136,7 @@ EVENT_TYPES = {
         FMYFileGenerated,
         FMYSubmitted,
         PaymentMade,
-        MinimumWageDefined,
-        EfkaRatesDefined,
-        TekaRatesDefined,
-        TaxScaleDefined,
-        SickLeaveRulesDefined,
-        AllowanceRulesDefined,
-        LaborSubsidyDefined,
-        MotherSubsidyDefined,
-        YouthSubsidyDefined,
-        PremiumExemptionDefined,
-        SeveranceRulesDefined,
-        WorkHourRulesDefined,
+        ParametersDefined,
         ObligationTypeConfigured,
         ObligationExtended,
         ObligationScheduled,
@@ -1339,18 +1162,7 @@ EVENT_TYPES = {
 # την άλλη. Ό,τι καταλήγει σε module-global override ΠΡΕΠΕΙ να είναι εδώ.
 SHARED_EVENT_TYPES = frozenset(
     {
-        "MinimumWageDefined",
-        "EfkaRatesDefined",
-        "TekaRatesDefined",
-        "TaxScaleDefined",
-        "SickLeaveRulesDefined",
-        "AllowanceRulesDefined",
-        "LaborSubsidyDefined",
-        "MotherSubsidyDefined",
-        "YouthSubsidyDefined",
-        "PremiumExemptionDefined",
-        "SeveranceRulesDefined",
-        "WorkHourRulesDefined",
+        "ParametersDefined",
         "ObligationTypeConfigured",
         # Το ΜΗΤΡΩΟ ΚΠΚ είναι θεσμικό, όχι εταιρικό: οι κωδικοί πακέτων
         # κάλυψης και τα ποσοστά κρατήσεων ορίζονται από ΕΦΚΑ/ΤΕΚΑ και

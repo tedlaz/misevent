@@ -1,9 +1,9 @@
 """Εκκίνηση της desktop έκδοσης (Windows) — το entry point του PyInstaller.
 
-Τρέχει το ίδιο web UI τοπικά (127.0.0.1, τυχαία θύρα), ανοίγει τον browser
-και βάζει εικονίδιο στο system tray (κάτω δεξιά): δεξί κλικ -> Open / Exit,
-διπλό κλικ -> Open. Καθαρό Win32 μέσω ctypes — χωρίς tkinter/pystray/Pillow,
-για μικρότερο πακέτο.
+Τρέχει το ίδιο web UI τοπικά (127.0.0.1, τυχαία θύρα), το ανοίγει σε δικό
+του παράθυρο (Edge/Chrome --app· αλλιώς καρτέλα στον browser) και βάζει
+εικονίδιο στο system tray (κάτω δεξιά): δεξί κλικ -> Open / Exit, διπλό κλικ -> Open.
+Καθαρό Win32 μέσω ctypes — χωρίς tkinter/pystray/Pillow, για μικρότερο πακέτο.
 
 Δεδομένα: %LOCALAPPDATA%\\misevent (εκτός φακέλου εγκατάστασης, ώστε να
 επιβιώνουν σε αναβάθμιση/απεγκατάσταση).
@@ -82,6 +82,19 @@ def _win32():
     return user32, shell32
 
 
+def open_window(url: str) -> None:
+    """Δικό της παράθυρο χωρίς γραμμή διευθύνσεων (Chromium --app)· ο Edge
+    υπάρχει σε κάθε Windows 10/11. Το startfile (ShellExecute) βρίσκει το exe
+    από τα «App Paths» του registry — δεν είναι στο PATH."""
+    for exe in ("msedge", "chrome"):
+        try:
+            os.startfile(exe, arguments=f"--app={url}")
+            return
+        except OSError:
+            continue
+    webbrowser.open(url)
+
+
 def run_tray(url: str, icon_path: Path) -> None:
     """Εικονίδιο στο tray — μπλοκάρει μέχρι το «Exit»."""
     user32, shell32 = _win32()
@@ -108,11 +121,11 @@ def run_tray(url: str, icon_path: Path) -> None:
             if lparam == WM_RBUTTONUP:
                 show_menu(hwnd)
             elif lparam == WM_LBUTTONDBLCLK:
-                webbrowser.open(url)
+                open_window(url)
             return 0
         if msg == WM_COMMAND:
             if wparam == CMD_OPEN:
-                webbrowser.open(url)
+                open_window(url)
             elif wparam == CMD_EXIT:
                 user32.DestroyWindow(hwnd)
             return 0
@@ -152,7 +165,7 @@ def main() -> int:
     mutex = kernel32.CreateMutexW(None, False, MUTEX_NAME)
     if kernel32.GetLastError() == 183:  # ERROR_ALREADY_EXISTS
         if runtime.exists():
-            webbrowser.open(runtime.read_text(encoding="utf-8"))
+            open_window(runtime.read_text(encoding="utf-8"))
         return 0
 
     try:
@@ -175,7 +188,7 @@ def main() -> int:
                 return 0 if r.status == 200 and pdf.output()[:4] == b"%PDF" else 1
 
         runtime.write_text(url, encoding="utf-8")
-        webbrowser.open(url)
+        open_window(url)
         run_tray(url, Path(webapp.__file__).parent / "static" / "app.ico")
         server.shutdown()
         return 0

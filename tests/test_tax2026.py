@@ -139,4 +139,4 @@ def test_roundtrip_events():
     old = config.tax_scale_for(date(2025, 6, 30))
     assert type(old).model_key == "standard", type(old).model_key
     assert len(entries) >= 2
-    print("OK roundtrip: TaxScaleDefined -> projection -> config overrides")
+    print("OK roundtrip: ParametersDefined(tax) -> projection -> config overrides")
