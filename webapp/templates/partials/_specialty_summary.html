@@ -1,0 +1,37 @@
+{# ⑤ Σύνοψη wizard ειδικότητας (id="spec-summary"): ΑΝΑ ΣΕΝΑΡΙΟ ΠΡΟΣΛΗΨΗΣ
+   οι γραμμές ΑΠΔ που θα προκύψουν. Τα σενάρια τα φτιάχνει το
+   `company._scenarios` από τη φόρμα — τίποτα δεν έχει αποθηκευτεί ακόμη. #}
+{% set who = {'efka': 'Παλαιός ασφαλισμένος (πρώτη ασφάλιση πριν 1/1/2022) → Επικουρική e-ΕΦΚΑ',
+              'teka': 'Νέος ασφαλισμένος (πρώτη ασφάλιση από 1/1/2022) → Επικουρική ΤΕΚΑ'} %}
+{% set pron_lbl = {'new': 'πρόνοια νέων (από 1/1/1993)', 'old': 'πρόνοια παλαιών (πριν 1/1/1993)',
+                   'yes': 'με πρόνοια', 'no': 'χωρίς πρόνοια'} %}
+<div id="spec-summary">
+  {% if not scenarios %}
+    <div class="lockbox">⚠ Δεν επιλέχθηκε φορέας επικουρικής — γυρίστε στο βήμα 3.</div>
+  {% endif %}
+  {% for s in scenarios or [] %}
+    <div class="opt sel wz-scn">
+      <div class="alt-h">{{ who[s.carrier] }} · {{ pron_lbl[s.choice] }}
+        {% if s.carrier == 'teka' and s.choice == 'old' %}
+          <span class="muted">— πρακτικά δεν συμβαίνει: οι ασφαλισμένοι ΤΕΚΑ είναι μετά το 1993</span>
+        {% endif %}</div>
+      <table class="wz-lines">
+        <thead><tr><th>Γραμμή ΑΠΔ</th><th>ΚΑΔ</th><th>Ειδικότητα</th><th>ΚΠΚ</th><th>No 36</th></tr></thead>
+        <tbody>
+        {% for l in s.lines %}
+          <tr>
+            <td>{{ l.label }}</td>
+            <td class="mono">{{ l.kad or '⚠' }}</td>
+            <td class="mono">{{ l.specialty_code or '⚠' }}</td>
+            <td><b class="mono">{{ l.kpk or '⚠ λείπει' }}</b>
+              <span class="muted">{{ l.kpk_name }}</span></td>
+            <td class="mono">{{ l.special }}</td>
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% endfor %}
+  <p class="muted" style="font-size:12px">Η πρόσληψη διαλέγει ΕΝΑ σενάριο ανά
+    εργαζόμενο. ⚠ = πεδίο που λείπει — η αποθήκευση θα το απορρίψει.</p>
+</div>

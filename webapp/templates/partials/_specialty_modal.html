@@ -1,10 +1,17 @@
-{# Ρύθμιση ειδικότητας σε ΤΡΕΙΣ ΒΑΘΜΙΔΕΣ ασφάλισης:
+{# Ρύθμιση ειδικότητας ως WIZARD πέντε βημάτων:
+   1 Θέση εργασίας · 2 Κύρια ΕΦΚΑ · 3 Επικουρική · 4 Πρόνοια · 5 Σύνοψη.
    ①+② Κύρια ΕΦΚΑ (ΕΝΑ ΚΑΔ + ΜΙΑ ειδικότητα του Ο.Σ.Υ.Κ.) και οι δύο
      εναλλακτικές επικουρικής — ΕΦΚΑ (ειδ. περίπτωση 10) ή ΤΕΚΑ (09 + σταθερή
      γραμμή ΤΕΚΑ). Η ειδικότητα δηλώνει ΠΟΙΟΥΣ φορείς επιτρέπει· η πρόσληψη
      διαλέγει έναν. Βλ. `_specialty_main.html`.
    ③ Πρόνοια — προαιρετική, με δικό της ΚΑΔ και ΕΙΔ/ΚΠΚ ανά νέους/παλαιούς
      (ή ενιαία). Βλ. `_specialty_pron.html`.
+
+   ➜ Τα βήματα είναι CSS-only (radios `wz-N` + `.wz:has(#wz-N:checked)`, βλ.
+   app.css)· ΕΝΑ form υποβάλλει τα πάντα. Τα radios ζουν ΕΞΩ από τα blocks που
+   ξαναφέρνει το htmx, οπότε ένα refresh δεν αλλάζει βήμα. `novalidate`: ένα
+   `required` σε κρυμμένο βήμα θα μπλόκαρε σιωπηλά την υποβολή — ελέγχει ο
+   server. Σε σφάλμα αποθήκευσης το modal ανοίγει στη Σύνοψη.
 
    Τα dropdowns κάθε ρόλου δείχνουν ΜΟΝΟ ΚΠΚ της βαθμίδας που δέχεται ο ρόλος
    (ο κανόνας ΔΕΝ επιβάλλεται από τη βάση — βλ. services._build_package). #}
@@ -15,17 +22,28 @@
               'mandatory': f.get('pron_mandatory') is not none,
               'differentiated': f.get('pron_differentiated') is not none}
              if form else (sp.pron_settings if sp else config.PRON_DEFAULTS)) %}
+{% set steps = ['Θέση εργασίας', 'Κύρια ασφάλιση', 'Επικουρική', 'Πρόνοια', 'Σύνοψη'] %}
+{% set start = 5 if form else 1 %}
 
 
 <div class="modal-backdrop">
   <div class="modal wide specialty-modal">
-    <form hx-post="{{ url_for('company.specialty_save') }}"
+    <form class="wz" novalidate hx-post="{{ url_for('company.specialty_save') }}"
           hx-target="#spec-panel" hx-swap="outerHTML">
+      {% for t in steps %}
+        <input type="radio" name="wz" id="wz-{{ loop.index }}" class="wz-r"
+          {{ 'checked' if loop.index == start }}
+          {% if loop.last %}hx-get="{{ url_for('company.specialty_summary') }}"
+          hx-include="closest form" hx-target="#spec-summary" hx-swap="outerHTML"
+          hx-trigger="change"{% endif %}>
+      {% endfor %}
       <div class="mhead">
         <h3>{{ '✏️ Επεξεργασία ειδικότητας' if sp else '➕ Νέα ειδικότητα' }}</h3>
-        <span class="muted" style="font-size:12.5px">
-          ασφαλιστικός συνδυασμός σε τρεις βαθμίδες — η πρόσληψη διαλέγει
-          μόνο φορέα επικουρικής και πρόνοια</span>
+        <div class="wz-bar">
+          {% for t in steps %}
+            <label for="wz-{{ loop.index }}"><b>{{ loop.index }}</b> {{ t }}</label>
+          {% endfor %}
+        </div>
       </div>
       <div class="mbody">
         {# ΚΑΔ του Ο.Σ.Υ.Κ. (osyk_29.zip) — ΕΝΑ datalist για κύρια και πρόνοια.
@@ -35,16 +53,24 @@
             <option value="{{ k.code }}">{{ k.code }} — {{ k.description }}</option>
           {% endfor %}
         </datalist>
-        <div class="frm cols">
-          <label class="wide">Ονομασία θέσης εργασίας
-            <input name="name" required placeholder="π.χ. ΠΩΛΗΤΗΣ"
-              value="{{ f.get('name', sp.name if sp else '') }}"
-              {{ 'readonly' if sp }}></label>
-          {% set ergani_code = f.get('ergani_specialty_code',
-              sp.ergani_specialty_code if sp else '') %}
-          {% set ergani_description = f.get('ergani_specialty_description',
-              sp.ergani_specialty_description if sp else '') %}
-          {% include "partials/_ergani_specialty_fields.html" %}
+        <div class="fsec wz-p1">
+          <div class="fs-h"><span class="fs-ic">1️⃣</span><b>Θέση εργασίας</b>
+            <span class="fs-hint">όνομα και ειδικότητα ΕΡΓΑΝΗ</span></div>
+          <div class="frm cols">
+            <label class="wide">Ονομασία θέσης εργασίας
+              <input name="name" required placeholder="π.χ. ΠΩΛΗΤΗΣ"
+                value="{{ f.get('name', sp.name if sp else '') }}"
+                {{ 'readonly' if sp }}></label>
+            {% set ergani_code = f.get('ergani_specialty_code',
+                sp.ergani_specialty_code if sp else '') %}
+            {% set ergani_description = f.get('ergani_specialty_description',
+                sp.ergani_specialty_description if sp else '') %}
+            {% include "partials/_ergani_specialty_fields.html" %}
+          </div>
+          <p class="wz-help">Ο οδηγός σε πάει βήμα-βήμα: <b>κύρια</b> (πάντα
+            e-ΕΦΚΑ) → <b>επικουρική</b> (e-ΕΦΚΑ ή ΤΕΚΑ, ανάλογα με το πότε
+            ασφαλίστηκε πρώτη φορά ο εργαζόμενος) → <b>πρόνοια</b> (προαιρετική,
+            πάντα e-ΕΦΚΑ) → <b>σύνοψη</b> με τις γραμμές ΑΠΔ κάθε σεναρίου.</p>
         </div>
 
         {% include "partials/_specialty_main.html" %}
@@ -53,10 +79,15 @@
         {# `pron-sec`: το toggle «Διαφοροποίηση νέων/παλαιών» κρύβει τα πακέτα
            που ΔΕΝ έχουν νόημα (CSS-only, βλ. app.css) — έτσι η φόρμα δεν
            μπορεί να προτείνει συνδυασμό που θα απορριφθεί. #}
-        <div class="fsec fs-extra pron-sec">
-          <div class="fs-h"><span class="fs-ic">3️⃣</span>
-            <b>Προνοιακή ασφάλιση</b>
+        <div class="fsec fs-extra pron-sec wz-p4">
+          <div class="fs-h"><span class="fs-ic">4️⃣</span>
+            <b>Προνοιακή ασφάλιση (εφάπαξ)</b>
             <span class="fs-hint">προαιρετική ανά ειδικότητα</span></div>
+          <p class="wz-help">Η πρόνοια είναι <b>πάντα e-ΕΦΚΑ</b> — και για τους
+            ασφαλισμένους ΤΕΚΑ (το ΤΕΚΑ καλύπτει ΜΟΝΟ επικουρική). Τη δηλώνεις
+            μόνο αν η ειδικότητα υπάγεται σε τομέα πρόνοιας (π.χ. ΤΑΠΙΤ).<br>
+            ⚠ «Νέοι / Παλαιοί» εδώ = πρώτη ασφάλιση <b>από / πριν 1/1/1993</b>
+            — όχι η τομή 1/1/2022 του ΤΕΚΑ.</p>
           <div class="frm cols">
             <label class="chk wide"><input type="checkbox" name="pron_enabled"
               {# Η πρόνοια αλλάζει την ειδική περίπτωση της κύριας ΕΦΚΑ (-> 10). #}
@@ -73,16 +104,36 @@
               <span class="muted">(αλλιώς μπορεί να επιλέξει «Όχι»)</span></label>
             <label class="chk"><input type="checkbox" name="pron_differentiated"
               {{ 'checked' if pr.differentiated }}> Διαφοροποίηση νέων /
-              παλαιών <span class="muted">(αλλιώς ενιαίος κωδικός)</span></label>
+              παλαιών <span class="muted">(πριν/από 1/1/1993· αλλιώς ενιαίος
+              κωδικός)</span></label>
           </div>
           {% include "partials/_specialty_pron.html" %}
+        </div>
+
+        <div class="fsec wz-p5">
+          <div class="fs-h"><span class="fs-ic">5️⃣</span><b>Σύνοψη — τι θα δηλωθεί στην ΑΠΔ</b>
+            <span class="fs-hint">ανά σενάριο πρόσληψης</span></div>
+          {% if scenarios is not none %}
+            {% include "partials/_specialty_summary.html" %}
+          {% else %}
+            <div id="spec-summary"></div>
+          {% endif %}
         </div>
       </div>
       <div class="mfoot">
         <button type="button" class="ghost"
                 hx-get="{{ url_for('company.specialty_modal_close') }}"
                 hx-target="#modal-host" hx-swap="innerHTML">Άκυρο</button>
-        <button class="run" type="submit">Αποθήκευση ειδικότητας</button>
+        {% for t in steps %}
+          <span class="wz-n wz-n{{ loop.index }}">
+            {% if not loop.first %}<label class="ghost" for="wz-{{ loop.index - 1 }}">← Πίσω</label>{% endif %}
+            {% if loop.last %}
+              <button class="run" type="submit">Αποθήκευση ειδικότητας</button>
+            {% else %}
+              <label class="ghost wz-next" for="wz-{{ loop.index + 1 }}">Επόμενο: {{ steps[loop.index] }} →</label>
+            {% endif %}
+          </span>
+        {% endfor %}
       </div>
     </form>
   </div>

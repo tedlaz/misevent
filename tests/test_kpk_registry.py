@@ -110,17 +110,17 @@ def test_specialty_form_derives_both_alternatives(fresh_system):
     main = dict(main_kad="5242", main_code="532030", epik_carriers=["efka", "teka"])
     html = _get(client, "/company/specialties/main", "main_code", **main)
     assert '<option value="532030">' in html  # η λίστα ειδικοτήτων του ΚΑΔ
-    assert _special(html, "ΕΦΚΑ") == "10" and _selected(html, "MAIN_EPIK_kpk") == "0101"
+    assert _special(html, "e-ΕΦΚΑ") == "10" and _selected(html, "MAIN_EPIK_kpk") == "0101"
     assert _special(html, "ΤΕΚΑ") == "09" and _selected(html, "MAIN_kpk") == "0103"
     assert "Γραμμή ΤΕΚΑ" in html
 
     # 0110/122100: βασικό 101 (έχει ήδη επικουρική) -> 00· με πρόνοια -> 10.
     other = dict(main, main_kad="0110", main_code="122100")
     html = _get(client, "/company/specialties/main", "main_code", **other)
-    assert _special(html, "ΕΦΚΑ") == "00" and _selected(html, "MAIN_EPIK_kpk") == "0101"
+    assert _special(html, "e-ΕΦΚΑ") == "00" and _selected(html, "MAIN_EPIK_kpk") == "0101"
     html = _get(client, "/company/specialties/main", "pron_enabled", **other,
                 pron_enabled="on")
-    assert _special(html, "ΕΦΚΑ") == "10"
+    assert _special(html, "e-ΕΦΚΑ") == "10"
 
     html = _get(client, "/company/specialties/main", "main_kad", **dict(main, main_kad="0110"))
     assert "Η ειδικότητα δεν ισχύει για αυτό το ΚΑΔ" in html

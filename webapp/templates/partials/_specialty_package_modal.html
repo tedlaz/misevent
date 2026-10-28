@@ -1,0 +1,83 @@
+{# Popup ΕΝΟΣ πακέτου ειδικότητας (κλικ σε κουτάκι του πίνακα ειδικοτήτων):
+   ταυτότητα ΚΑΔ/ειδικότητας/ΚΠΚ με περιγραφές Ο.Σ.Υ.Κ., σε ποιον ισχύει και
+   ποσοστά — τα τρέχοντα (σήμερα) και ολόκληρη η χρονοσειρά του Μητρώου ΚΠΚ. #}
+{# Τα ποσοστά του Μητρώου ΚΠΚ είναι ΚΛΑΣΜΑΤΑ (0.1337 = 13,37%) — όπως στη σελίδα Παράμετροι. #}
+{% macro p(v) %}{{ "%.2f"|format(v * 100) }}%{% endmacro %}
+<div class="modal-backdrop">
+  <div class="modal wide">
+    <div class="mhead">
+      <h3>📦 {{ c.label }}</h3>
+      <span class="muted" style="font-size:12.5px">ειδικότητα «{{ sp.name }}» ·
+        {{ config.CARRIERS.get(config.fund_carrier(c.fund), c.fund) }} ·
+        βαθμίδα {{ config.TIERS[spec_role.tier] }}</span>
+    </div>
+    <div class="mbody">
+      <p class="wz-help">{{ who }}</p>
+      <table class="wz-lines pkg-detail">
+        <tbody>
+          <tr><th>ΚΑΔ (No 31)</th><td class="mono">{{ c.kad }}</td>
+            <td>{{ kpkreg.kad_description(c.kad) or '—' }}</td></tr>
+          <tr><th>Ειδικότητα (No 35)</th><td class="mono">{{ c.specialty_code }}</td>
+            <td>{{ kpkreg.eid_description(c.specialty_code) or '—' }}</td></tr>
+          <tr><th>ΚΠΚ (No 37)</th><td class="mono"><b>{{ c.kpk }}</b></td>
+            <td>{{ ident.name if ident else '⚠ δεν υπάρχει στο Μητρώο ΚΠΚ' }}</td></tr>
+          {% if c.special_case is defined and c.special_case %}
+            <tr><th>Ειδ. περίπτωση (No 36)</th><td class="mono">{{ c.special_case }}</td>
+              <td>{{ 'καμία' if c.special_case == '00'
+                     else kpkreg.special_case_description(c.special_case) }}
+                <span class="muted">— με πρόνοια e-ΕΦΚΑ η ΑΠΔ γράφει 10 (εκτός ΤΕΚΑ: 09)</span></td></tr>
+          {% endif %}
+        </tbody>
+      </table>
+
+      <div class="fs-h" style="margin-top:14px"><b>Τρέχοντα ποσοστά</b>
+        <span class="fs-hint">{{ 'ισχύουν από ' ~ rates.valid_from.strftime('%d/%m/%Y') if rates
+          else 'καμία γραμμή ισχύος για σήμερα' }}</span></div>
+      {% if rates %}
+        <div class="pkg-rates">
+          <div><span>Εργαζόμενος</span><b>{{ p(rates.employee) }}</b></div>
+          <div><span>Εργοδότης</span><b>{{ p(rates.employer) }}</b></div>
+          <div><span>Σύνολο</span><b>{{ p(rates.employee + rates.employer) }}</b></div>
+        </div>
+        {% if rates.components %}
+          <table class="wz-lines">
+            <thead><tr><th>Κλάδος</th><th>Εργαζόμενος</th><th>Εργοδότης</th></tr></thead>
+            <tbody>
+              {% for part in rates.components %}
+                <tr><td>{{ config.INSURANCE_COMPONENTS.get(part.branch, part.branch) }}</td>
+                  <td class="mono">{{ p(part.employee|float) }}</td>
+                  <td class="mono">{{ p(part.employer|float) }}</td></tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        {% else %}
+          <p class="muted" style="font-size:12px">Χωρίς ανάλυση ανά κλάδο στο Μητρώο ΚΠΚ.</p>
+        {% endif %}
+      {% else %}
+        <div class="warnbox">Το ΚΠΚ {{ c.kpk }} δεν έχει ποσοστά σε ισχύ — προσθέστε
+          γραμμή ισχύος στο Μητρώο ΚΠΚ (σελίδα «Παράμετροι»).</div>
+      {% endif %}
+
+      {% if series|length > 1 %}
+        <div class="fs-h" style="margin-top:14px"><b>Ιστορικό ποσοστών</b></div>
+        <table class="wz-lines">
+          <thead><tr><th>Ισχύει από</th><th>Εργαζόμενος</th><th>Εργοδότης</th><th>Σύνολο</th></tr></thead>
+          <tbody>
+            {% for r in series %}
+              <tr class="{{ 'on' if rates and r.valid_from == rates.valid_from }}{{ ' muted' if r.valid_from > today }}">
+                <td class="mono">{{ r.valid_from.strftime('%d/%m/%Y') }}{{ ' (μελλοντική)' if r.valid_from > today }}</td>
+                <td class="mono">{{ p(r.employee) }}</td>
+                <td class="mono">{{ p(r.employer) }}</td>
+                <td class="mono">{{ p(r.employee + r.employer) }}</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      {% endif %}
+    </div>
+    <div class="mfoot">
+      <button type="button" class="run"
+              hx-get="{{ url_for('company.specialty_modal_close') }}"
+              hx-target="#modal-host" hx-swap="innerHTML">Κλείσιμο</button>
+    </div>
+  </div>
+</div>

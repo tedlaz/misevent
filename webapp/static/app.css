@@ -752,6 +752,47 @@ canvas{max-height:230px}
    πακέτο να μη στέλνεται καν (ένα κρυφό select εξακολουθεί να υποβάλλεται). */
 .pron-sec:not(:has(input[name="pron_differentiated"]:checked)) .pron-diff,
 .pron-sec:has(input[name="pron_differentiated"]:checked) .pron-uniform{display:none}
+/* WIZARD ειδικότητας: κρυφά radios `wz-N` -> φαίνεται ΜΟΝΟ το βήμα `.wz-pN`
+   και η πλοήγησή του `.wz-nN`. Ίδιο μοτίβο :has() με τα tabs — μηδέν JS. */
+.wz .wz-r{position:absolute;opacity:0;pointer-events:none}
+.wz [class*="wz-p"],.wz .wz-n{display:none}
+.wz:has(#wz-1:checked) .wz-p1,.wz:has(#wz-2:checked) .wz-p2,
+.wz:has(#wz-3:checked) .wz-p3,.wz:has(#wz-4:checked) .wz-p4,
+.wz:has(#wz-5:checked) .wz-p5{display:block}
+.wz:has(#wz-1:checked) .wz-n1,.wz:has(#wz-2:checked) .wz-n2,
+.wz:has(#wz-3:checked) .wz-n3,.wz:has(#wz-4:checked) .wz-n4,
+.wz:has(#wz-5:checked) .wz-n5{display:inline-flex;gap:8px}
+.wz .mfoot{display:flex;justify-content:space-between;align-items:center}
+/* Σταθερό ύψος: το modal δεν «χοροπηδά» ανάμεσα στα βήματα και οι λίστες
+   προτάσεων έχουν χώρο να ανοίξουν μέσα στο (κυλιόμενο) .mbody. */
+.wz .mbody{min-height:min(520px,70vh)}
+.wz-bar{display:flex;gap:4px;flex-wrap:wrap;margin-top:8px}
+.wz-bar label{font-size:12.5px;padding:4px 10px;border-radius:999px;cursor:pointer;
+  border:1px solid var(--line);color:var(--muted);background:var(--card)}
+.wz-bar b{display:inline-grid;place-items:center;width:18px;height:18px;margin-right:4px;
+  border-radius:50%;background:var(--line);color:var(--ink);font-size:11px}
+.wz:has(#wz-1:checked) .wz-bar label[for=wz-1],.wz:has(#wz-2:checked) .wz-bar label[for=wz-2],
+.wz:has(#wz-3:checked) .wz-bar label[for=wz-3],.wz:has(#wz-4:checked) .wz-bar label[for=wz-4],
+.wz:has(#wz-5:checked) .wz-bar label[for=wz-5]{color:var(--ink);border-color:var(--ready);
+  box-shadow:inset 0 0 0 1px var(--ready)}
+.wz:has(.wz-r:focus-visible) .wz-bar{outline:2px solid var(--ready);outline-offset:3px;border-radius:999px}
+.wz label.wz-next{border-color:var(--ready);color:var(--ready);font-weight:600}
+.wz-help{font-size:12.5px;line-height:1.55;color:var(--muted);margin:6px 0 10px}
+.wz-lines{width:100%;border-collapse:collapse;font-size:12.5px;margin-top:6px}
+.wz-lines th,.wz-lines td{text-align:left;padding:4px 6px;border-top:1px solid var(--line)}
+.wz-lines th{font-size:11.5px;color:var(--muted);font-weight:600}
+@media (max-width:640px){.wz-lines{display:block;overflow-x:auto}}
+/* Κουτάκι πακέτου στον πίνακα ειδικοτήτων: ανοίγει το popup λεπτομερειών */
+.cov-link{cursor:pointer;transition:box-shadow .15s,transform .15s}
+.cov-link:hover,.cov-link:focus-visible{box-shadow:var(--sh-2);transform:translateY(-1px);
+  outline:none}
+.pkg-detail th{width:170px;color:var(--muted);font-weight:600}
+.pkg-rates{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:8px 0}
+.pkg-rates div{border:1px solid var(--line);border-radius:10px;padding:8px 12px;
+  background:var(--paper);display:flex;flex-direction:column}
+.pkg-rates span{font-size:11.5px;color:var(--muted)}
+.pkg-rates b{font-size:18px;font-family:var(--mono)}
+.wz-lines tr.on td{background:var(--ready-bg)}
 /* ΕΙΔΟΣ ΠΡΟΣΛΗΨΗΣ: νέα πρόσληψη ή υπάρχων εργαζόμενος (μεταφορά από άλλο
    πρόγραμμα μισθοδοσίας). Τα πεδία της μεταφοράς και οι ετικέτες `.migr-only`
    εμφανίζονται ΜΟΝΟ με το «Υπάρχων» — CSS-only :has(). Ο κανόνας
@@ -795,8 +836,8 @@ table.ins-preview{margin-top:10px}
 table.ins-preview tr.bad td{background:var(--warn-bg);color:var(--warn)}
 table.ins-preview tr.tot td{font-weight:700;border-top:2px solid var(--line)}
 .ergani-specialty-lookup{position:relative}
-.ergani-specialty-results{position:absolute;z-index:4;top:100%;left:0;right:0;
-  max-height:260px;overflow:auto;background:var(--card);border:1px solid var(--line);
+.ergani-specialty-results{position:absolute;z-index:50;top:100%;left:0;right:0;
+  max-height:min(420px,60vh);overflow:auto;background:var(--card);border:1px solid var(--line);
   border-radius:9px;box-shadow:0 9px 25px rgba(23,36,47,.18)}
 .ergani-specialty-results:empty{display:none}
 .ergani-specialty-results button{display:grid;grid-template-columns:70px 1fr;
@@ -1674,7 +1715,7 @@ button.pick>span:first-of-type{flex:1}
 
 .fsec{--fc:var(--muted);--fc-bg:var(--paper);
   position:relative;background:var(--card);border:1px solid var(--line);
-  border-radius:14px;padding:13px 15px 15px;overflow:hidden;
+  border-radius:14px;padding:13px 15px 15px;
   animation:rise .32s var(--ease) backwards;
   transition:border-color .2s var(--ease),box-shadow .2s var(--ease)}
 /* Κλιμακωτή εμφάνιση — η φόρμα «χτίζεται» ενότητα-ενότητα */
@@ -1683,14 +1724,18 @@ button.pick>span:first-of-type{flex:1}
 .fsec:nth-child(3){animation-delay:.14s}
 .fsec:nth-child(4){animation-delay:.20s}
 .fsec:nth-child(5){animation-delay:.26s}
-/* Η χρωματική «ράχη» αριστερά: λεπτή σε ηρεμία, γεμάτη όταν δουλεύεις εκεί */
-.fsec::before{content:'';position:absolute;left:0;top:0;bottom:0;width:4px;
-  background:var(--fc);opacity:.35;transition:opacity .25s var(--ease),
-    width .25s var(--ease)}
+/* Η χρωματική «ράχη» αριστερά: λεπτή σε ηρεμία, γεμάτη όταν δουλεύεις εκεί.
+   ➜ Ζωγραφίζεται ως gradient σε ΟΛΟ το κουτί με τις ΙΔΙΕΣ γωνίες, ώστε να
+   στρογγυλεύει μόνη της — ΧΩΡΙΣ overflow:hidden στο .fsec, που θα έκοβε τις
+   λίστες προτάσεων (select-search, ΕΡΓΑΝΗ) που ανοίγουν μέσα του. */
+.fsec::before{content:'';position:absolute;inset:0;border-radius:13px;
+  pointer-events:none;
+  background:linear-gradient(90deg,var(--fc) var(--sw,4px),transparent 0);
+  opacity:.35;transition:opacity .25s var(--ease)}
 .fsec:hover{border-color:var(--fc);box-shadow:var(--sh-1)}
 .fsec:hover::before{opacity:.6}
 .fsec:focus-within{border-color:var(--fc);box-shadow:var(--sh-2)}
-.fsec:focus-within::before{opacity:1;width:5px}
+.fsec:focus-within::before{opacity:1;--sw:5px}
 
 .fsec .fs-h{display:flex;align-items:center;gap:9px;flex-wrap:wrap;
   margin-bottom:11px}
@@ -2453,10 +2498,17 @@ body.authpage{background:var(--paper);min-height:100vh;display:flex;
 
 /* ------------------------------------- ΑΝΑΖΗΤΗΣΗ ΣΕ ΜΕΓΑΛΑ SELECT (select-search.js) */
 .ss{position:relative;display:block;min-width:0}
+/* min-width: ένα στενό πεδίο (π.χ. ΚΑΔ, 4 ψηφία) δεν στενεύει τη λίστα. */
 .ss-menu{position:absolute;left:0;right:0;top:calc(100% + 2px);z-index:50;
-  margin:0;padding:4px 0;list-style:none;max-height:260px;overflow:auto;
+  min-width:min(560px,calc(100vw - 32px));
+  margin:0;padding:4px 0;list-style:none;max-height:min(420px,60vh);overflow:auto;
   background:var(--card);border:1px solid var(--line);border-radius:8px;
   box-shadow:0 6px 18px rgba(23,36,47,.14);font-size:13px;color:var(--ink)}
+/* Ανοιχτή λίστα στο top layer (select-search.js): fixed, θέση/πλάτος/ύψος
+   από το JS — ακυρώνονται τα inset/margin του UA για τα [popover]. */
+.ss-menu:popover-open,.ergani-specialty-results:popover-open{position:fixed;
+  inset:auto;margin:0;min-width:0;color:var(--ink)}
+.ergani-specialty-results:popover-open{padding:0}
 .ss-menu li{padding:5px 10px;cursor:pointer}
 .ss-menu li.on,.ss-menu li:hover{background:var(--ready-bg)}
 .ss-menu li.ss-more{color:var(--muted);font-style:italic;cursor:default;background:none}

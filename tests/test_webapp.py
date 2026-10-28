@@ -211,6 +211,26 @@ def test_webapp(fresh_system):
         "PRON_NEW_kpk": "0024", "PRON_OLD_kpk": "0026",
     })
     check("ειδικότητα με πρόνοια", r, "ΤΑΠΙΤ")
+    # Σύνοψη wizard: 2 φορείς × νέοι/παλαιοί = 4 σενάρια· ΤΕΚΑ -> 4169 και No 36 = 09
+    body = check("σύνοψη wizard ειδικότητας", c.get("/company/specialties/summary", query_string={
+        "epik_carriers": ["efka", "teka"], "main_kad": "0141", "main_code": "411200",
+        "MAIN_EPIK_kpk": "0101", "MAIN_kpk": "0103",
+        "pron_enabled": "on", "pron_mandatory": "on", "pron_differentiated": "on",
+        "pron_kad": "0013", "PRON_NEW_kpk": "0024", "PRON_OLD_kpk": "0026",
+    }), "4169")
+    ok = body.count("wz-scn") == 4 and ">09<" in body
+    print(f"  {'OK  ' if ok else 'FAIL'} σύνοψη: 4 σενάρια, γραμμή ΤΕΚΑ με ειδ. περίπτωση 09")
+    if not ok:
+        fails.append("η σύνοψη του wizard δεν δείχνει τα σενάρια πρόσληψης")
+    # Κλικ σε κουτάκι πακέτου -> popup με περιγραφές + ιστορικό ποσοστών (0026: 2 γραμμές)
+    body = check("popup πακέτου πρόνοιας", c.get("/company/specialties/package",
+                 query_string={"name": "ΠΩΛΗΤΗΣ", "role": "PRON_OLD"}), "Τρέχοντα ποσοστά")
+    # Τα ποσοστά ζουν ως ΚΛΑΣΜΑΤΑ (0.05) -> το popup δείχνει 5.00%, όχι 0.05%
+    ok = ("0026" in body and "Ιστορικό ποσοστών" in body and "Πρόνοια παλαιών" in body
+          and "5.00%" in body and "0.05%" not in body)
+    print(f"  {'OK  ' if ok else 'FAIL'} popup πακέτου: ΚΠΚ, ονομασία, χρονοσειρά")
+    if not ok:
+        fails.append("το popup πακέτου δεν δείχνει ΚΠΚ/ποσοστά")
     # Ο ρόλος δέχεται ΜΟΝΟ ΚΠΚ της βαθμίδας του (0103 = κύρια, όχι κύρια+επικ.)
     r = c.post("/company/specialties", data={
         "name": "ΛΑΘΟΣ ΒΑΘΜΙΔΑ", "epik_carriers": ["efka"],

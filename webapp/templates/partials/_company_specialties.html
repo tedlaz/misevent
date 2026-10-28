@@ -49,7 +49,12 @@
                         <div class="covs">
                           {% for r in roles if sp.package(r) %}
                             {% set c = sp.package(r) %}
-                            <span class="cov {{ c.fund }}">
+                            {# Κλικ -> popup με περιγραφές και ποσοστά του πακέτου #}
+                            <span class="cov {{ c.fund }} cov-link" role="button" tabindex="0"
+                                  title="Αναλυτικά στοιχεία και ποσοστά"
+                                  hx-get="{{ url_for('company.specialty_package', name=sp.name, role=r) }}"
+                                  hx-trigger="click, keyup[key=='Enter']"
+                                  hx-target="#modal-host" hx-swap="innerHTML">
                               <i>{{ c.label }}</i>
                               <span class="mono">{{ c.kad }} · {{ c.specialty_code }}
                                 · {{ c.kpk }}</span>

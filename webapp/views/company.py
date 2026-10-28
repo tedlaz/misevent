@@ -427,11 +427,45 @@ def _form_pron(f):
     }
 
 
+def _scenarios(f):
+    """Σύνοψη του wizard: ΑΝΑ ΣΕΝΑΡΙΟ ΠΡΟΣΛΗΨΗΣ (φορέας επικουρικής × επιλογή
+    πρόνοιας) οι γραμμές ΑΠΔ που θα προκύψουν — από τη φόρμα, χωρίς αποθήκευση.
+    Ίδιοι ρόλοι με την ανάθεση (`config.active_roles`), ίδιες επιλογές
+    πρόνοιας με το `specialty_options`."""
+    packages, pron = _form_packages(f), _form_pron(f)
+    packages["TEKA"] = dict(config.TEKA_PACKAGE)
+    choices = ["no"]
+    if pron["enabled"]:
+        choices = ["new", "old"] if pron["differentiated"] else ["yes"]
+        if not pron["mandatory"]:
+            choices.append("no")
+    out = []
+    for carrier in (c for c in config.CARRIER_ROLES if c in f.getlist("epik_carriers")):
+        for choice in choices:
+            lines = []
+            for role in config.active_roles(carrier, pron, choice):
+                spec_role = config.SPECIALTY_ROLES[role]
+                pkg = packages.get(role, {})
+                ident = svc.kpk_identity(spec_role.fund, pkg.get("kpk", ""))
+                special = ""
+                if spec_role.tier in ("main", "main_auxiliary"):
+                    special = kpk_registry.main_special_case(
+                        carrier, pkg.get("kad", ""), pkg.get("specialty_code", ""),
+                        choice != "no",
+                    )
+                lines.append({**pkg, "label": config.role_label(role, pron["name"]),
+                              "kpk_name": ident.name if ident else "",
+                              "special": special})
+            out.append({"carrier": carrier, "choice": choice, "lines": lines})
+    return out
+
+
 def _specialty_ctx(name=None, form=None):
     """Context του modal ειδικότητας — ΜΙΑ πηγή για άνοιγμα και για σφάλμα."""
     return {
         "sp": proj.specialties.get(name) if name else None,
         "form": form,
+        "scenarios": _scenarios(form) if form else None,
         "config": config,
         # Τα dropdowns κάθε ρόλου δείχνουν ΜΟΝΟ ΚΠΚ της βαθμίδας του.
         "kpks_by_tier": {t: svc.kpks_by_tier(t) for t in config.TIERS},
@@ -458,6 +492,51 @@ def specialty_pron():
         if trigger in ("pron_kad", f"{role}_code"):
             form.pop(f"{role}_kpk", None)
     return render_template("partials/_specialty_pron.html", **_specialty_ctx(form=form))
+
+
+# Σε ΠΟΙΟΝ εργαζόμενο ισχύει κάθε ρόλος — κείμενο του popup πακέτου.
+_ROLE_WHO = {
+    "MAIN_EPIK": "Εργαζόμενοι με επικουρική e-ΕΦΚΑ (πρώτη ασφάλιση πριν "
+                 "1/1/2022): κύρια + επικουρική σε ΕΝΑ ΚΠΚ.",
+    "MAIN": "Εργαζόμενοι με επικουρική ΤΕΚΑ (πρώτη ασφάλιση από 1/1/2022): "
+            "ΜΟΝΟ η κύρια — η επικουρική πάει στη γραμμή ΤΕΚΑ.",
+    "TEKA": "Εργαζόμενοι με επικουρική ΤΕΚΑ: ΜΟΝΟ επικουρική, σε ξεχωριστή "
+            "ΑΠΔ ΤΕΚΑ. Σταθερό πακέτο, ίδιο για κάθε ειδικότητα.",
+    "PRON_NEW": "Εργαζόμενοι με πρόνοια, πρώτη ασφάλιση από 1/1/1993 (νέοι).",
+    "PRON_OLD": "Εργαζόμενοι με πρόνοια, πρώτη ασφάλιση πριν 1/1/1993 (παλαιοί).",
+    "PRON_UNIFORM": "Όλοι οι εργαζόμενοι με πρόνοια (ενιαίος κωδικός).",
+}
+
+
+@bp.get("/specialties/package")
+def specialty_package():
+    """Popup πακέτου ειδικότητας: περιγραφές ΚΑΔ/ειδικότητας/ΚΠΚ, σε ποιον
+    ισχύει και τα ποσοστά — τρέχοντα + χρονοσειρά (Μητρώο ΚΠΚ)."""
+    sp = svc.get_specialty(request.args.get("name", ""))
+    role = request.args.get("role", "")
+    c = sp.package(role)
+    if c is None:
+        return ""
+    fund, kpk = c["fund"], c["kpk"]
+    try:
+        rates = svc.kpk_rates_for(fund, kpk, today())
+    except ValueError:
+        rates = None
+    return render_template(
+        "partials/_specialty_package_modal.html",
+        sp=sp, c=c, role=role, who=_ROLE_WHO.get(role, ""),
+        spec_role=config.SPECIALTY_ROLES[role], ident=svc.kpk_identity(fund, kpk),
+        rates=rates, series=svc.kpk_rate_series(fund, kpk), today=today(),
+        config=config, kpkreg=kpk_registry,
+    )
+
+
+@bp.get("/specialties/summary")
+def specialty_summary():
+    """Βήμα «Σύνοψη» του wizard: τα σενάρια πρόσληψης της τρέχουσας φόρμας."""
+    return render_template(
+        "partials/_specialty_summary.html", **_specialty_ctx(form=request.args)
+    )
 
 
 @bp.post("/specialties")

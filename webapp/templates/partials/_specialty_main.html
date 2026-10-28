@@ -15,8 +15,10 @@
 {% set first = (sp.package('MAIN_EPIK') or sp.package('MAIN')) if sp else None %}
 {% set kad_val = f.get('main_kad', first.kad if first else '') %}
 {% set code_val = f.get('main_code', first.specialty_code if first else '') %}
+{# Νέα ειδικότητα: ΚΑΙ οι δύο φορείς — από 1/1/2022 κάθε πρωτοασφαλισμένος
+   πάει στο ΤΕΚΑ, οι παλαιότεροι μένουν στον e-ΕΦΚΑ. #}
 {% set carriers = f.getlist('epik_carriers') if form
-                  else (sp.epik_carriers if sp else ['efka']) %}
+                  else (sp.epik_carriers if sp else ['efka', 'teka']) %}
 {% set pron_on = (f.get('pron_enabled') is not none) if form
                  else (sp.pron_settings.enabled if sp else false) %}
 {% set eids = kpkreg.specialties_for(kad_val) if kad_val else [] %}
@@ -24,9 +26,12 @@
   hx-include="[name='main_kad'],[name='main_code'],[name='epik_carriers'],[name='MAIN_EPIK_kpk'],[name='MAIN_kpk'],[name='pron_enabled']"
   hx-target="#spec-main" hx-swap="outerHTML"{% endset %}
 <div id="spec-main">
-  <div class="fsec fs-id">
-    <div class="fs-h"><span class="fs-ic">1️⃣</span><b>Κύρια ασφάλιση — ΕΦΚΑ</b>
+  <div class="fsec fs-id wz-p2">
+    <div class="fs-h"><span class="fs-ic">2️⃣</span><b>Κύρια ασφάλιση — e-ΕΦΚΑ</b>
       <span class="fs-hint">ΚΑΔ & ειδικότητα από τον Ο.Σ.Υ.Κ.</span></div>
+    <p class="wz-help">Η κύρια σύνταξη και η υγειονομική είναι <b>πάντα e-ΕΦΚΑ</b>,
+      για όλους. Εδώ ορίζεις μόνο τον ΚΑΔ δραστηριότητας και την ειδικότητα
+      του Ο.Σ.Υ.Κ. — από αυτά προκύπτουν τα προτεινόμενα ΚΠΚ στο επόμενο βήμα.</p>
     <div class="frm cols">
       <label>ΚΑΔ
         <input name="main_kad" maxlength="4" class="mono" list="kpk-kad-list"
@@ -50,12 +55,17 @@
     </div>
   </div>
 
-  <div class="fsec fs-ins">
-    <div class="fs-h"><span class="fs-ic">2️⃣</span><b>Επικουρική ασφάλιση</b>
+  <div class="fsec fs-ins wz-p3">
+    <div class="fs-h"><span class="fs-ic">3️⃣</span><b>Επικουρική ασφάλιση</b>
       <span class="fs-hint">επιτρεπτοί φορείς — η πρόσληψη διαλέγει έναν</span></div>
+    <p class="wz-help">Ο φορέας επικουρικής εξαρτάται από τον <b>εργαζόμενο</b>,
+      όχι από τη θέση: όποιος ασφαλίστηκε <b>για πρώτη φορά από 1/1/2022</b> πάει
+      υποχρεωτικά στο <b>ΤΕΚΑ</b> (ν.4826/2021 — ΜΟΝΟ επικουρική), όπως και όσοι
+      μεταφέρθηκαν εκεί με αίτηση· όλοι οι άλλοι μένουν στην επικουρική
+      <b>e-ΕΦΚΑ</b>. Τσέκαρε και τα δύο αν θα προσλάβεις και νέους και παλαιούς.</p>
     {% for carrier, role, title, tag in [
-         ('efka', 'MAIN_EPIK', 'Α · Κύρια + Επικουρική ΕΦΚΑ', 'ένα ΚΠΚ'),
-         ('teka', 'MAIN', 'Β · Κύρια ΕΦΚΑ + Επικουρική ΤΕΚΑ', 'δύο γραμμές ΑΠΔ')] %}
+         ('efka', 'MAIN_EPIK', 'Α · Παλαιοί ασφαλισμένοι (πριν 1/1/2022) → Επικουρική e-ΕΦΚΑ', 'ένα ΚΠΚ · κύρια+επικουρική'),
+         ('teka', 'MAIN', 'Β · Νέοι ασφαλισμένοι (από 1/1/2022) → Επικουρική ΤΕΚΑ', 'δύο γραμμές ΑΠΔ · κύρια + ΤΕΚΑ')] %}
       {% set spec_role = config.SPECIALTY_ROLES[role] %}
       {% set pkg = sp.package(role) if sp else None %}
       {% set options = kpks_by_tier[spec_role.tier] %}
