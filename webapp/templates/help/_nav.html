@@ -1,0 +1,16 @@
+{# Μενού της Βοήθειας: αναζήτηση + θέματα ανά ομάδα (από το `help.TOPICS`). #}
+<aside class="help-nav">
+  <form action="{{ url_for('help.index') }}" method="get">
+    <input type="search" name="q" value="{{ q or '' }}" placeholder="🔎 Αναζήτηση στη βοήθεια…"
+           aria-label="Αναζήτηση στη βοήθεια">
+  </form>
+  {# Όλη η Βοήθεια ως βιβλίο PDF — από τα ίδια άρθρα (webapp/help_book.py) #}
+  <a class="ghost help-book" href="{{ url_for('help.book') }}" target="_blank">📕 Βιβλίο PDF</a>
+  {% for g, items in groups.items() %}
+    <div class="help-nav-g">{{ g }}</div>
+    {% for t in items %}
+      <a class="{{ 'on' if topic is defined and topic and topic.slug == t.slug }}"
+         href="{{ url_for('help.article', slug=t.slug) }}">{{ t.icon }} {{ t.title }}</a>
+    {% endfor %}
+  {% endfor %}
+</aside>

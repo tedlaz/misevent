@@ -130,6 +130,9 @@ try { const t = localStorage.getItem('theme'); if (t) document.documentElement.d
         {% endif %}
       </form>
       {% block headeractions %}{% endblock %}
+      {# Βοήθεια για ΑΥΤΗ την οθόνη (`views/help.help_for`) #}
+      <a class="ghost helpbtn" href="{{ help_url }}" title="Βοήθεια για αυτή την οθόνη"
+         aria-label="Βοήθεια">❓</a>
       {% if current_user %}
         <form class="userbox" method="post" action="{{ url_for('auth.logout') }}">
           <a class="who" href="{{ url_for('auth.password') }}"

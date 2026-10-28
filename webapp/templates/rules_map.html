@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block title %}Χάρτης κανόνων{% endblock %}
+{% block heading %}Χάρτης κανόνων{% endblock %}
+{% block subheading %}η ροή του μήνα και οι έλεγχοι κάθε ενέργειας — παράγονται από τον κώδικα{% endblock %}
+
+{% block content %}
+{# Δύο tabs, CSS-only (:has() πάνω σε radios) — ίδιο μοτίβο με την Εταιρεία. #}
+<div class="rmtabs">
+  <input class="tabradio" type="radio" name="_rm" id="rm-flow" checked>
+  <input class="tabradio" type="radio" name="_rm" id="rm-checks">
+  <input class="tabradio" type="radio" name="_rm" id="rm-calc">
+  <div class="tabbar">
+    <label for="rm-flow">① Ροή μήνα</label>
+    <label for="rm-checks">② Έλεγχοι εγκυρότητας</label>
+    <label for="rm-calc">③ Υπολογισμοί</label>
+  </div>
+  <div class="card tabpane rm-p-calc">
+    <h2>Διαγράμματα υπολογισμών <span class="norm">— εναλλακτικές και τύποι, με τις τρέχουσες τιμές</span></h2>
+    {% include "partials/_rules_flows.html" %}
+  </div>
+  <div class="card tabpane rm-p-flow">
+    <h2>Ροή μήνα <span class="norm">— ποιο βήμα προαπαιτεί ποιο, και πού βρίσκεται η περίοδος</span></h2>
+    {% include "partials/_rules_flow.html" %}
+  </div>
+  <div class="card tabpane rm-p-checks">
+    <h2>Έλεγχοι εγκυρότητας <span class="norm">— ποιοι κανόνες τρέχουν σε κάθε ενέργεια</span></h2>
+    {% include "partials/_rules_validation.html" %}
+  </div>
+</div>
+{% endblock %}

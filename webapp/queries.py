@@ -90,6 +90,16 @@ def days_late(ob, ref: date) -> int:
     return (ref - ob.due_date).days
 
 
+def due_countdown(ob, ref: date) -> str:
+    """Η προθεσμία ως ΑΝΤΙΣΤΡΟΦΗ ΜΕΤΡΗΣΗ για το pill του χρονολογίου."""
+    if ob.fulfilled:
+        return "✓ έγινε"
+    days = (ob.due_date - ref).days
+    if days < 0:
+        return f"εκπρόθεσμη {-days} ημ."
+    return {0: "λήγει σήμερα", 1: "λήγει αύριο"}.get(days, f"σε {days} ημ.")
+
+
 def obligation_status(ob, ref: date):
     """(status, reason). `reason` ΜΟΝΟ όταν η υποχρέωση είναι πραγματικά
     μπλοκαρισμένη (ανεκπλήρωτο προαπαιτούμενο / κατώτατος μισθός).
@@ -197,6 +207,7 @@ def obligation_list(ref: date, show_locked: bool = False, view: str = "active"):
                 "status": st,
                 "reason": reason,
                 "late": days_late(o, ref),
+                "when": due_countdown(o, ref),
                 "deps": [
                     {"label": dep_label(p), "done": p.fulfilled}
                     for p in deps.prerequisites(o, index)
@@ -204,6 +215,18 @@ def obligation_list(ref: date, show_locked: bool = False, view: str = "active"):
             }
         )
     return out
+
+
+def unlocked_by(ob_id: str) -> list[str]:
+    """Οι υποχρεώσεις που η `ob_id` ΜΟΛΙΣ άφησε ελεύθερες (εκκρεμείς, χωρίς
+    άλλο ανεκπλήρωτο προαπαιτούμενο) — για το μήνυμα μετά την ενεργοποίηση."""
+    index = deps.build_index(proj.obligations.values())
+    return [
+        dep_label(o)
+        for o in sorted(proj.obligations.values(), key=lambda x: x.due_date)
+        if not o.fulfilled and not hidden_payment(o) and not is_locked(o, index)
+        and any(p.obligation_id == ob_id for p in deps.prerequisites(o, index))
+    ]
 
 
 def locked_count() -> int:
@@ -2855,12 +2878,13 @@ def detail_payload(ob_id: str, ref: date):
         "done": ob.fulfilled,
         "reason": reason,
         "late": days_late(ob, ref),  # >0 -> εκπρόθεσμη, επιτρέπεται με προειδοποίηση
+        # `id`: τα chips του modal ανοίγουν το modal εκείνης της υποχρέωσης
         "deps": [
-            {"label": dep_label(p), "done": p.fulfilled}
+            {"id": p.obligation_id, "label": dep_label(p), "done": p.fulfilled}
             for p in deps.prerequisites(ob, index)
         ],
         "unlocks": [
-            {"label": dep_label(o), "done": o.fulfilled}
+            {"id": o.obligation_id, "label": dep_label(o), "done": o.fulfilled}
             for o in sorted(dependents, key=lambda x: x.due_date)
         ],
         "steps": [],

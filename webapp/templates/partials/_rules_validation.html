@@ -1,0 +1,40 @@
+{# Έλεγχοι εγκυρότητας ανά ενέργεια (Χάρτης κανόνων). ΠΑΡΑΓΩΓΟ του κώδικα
+   (`views/rules_map.validation_map`, AST): ποια συνάρτηση καλεί ποιο
+   `constraints.check_*`. Αριστερά η ενέργεια, δεξιά οι έλεγχοί της· όσοι
+   καλούν άλλους ελέγχους τους δείχνουν από κάτω. #}
+{% macro chip(name) %}
+  {% set c = vmap.checks[name] %}
+  <details class="rv-chip">
+    <summary title="{{ c.doc }}"><code>{{ name }}</code></summary>
+    <div class="rv-doc">{{ c.doc or '—' }}
+      {% if c.nested %}<div class="rv-nested">καλεί και:
+        {% for n in c.nested %}<code>{{ n }}</code>{{ ', ' if not loop.last }}{% endfor %}</div>{% endif %}
+    </div>
+  </details>
+{% endmacro %}
+<p class="muted" style="font-size:12.5px;margin-top:0">Κάθε ενέργεια, πριν γράψει
+  οτιδήποτε, περνά από τους ελέγχους δεξιά· αν κάποιος αποτύχει, η ενέργεια απορρίπτεται
+  με το μήνυμά του. Κλικ σε έλεγχο για την περιγραφή του. Η λίστα παράγεται αυτόματα από
+  τον κώδικα, άρα είναι πάντα ενημερωμένη.</p>
+{% for grp in vmap.groups %}
+  <div class="rv-grp">
+    <div class="rv-grp-h"><span class="tag">{{ grp.where }}</span> <b>{{ grp.title }}</b>
+      <span class="muted mono" style="font-size:11px">{{ grp.file }}</span></div>
+    {% for a in grp.actions %}
+      <div class="rv-row">
+        <div class="rv-act">
+          <code class="{{ 'muted' if a.private }}">{{ a.name }}</code>
+          {% if a.private %}<span class="muted" style="font-size:11px">(βοηθητική)</span>{% endif %}
+          <div class="rv-adoc">{{ a.doc }}</div>
+        </div>
+        <div class="rv-arrow" aria-hidden="true">→</div>
+        <div class="rv-checks">{% for c in a.checks %}{{ chip(c) }}{% endfor %}</div>
+      </div>
+    {% endfor %}
+  </div>
+{% endfor %}
+{% if vmap.unused %}
+  <div class="warnbox" style="margin-top:12px">⚠️ Έλεγχοι που <b>δεν καλεί καμία
+    ενέργεια</b> (νεκρός κώδικας — βλ. ARCH_REF §6α-Β):
+    {% for c in vmap.unused %}<code>{{ c }}</code>{{ ', ' if not loop.last }}{% endfor %}</div>
+{% endif %}

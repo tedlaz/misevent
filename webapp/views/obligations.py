@@ -37,6 +37,11 @@ def _panel(selected: str | None, ref, show_locked: bool = False, view: str = "ac
     obs = q.obligation_list(ref, show_locked=show_locked, view=view)
     return {
         "obs": obs,
+        # «Επόμενο βήμα»: η πιο επείγουσα ΕΚΤΕΛΕΣΙΜΗ (όχι μπλοκαρισμένη) — η
+        # λίστα είναι ήδη ταξινομημένη κατά προθεσμία.
+        "next_ob": next(
+            (o for o in obs if o["status"] != "done" and not o["reason"]), None
+        ),
         "counts": q.status_counts(obs),
         "ref": ref,
         "locked_n": q.locked_count(),
@@ -97,6 +102,8 @@ def run(ob_id):
     ok, msg = run_command(lambda: trigger(ob_id))
     if ok and late:
         msg = f"{msg} — ΕΚΠΡΟΘΕΣΜΑ κατά {late} ημέρες"
+    if ok and (unlocked := q.unlocked_by(ob_id)):
+        msg = f"{msg} · Ξεκλείδωσε: {', '.join(unlocked)}"
     # Μετά την ενεργοποίηση, ό,τι ξεκλείδωσε εμφανίζεται πλέον στο χρονολόγιο.
     # ΕΠΙΤΥΧΙΑ -> κλείνει το modal (selected=None, άρα κενό #modal-host) και ο
     # χρήστης βλέπει το ανανεωμένο χρονολόγιο· ΣΦΑΛΜΑ -> μένει ανοιχτό, ώστε ο

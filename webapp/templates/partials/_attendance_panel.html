@@ -5,6 +5,10 @@
   <div class="card">
     <h2>Παρουσίες {{ m }}/{{ y }}
       <span class="norm">— {{ 'εγκεκριμένο' if done else 'προσχέδιο' }}</span>
+      {% if back == 'dashboard' %}
+        <a class="ghost sm" style="margin-left:8px" href="{{ url_for('dashboard.index') }}"
+           title="Μετά την έγκριση επιστρέφεις αυτόματα στην Επισκόπηση">← Επισκόπηση</a>
+      {% endif %}
       {# ΚΕΝΤΡΙΚΗ σημαία: εισήχθη κάρτα και καλύπτει τις ημέρες εργασίας
          ΟΛΩΝ (λείπουν το πολύ αργίες) #}
       {% if card_complete %}
@@ -16,6 +20,7 @@
     <form class="btnrow" style="margin-bottom:14px"
           hx-get="{{ url_for('attendance.index') }}" hx-target="body"
           hx-swap="outerHTML" hx-push-url="true">
+      {% if back %}<input type="hidden" name="back" value="{{ back }}">{% endif %}
       <label class="ref">Περίοδος
         <input type="number" name="m" value="{{ m }}" min="1" max="12" style="width:70px">
         <input type="number" name="y" value="{{ y }}" min="2020" max="2100" style="width:90px">
@@ -31,6 +36,7 @@
           hx-post="{{ url_for('attendance.import_karta') }}"
           hx-target="#attendance-panel" hx-swap="outerHTML"
           hx-encoding="multipart/form-data">
+      {% if back %}<input type="hidden" name="back" value="{{ back }}">{% endif %}
       <input type="hidden" name="y" value="{{ y }}">
       <input type="hidden" name="m" value="{{ m }}">
       <label class="ref">Κάρτα ΕΡΓΑΝΗ {{ m }}/{{ y }} (xlsx)
@@ -85,6 +91,7 @@
       <form id="sheet-form"
             hx-post="{{ url_for('attendance.approve', y=y, m=m) }}"
             hx-target="#attendance-panel" hx-swap="outerHTML">
+        {% if back %}<input type="hidden" name="back" value="{{ back }}">{% endif %}
         <div class="atbl">
           <div class="atbl-head">
             <div>Εργαζόμενος</div>

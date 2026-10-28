@@ -12,23 +12,24 @@
       {% set mk = o.due.strftime('%m/%Y') %}
       {% if mk != ns.month %}
         {% set ns.month = mk %}
-        <div class="month-h">{{ mk }}</div>
+        {# ο μήνας της ΠΡΟΘΕΣΜΙΑΣ — όχι της περιόδου (ΑΠΔ 10 λήγει τον 11) #}
+        <div class="month-h">Προθεσμίες {{ mk }}</div>
       {% endif %}
       <div class="ob {{ 'done' if o.status == 'done' else '' }}"
+           role="button" tabindex="0"
            hx-get="{{ url_for('obligations.detail_modal', id=o.id) }}"
+           hx-trigger="click, keyup[key=='Enter']"
            hx-target="#modal-host" hx-swap="innerHTML"
            title="Λεπτομέρειες ενέργειας">
         <span class="rail"><span class="dot d-{{ o.status }}"></span>
           <span class="ln"></span></span>
         <span class="body">
           <span class="t"><span class="ic">{{ o.icon }}</span>{{ o.label }}</span>
-          <span class="m">{{ o.due|date_gr }} · περίοδος {{ o.period }}</span>
-          {% if o.reason %}<span class="reason">{{ o.reason }}</span>
-          {% elif o.late %}
-            <span class="reason">Εκπρόθεσμη κατά {{ o.late }} ημέρες</span>
-          {% endif %}
+          <span class="m">περίοδος {{ o.period }} · προθεσμία {{ o.due|date_gr }}</span>
+          {% if o.reason %}<span class="reason">{{ o.reason }}</span>{% endif %}
         </span>
-        <span class="pill p-{{ o.status }}">{{ o.period }}</span>
+        {# Αντίστροφη μέτρηση (η εκπρόθεσμη φαίνεται εδώ, όχι ως reason) #}
+        <span class="pill p-{{ o.status }}">{{ o.when }}</span>
       </div>
     {% else %}
       <div class="empty sm">—</div>

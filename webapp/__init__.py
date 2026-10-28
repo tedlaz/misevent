@@ -41,7 +41,7 @@ from .tenancy import data_dir
 # γράφονται στο ΚΟΙΝΟ store (SHARED_EVENT_TYPES) και ισχύουν για ΟΛΕΣ τις
 # εταιρείες — η ενεργή εταιρεία δεν αλλάζει τίποτε σε αυτή τη σελίδα.
 SYSTEM_ENDPOINTS = ("auth.", "companies.", "apd_import.", "welcome.", "users.",
-                    "settings.", "backup.")
+                    "settings.", "backup.", "help.")
 
 # Σελίδες ΜΟΝΟ για διαχειριστές. Οι «Παράμετροι» είναι ΚΟΙΝΕΣ για όλες τις
 # εταιρείες (νέα ΓΣΣΕ/φορολογική κλίμακα) — δεν τις αλλάζει απλός χρήστης.
@@ -100,6 +100,7 @@ def create_app():
         employments,
         ergani,
         fmy,
+        help,
         leaves,
         live,
         month,
@@ -107,6 +108,7 @@ def create_app():
         payments,
         payroll,
         persons,
+        rules_map,
         settings,
         users,
         welcome,
@@ -116,6 +118,10 @@ def create_app():
         auth as auth_view,
     )
     from .views import clock as clock_view
+
+    def help_url(endpoint: str) -> str:
+        slug = help.help_for(endpoint)
+        return url_for("help.article", slug=slug) if slug else url_for("help.index")
 
     for mod in (
         dashboard,
@@ -142,6 +148,8 @@ def create_app():
         apd_import,
         welcome,
         users,
+        rules_map,
+        help,
     ):
         app.register_blueprint(mod.bp)
 
@@ -222,6 +230,8 @@ def create_app():
         company_id = getattr(g, "company_id", None)
         return {
             "NAV_TOP": NAV_TOP,
+            # Κουμπί ❓ της κεφαλίδας: το άρθρο Βοήθειας της τρέχουσας οθόνης
+            "help_url": help_url(request.endpoint or ""),
             "nav": nav_for(bool(user and user.is_admin), request.endpoint or ""),
             "current_user": user,
             # Η ετικέτα κάθε εταιρείας είναι το ΟΝΟΜΑ ΜΕΝΟΥ (`display_name`)·

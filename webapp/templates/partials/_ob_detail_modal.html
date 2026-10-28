@@ -29,16 +29,21 @@
 
       {% if detail.deps or detail.unlocks %}
         <div class="chain">
+          {# Κάθε chip ανοίγει το modal ΕΚΕΙΝΗΣ της υποχρέωσης (ίδιο #modal-host) #}
           {% if detail.deps %}
             <span class="ct">Προαπαιτεί</span>
             {% for d in detail.deps %}
-              <span class="dep {{ 'ok' if d.done else 'no' }}">{{ d.label }}</span>
+              <button type="button" class="dep {{ 'ok' if d.done else 'no' }}"
+                      hx-get="{{ url_for('obligations.detail_modal', id=d.id) }}"
+                      hx-target="#modal-host" hx-swap="innerHTML">{{ d.label }}</button>
             {% endfor %}
           {% endif %}
           {% if detail.unlocks %}
             <span class="ct">Ξεκλειδώνει</span>
             {% for d in detail.unlocks %}
-              <span class="dep {{ 'ok' if d.done else 'next' }}">{{ d.label }}</span>
+              <button type="button" class="dep {{ 'ok' if d.done else 'next' }}"
+                      hx-get="{{ url_for('obligations.detail_modal', id=d.id) }}"
+                      hx-target="#modal-host" hx-swap="innerHTML">{{ d.label }}</button>
             {% endfor %}
           {% endif %}
         </div>
@@ -155,6 +160,14 @@
       {% if not detail.done and detail.ergani_only %}
         {# Αποστολή στο ΕΡΓΑΝΗ: ΜΟΝΟ από την οθόνη ΕΡΓΑΝΗ (labels.ERGANI_ONLY) #}
         <a class="run" href="{{ url_for('ergani.index') }}">📤 Υποβολή από την οθόνη ΕΡΓΑΝΗ</a>
+      {% elif not detail.done and detail.reason
+               and detail.deps|rejectattr('done')|list %}
+        {# Μπλοκαρισμένη από προαπαιτούμενο: οδηγός προς αυτό, όχι νεκρό κουμπί #}
+        {% set first = (detail.deps|rejectattr('done')|first) %}
+        <button type="button" class="run"
+                hx-get="{{ url_for('obligations.detail_modal', id=first.id) }}"
+                hx-target="#modal-host" hx-swap="innerHTML">
+          → Πρώτα: {{ first.label }}</button>
       {% elif not detail.done %}
         {# Εκπρόθεσμη: ΕΠΙΤΡΕΠΕΤΑΙ, με κόκκινο κουμπί + προειδοποίηση.
            Μπλοκαρισμένη (reason): παραμένει ανενεργό. #}

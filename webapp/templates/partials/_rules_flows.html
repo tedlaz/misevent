@@ -1,0 +1,39 @@
+{# Διαγράμματα ροής υπολογισμών (Χάρτης κανόνων, tab ③). Τα δεδομένα από το
+   `views/rules_map.calc_flows`: ακολουθίες κόμβων, με κλάδους στα ερωτήματα.
+   Καθαρό HTML/CSS (καμία βιβλιοθήκη γράφων) — ο ίδιος macro αποδίδει
+   αναδρομικά κάθε κλάδο. #}
+{% macro seq(nodes) %}
+  <div class="fc-seq">
+    {% for n in nodes %}
+      <div class="fc-node fc-{{ n.k }}">
+        <span class="fc-t">{{ {'start': '▶', 'q': '◆', 'calc': '＝', 'end': '■', 'note': 'ℹ'}[n.k] }} {{ n.t }}</span>
+        {% if n.d %}<span class="fc-d">{{ n.d }}</span>{% endif %}
+      </div>
+      {% if n.br %}
+        <div class="fc-branches">
+          {% for label, sub in n.br %}
+            <div class="fc-branch">
+              <span class="fc-label">{{ label }}</span>
+              {{ seq(sub) }}
+            </div>
+          {% endfor %}
+        </div>
+      {% endif %}
+    {% endfor %}
+  </div>
+{% endmacro %}
+<p class="muted" style="font-size:12.5px;margin-top:0">Πώς αποφασίζει και τι
+  υπολογίζει το σύστημα σε κάθε περίπτωση. ◆ = ερώτηση με εναλλακτικές · ＝ = υπολογισμός
+  · ■ = τέλος διαδρομής. Οι τιμές (ποσοστά, όρια, πίνακες) είναι οι παράμετροι που
+  ισχύουν στις {{ ref.strftime('%d/%m/%Y') }} — αλλάζουν από τη σελίδα «Παράμετροι».</p>
+{% for f in flows %}
+  <details class="fc-card" {{ 'open' if loop.first }}>
+    <summary><span class="fc-ic">{{ f.icon }}</span> <b>{{ f.title }}</b>
+      <span class="muted mono" style="font-size:11px">{{ f.src }}</span></summary>
+    {% if f.suggested %}
+      <div class="warnbox">Οι παράμετροι δεν έχουν επιβεβαιωθεί ακόμη — εμφανίζονται οι
+        προτεινόμενες τιμές.</div>
+    {% endif %}
+    <div class="fc-scroll">{{ seq(f.seq) }}</div>
+  </details>
+{% endfor %}

@@ -1,0 +1,17 @@
+{# Ροή μήνα (Χάρτης κανόνων): ο γράφος της αλυσίδας με την κατάσταση της
+   περιόδου y/m. Ανανεώνεται μόνος του (htmx) όταν αλλάζει η περίοδος. Το
+   #modal-host ζει ΜΕΣΑ: το κλικ σε κόμβο ανοίγει τις λεπτομέρειες εδώ. #}
+<div id="rules-flow">
+  <form class="btnrow" style="margin-bottom:12px"
+        hx-get="{{ url_for('rules.flow') }}" hx-target="#rules-flow" hx-swap="outerHTML">
+    <label class="ref">Περίοδος
+      <input type="number" name="m" value="{{ m }}" min="1" max="12" style="width:70px">
+      <input type="number" name="y" value="{{ y }}" min="2020" max="2100" style="width:90px">
+    </label>
+    <button class="ghost" type="submit">Προβολή</button>
+    <span class="muted" style="font-size:12.5px">Κάθε κουτί είναι ένα βήμα του μήνα· τα βέλη
+      δείχνουν τι πρέπει να γίνει πρώτα. Οι ετήσιες (Δώρα) φαίνονται στο έτος τους.</span>
+  </form>
+  {% include "partials/_chain_graph.html" %}
+  <div id="modal-host"></div>
+</div>

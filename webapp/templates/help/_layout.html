@@ -1,0 +1,29 @@
+{# Σκελετός άρθρου Βοήθειας. Κάθε άρθρο: `{% extends "help/_layout.html" %}`
+   + `{% block article %}`. Με `body_only` (αναζήτηση) αποδίδεται μόνο το
+   κείμενο, χωρίς σελίδα. Δομικά στοιχεία για τα άρθρα:
+     <ol class="steps">  βήματα με αρίθμηση
+     <span class="ui">   όνομα κουμπιού/πεδίου όπως φαίνεται στην οθόνη
+     <div class="hint">  συμβουλή · <div class="warnbox"> προσοχή #}
+{% extends "help/_bare.html" if body_only else "base.html" %}
+{% block title %}{{ topic.title }} — Βοήθεια{% endblock %}
+{% block heading %}❓ Βοήθεια{% endblock %}
+{% block subheading %}{{ topic.title }}{% endblock %}
+
+{% block content %}
+{% if body_only %}{% block article %}{% endblock %}{% else %}
+<div class="help-wrap">
+  {% include "help/_nav.html" %}
+  <article class="card help-art">
+    <div class="help-crumb"><a class="lnk" href="{{ url_for('help.index') }}">Βοήθεια</a>
+      › {{ topic.group }}</div>
+    <h2 class="help-title">{{ topic.icon }} {{ topic.title }}</h2>
+    <p class="help-lead">{{ topic.summary }}</p>
+    {{ self.article() }}
+    <div class="help-pn">
+      {% if prev %}<a class="ghost" href="{{ url_for('help.article', slug=prev.slug) }}">← {{ prev.title }}</a>{% else %}<span></span>{% endif %}
+      {% if next %}<a class="ghost" href="{{ url_for('help.article', slug=next.slug) }}">{{ next.title }} →</a>{% endif %}
+    </div>
+  </article>
+</div>
+{% endif %}
+{% endblock %}

@@ -12,10 +12,12 @@ MODAL. Οι διορθώσεις «σταδιάζονται» σε κρυφά in
 event) και ΟΛΕΣ μαζί γράφονται με το κουμπί «Έγκριση».
 """
 
+import json
 import re
 from datetime import date
+from urllib.parse import urlparse
 
-from flask import Blueprint, Response, render_template, request
+from flask import Blueprint, Response, make_response, render_template, request, url_for
 
 from .. import queries as q
 from ..actions import trigger
@@ -54,9 +56,20 @@ def _period():
     return y, m
 
 
+def _back() -> str:
+    """«dashboard» όταν ο χρήστης ήρθε στις Παρουσίες από την Επισκόπηση —
+    τότε η έγκριση τον γυρίζει πίσω. Στο πρώτο GET το λέει ο Referer· μετά
+    ταξιδεύει ως κρυφό `back` στις φόρμες της σελίδας."""
+    if request.values.get("back") == "dashboard":
+        return "dashboard"
+    ref = urlparse(request.referrer or "")
+    home = url_for("dashboard.index")
+    return "dashboard" if ref.netloc == request.host and ref.path == home else ""
+
+
 def _context():
     y, m = _period()
-    return {"y": y, "m": m, **q.attendance_sheet(y, m)}
+    return {"y": y, "m": m, "back": _back(), **q.attendance_sheet(y, m)}
 
 
 @bp.get("/")
@@ -164,6 +177,19 @@ def approve():
         )
 
     ok, msg = run_command(cmd)
+    if ok and _back() == "dashboard":
+        # Πίσω στην Επισκόπηση: ολόκληρη η σελίδα στο body + νέο URL. Το toast
+        # μετά το settle, ώστε να το δείξει η νέα σελίδα.
+        from .dashboard import _context as dashboard_context
+
+        resp = make_response(render_template("dashboard.html", **dashboard_context()))
+        resp.headers["HX-Retarget"] = "body"
+        resp.headers["HX-Reswap"] = "outerHTML"
+        resp.headers["HX-Push-Url"] = url_for("dashboard.index")
+        resp.headers["HX-Trigger-After-Settle"] = json.dumps(
+            {"flash": {"msg": msg, "err": False}}
+        )
+        return resp
     return flash_to(
         render_template("partials/_attendance_panel.html", **_context()),
         msg,

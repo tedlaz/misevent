@@ -29,12 +29,30 @@
       {% endfor %}
     </div>
 
-    <div class="legend">
-      <span><i style="background:var(--done)"></i>Ολοκληρωμένη</span>
-      <span><i style="background:var(--ready)"></i>Διαθέσιμη</span>
-      <span><i style="background:var(--warn)"></i>Λήγει σύντομα</span>
-      <span><i style="background:var(--prob)"></i>Εκπρόθεσμη / πρόβλημα</span>
+    {# ΤΙ ΕΚΚΡΕΜΕΙ: μετρητές ανά κατάσταση — κάνουν και τη δουλειά του υπομνήματος
+       (ίδια χρώματα με τις κουκκίδες του χρονολογίου). #}
+    <div class="ob-sum">
+      {% for st, label in [('problem', 'Εκπρόθεσμες / πρόβλημα'), ('warning', 'Λήγουν σύντομα'),
+                           ('ready', 'Διαθέσιμες'), ('done', 'Ολοκληρωμένες')]
+            if counts[st] or st != 'done' %}
+        <span class="ob-chip c-{{ st }} {{ 'zero' if not counts[st] }}">
+          <i></i><b>{{ counts[st] }}</b> {{ label }}</span>
+      {% endfor %}
     </div>
+
+    {# ΕΠΟΜΕΝΟ ΒΗΜΑ: η πιο επείγουσα υποχρέωση που ΜΠΟΡΕΙ να γίνει τώρα #}
+    {% if next_ob %}
+      <div class="ob-next s-{{ next_ob.status }}" role="button" tabindex="0"
+           hx-get="{{ url_for('obligations.detail_modal', id=next_ob.id) }}"
+           hx-trigger="click, keyup[key=='Enter']"
+           hx-target="#modal-host" hx-swap="innerHTML">
+        <span class="ob-next-k">Επόμενο βήμα</span>
+        <span class="ob-next-t"><span class="ic">{{ next_ob.icon }}</span>
+          {{ next_ob.label }} <span class="muted">· περίοδος {{ next_ob.period }}</span></span>
+        <span class="ob-next-w">{{ next_ob.when }} · {{ next_ob.due|date_gr }}</span>
+        <span class="ghost sm ob-next-go">Άνοιγμα →</span>
+      </div>
+    {% endif %}
 
     {# Οι κλειδωμένες (περιμένουν προαπαιτούμενο) δεν εμφανίζονται — ξεκλειδώνουν
        μόλις ενεργοποιηθεί το προαπαιτούμενο. Εδώ μόνο ο μετρητής/διακόπτης. #}

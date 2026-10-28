@@ -170,6 +170,29 @@ details.fold>summary:hover h2,details.fold>summary:hover::after{color:var(--ink)
 .p-ready{background:var(--ready-bg);color:var(--ready)}
 .p-warning{background:var(--warn-bg);color:var(--warn)}
 .p-problem{background:var(--prob-bg);color:var(--prob)}
+.ob:focus-visible{outline:2px solid var(--ready);outline-offset:1px;background:var(--paper)}
+/* Μετρητές «τι εκκρεμεί» (κάνουν και τη δουλειά του υπομνήματος) */
+.ob-sum{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px}
+.ob-chip{--c:var(--muted);--cb:var(--paper);display:inline-flex;align-items:center;gap:6px;
+  padding:4px 11px;border-radius:99px;font-size:12.5px;background:var(--cb);color:var(--c)}
+.ob-chip i{width:9px;height:9px;border-radius:50%;background:var(--c)}
+.ob-chip b{font-size:14px}
+.ob-chip.zero{opacity:.5}
+.c-problem{--c:var(--prob);--cb:var(--prob-bg)} .c-warning{--c:var(--warn);--cb:var(--warn-bg)}
+.c-ready{--c:var(--ready);--cb:var(--ready-bg)} .c-done{--c:var(--done);--cb:var(--done-bg)}
+/* «Επόμενο βήμα»: η πιο επείγουσα εκτελέσιμη υποχρέωση */
+.ob-next{--c:var(--ready);display:grid;grid-template-columns:auto 1fr auto auto;gap:4px 14px;
+  align-items:center;padding:10px 14px;margin-bottom:12px;border-radius:12px;cursor:pointer;
+  border:1px solid var(--c);border-left:5px solid var(--c);background:var(--card)}
+.ob-next.s-warning{--c:var(--warn)} .ob-next.s-problem{--c:var(--prob)}
+.ob-next:hover,.ob-next:focus-visible{box-shadow:var(--sh-2);outline:none}
+.ob-next-k{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--c)}
+.ob-next-t{font-weight:600}
+.ob-next-w{font-family:var(--mono);font-size:12.5px;color:var(--c)}
+@media (max-width:640px){.ob-next{grid-template-columns:1fr}}
+/* Προαπαιτούμενα/ξεκλειδώματα στο modal: κουμπιά προς εκείνη την υποχρέωση */
+button.dep{font:inherit;cursor:pointer}
+button.dep:hover{text-decoration:underline}
 
 /* --------------------------------------------------------------- κουμπιά */
 button.run,a.run{font:inherit;font-weight:600;border:0;border-radius:9px;
@@ -239,7 +262,10 @@ button.tag.lnk-tag{font-family:inherit;font-size:10.5px;font-weight:700}
 .tabs:has(#tab-specialties:checked) .tp-specialties,
 .tabs:has(#tab-kpk:checked) .tp-kpk,
 .tabs:has(#tab-ergani:checked) .tp-ergani,
-.tabs:has(#tab-audit:checked) .tp-audit{display:block}
+.tabs:has(#tab-audit:checked) .tp-audit,
+.rmtabs:has(#rm-flow:checked) .rm-p-flow,
+.rmtabs:has(#rm-checks:checked) .rm-p-checks,
+.rmtabs:has(#rm-calc:checked) .rm-p-calc{display:block}
 /* ενεργή ετικέτα */
 #tab-general:checked ~ .tabbar label[for=tab-general],
 #tab-foreign:checked ~ .tabbar label[for=tab-foreign],
@@ -251,9 +277,113 @@ button.tag.lnk-tag{font-family:inherit;font-size:10.5px;font-weight:700}
 .tabs:has(#tab-specialties:checked) .tabbar label[for=tab-specialties],
 .tabs:has(#tab-kpk:checked) .tabbar label[for=tab-kpk],
 .tabs:has(#tab-ergani:checked) .tabbar label[for=tab-ergani],
-.tabs:has(#tab-audit:checked) .tabbar label[for=tab-audit]{
+.tabs:has(#tab-audit:checked) .tabbar label[for=tab-audit],
+.rmtabs:has(#rm-flow:checked) .tabbar label[for=rm-flow],
+.rmtabs:has(#rm-checks:checked) .tabbar label[for=rm-checks],
+.rmtabs:has(#rm-calc:checked) .tabbar label[for=rm-calc]{
   color:var(--ink);background:var(--card);border-color:var(--line);
   border-bottom:1px solid var(--card)}
+/* Χάρτης κανόνων — κατάσταση κόμβου του γράφου (ίδια χρώματα με το
+   χρονολόγιο υποχρεώσεων). Το CSS νικά τα presentation attributes του SVG. */
+g.gs-done rect{fill:var(--done-bg);stroke:var(--done)}
+g.gs-ready rect{fill:var(--ready-bg);stroke:var(--ready);stroke-width:2}
+g.gs-warning rect{fill:var(--warn-bg);stroke:var(--warn);stroke-width:2}
+g.gs-problem rect{fill:var(--prob-bg);stroke:var(--prob);stroke-width:2.4}
+g.gs-locked rect{fill:var(--paper);stroke:#9aa6b1;stroke-dasharray:4 3}
+g.gs-none{opacity:.38}
+g.gs-done .gs-t{fill:var(--done)} g.gs-ready .gs-t{fill:var(--ready)}
+g.gs-warning .gs-t{fill:var(--warn)} g.gs-problem .gs-t{fill:var(--prob)}
+g.gs-locked .gs-t,g.gs-none .gs-t{fill:#8a93a6}
+g[hx-get]:hover rect{filter:drop-shadow(0 2px 6px rgba(23,36,47,.18))}
+/* ------------------------------------------------------------ Βοήθεια */
+header .helpbtn{padding:6px 10px;font-size:15px;line-height:1}
+.help-wrap{display:grid;grid-template-columns:240px minmax(0,1fr);gap:18px;align-items:start}
+.help-nav{position:sticky;top:12px;display:flex;flex-direction:column;gap:2px;font-size:13.5px}
+.help-nav input{width:100%;margin-bottom:8px}
+.help-nav a.help-book{text-align:center;margin-bottom:4px}
+.help-nav-g{font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;
+  color:var(--muted);margin:12px 0 4px}
+.help-nav a{padding:5px 9px;border-radius:8px;color:var(--ink);text-decoration:none}
+.help-nav a:hover{background:var(--paper)}
+.help-nav a.on{background:var(--ready-bg);color:var(--ready);font-weight:600}
+.help-art{max-width:860px;line-height:1.65;font-size:14.5px}
+.help-crumb{font-size:12px;color:var(--muted)}
+.help-title{font-size:22px;margin:4px 0}
+.help-lead{color:var(--muted);margin-top:0}
+.help-art h3{font-size:16px;margin:24px 0 6px;padding-top:12px;border-top:1px dashed var(--line)}
+.help-art ol.steps{counter-reset:st;list-style:none;padding-left:0}
+.help-art ol.steps>li{counter-increment:st;position:relative;padding:4px 0 8px 36px}
+.help-art ol.steps>li::before{content:counter(st);position:absolute;left:0;top:4px;width:24px;
+  height:24px;border-radius:50%;display:grid;place-items:center;font-size:12px;font-weight:700;
+  background:var(--ready-bg);color:var(--ready)}
+.help-art .ui{display:inline-block;padding:0 7px;border:1px solid var(--line);border-radius:6px;
+  background:var(--paper);font-size:13px;white-space:nowrap}
+.help-art table{border-collapse:collapse;font-size:13.5px;margin:8px 0}
+.help-art th,.help-art td{border-bottom:1px solid var(--line);padding:5px 10px;text-align:left;
+  vertical-align:top}
+.hint{background:var(--ready-bg);border-left:4px solid var(--ready);border-radius:8px;
+  padding:9px 12px;margin:10px 0;font-size:13.5px}
+.help-pn{display:flex;justify-content:space-between;gap:10px;margin-top:28px;
+  padding-top:14px;border-top:1px solid var(--line)}
+.help-gh{margin:22px 0 8px;font-size:13px;letter-spacing:.06em;text-transform:uppercase;
+  color:var(--muted)}
+.help-cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:12px}
+.help-card{display:flex;flex-direction:column;gap:4px;text-decoration:none;color:var(--ink);
+  transition:box-shadow .15s,transform .15s}
+.help-card:hover{box-shadow:var(--sh-2);transform:translateY(-2px)}
+.help-card .ic{font-size:22px}
+.help-card .muted{font-size:12.5px}
+.help-hit{display:block;padding:10px 0;border-bottom:1px dashed var(--line);text-decoration:none;
+  color:var(--ink)}
+.help-hit .muted{display:block;font-size:12.5px;margin-top:2px}
+@media (max-width:860px){.help-wrap{grid-template-columns:1fr}.help-nav{position:static}}
+/* Χάρτης κανόνων — έλεγχοι ανά ενέργεια */
+.rv-grp{border:1px solid var(--line);border-radius:12px;padding:10px 12px;margin-top:12px}
+.rv-grp-h{display:flex;gap:8px;align-items:baseline;flex-wrap:wrap;margin-bottom:6px}
+.rv-row{display:grid;grid-template-columns:minmax(200px,1fr) 24px 2fr;gap:8px;
+  align-items:start;padding:8px 0;border-top:1px dashed var(--line)}
+.rv-adoc{font-size:12px;color:var(--muted);margin-top:2px}
+.rv-arrow{color:var(--muted);text-align:center;padding-top:2px}
+.rv-checks{display:flex;flex-wrap:wrap;gap:6px;align-items:flex-start}
+.rv-chip summary{list-style:none;cursor:pointer;padding:2px 9px;border-radius:99px;
+  border:1px solid var(--line);background:var(--paper);font-size:12px}
+.rv-chip summary::-webkit-details-marker{display:none}
+.rv-chip[open] summary{border-color:var(--ready);background:var(--ready-bg)}
+.rv-doc{font-size:12px;max-width:340px;padding:6px 9px;margin-top:4px;border-radius:8px;
+  background:var(--card);border:1px solid var(--line)}
+.rv-nested{margin-top:4px;color:var(--muted)}
+@media (max-width:640px){.rv-row{grid-template-columns:1fr}.rv-arrow{display:none}}
+/* Χάρτης κανόνων — διαγράμματα ροής: ακολουθία κόμβων κάθετα, κλάδοι δίπλα-δίπλα.
+   Οι γραμμές σύνδεσης είναι ::before (κάθετες) και το border-top των κλάδων. */
+.fc-card{border:1px solid var(--line);border-radius:12px;padding:10px 14px;margin-top:12px}
+.fc-card>summary{cursor:pointer;display:flex;gap:8px;align-items:baseline;flex-wrap:wrap}
+.fc-ic{font-size:18px}
+.fc-scroll{overflow-x:auto;padding:12px 2px 6px}
+.fc-seq{display:flex;flex-direction:column;align-items:center;min-width:max-content}
+.fc-node{position:relative;max-width:300px;text-align:center;padding:7px 12px;margin-top:18px;
+  border:1.5px solid var(--line);border-radius:10px;background:var(--card);font-size:12.5px}
+.fc-seq>.fc-node:first-child{margin-top:0}
+.fc-node::before{content:'';position:absolute;left:50%;top:-19px;height:18px;border-left:1.5px solid var(--line)}
+.fc-seq>.fc-node:first-child::before{display:none}
+.fc-t{display:block;font-weight:600}
+.fc-d{display:block;font-size:11.5px;color:var(--muted);margin-top:3px;line-height:1.4}
+.fc-start{background:var(--ink);color:var(--card);border-color:var(--ink);border-radius:99px}
+.fc-start .fc-d{color:inherit;opacity:.75}
+.fc-q{border-color:var(--warn);background:var(--warn-bg)}
+.fc-calc{border-color:#9FC2EE;background:#EEF4FF}
+.fc-end{border-color:var(--done);background:var(--done-bg);border-radius:99px}
+.fc-note{border-style:dashed;color:var(--muted)}
+.fc-branches{display:flex;gap:14px;justify-content:center;margin-top:18px;position:relative;
+  padding-top:14px;border-top:1.5px solid var(--line)}
+.fc-branches::before{content:'';position:absolute;left:50%;top:-19px;height:18px;border-left:1.5px solid var(--line)}
+.fc-branch{display:flex;flex-direction:column;align-items:center;position:relative}
+.fc-branch::before{content:'';position:absolute;left:50%;top:-14px;height:14px;border-left:1.5px solid var(--line)}
+.fc-label{font-size:11px;font-weight:700;color:var(--warn);background:var(--card);
+  border:1px solid var(--warn);border-radius:99px;padding:1px 9px;max-width:220px;text-align:center}
+.fc-branch>.fc-seq{margin-top:0}
+.fc-branch>.fc-seq>.fc-node:first-child{margin-top:18px}
+.fc-branch>.fc-seq>.fc-node:first-child::before{display:block}
+.fc-branches+.fc-node{margin-top:22px}
 .legend{display:flex;gap:14px;flex-wrap:wrap;font-size:12.5px;
   color:var(--muted);margin-bottom:10px}
 .legend i{width:10px;height:10px;border-radius:50%;display:inline-block;

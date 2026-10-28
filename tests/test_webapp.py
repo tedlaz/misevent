@@ -80,6 +80,24 @@ def test_webapp(fresh_system):
     print("\n=== Σελίδες (GET) ===")
     check("/            Επισκόπηση", c.get("/"), "Επισκόπηση")
     check("/  υποχρεώσεις (κάρτα)", c.get("/"), 'data-fold="obligations"')
+    check("/  υποχρεώσεις: μετρητές", c.get("/"), 'class="ob-sum"')
+    from types import SimpleNamespace as _NS
+    _ob = lambda d, f=False: _NS(due_date=_date(2026, 11, d), fulfilled=f)  # noqa: E731
+    _r = _date(2026, 11, 10)
+    ok = ([q.due_countdown(_ob(d), _r) for d in (13, 11, 10, 7)]
+          == ["σε 3 ημ.", "λήγει αύριο", "λήγει σήμερα", "εκπρόθεσμη 3 ημ."]
+          and q.due_countdown(_ob(1, True), _r) == "✓ έγινε")
+    print(f"  {'OK  ' if ok else 'FAIL'} αντίστροφη μέτρηση προθεσμίας")
+    if not ok:
+        fails.append("λάθος αντίστροφη μέτρηση στο pill υποχρεώσεων")
+    # Modal: τα προαπαιτούμενα ανοίγουν το modal ΕΚΕΙΝΗΣ της υποχρέωσης
+    _with_dep = next((d for d in (q.detail_payload(i, _r) for i in proj.obligations)
+                      if d["deps"]), None)
+    if _with_dep:
+        body = check("modal υποχρέωσης με προαπαιτούμενο",
+                     c.get(f"/obligations/modal?id={_with_dep['id']}"))
+        if f"/obligations/modal?id={_with_dep['deps'][0]['id']}" not in body:
+            fails.append("το προαπαιτούμενο στο modal δεν είναι σύνδεσμος")
     r = c.get("/obligations/?view=all")
     assert r.status_code == 302 and r.headers["Location"].endswith("/?view=all")
     check("/persons     Εργαζόμενοι", c.get("/persons/"), "Εργαζόμενοι")
@@ -696,11 +714,31 @@ def test_webapp(fresh_system):
         data[f"unpaid_{r_['eid']}"] = r_["unpaid"]
         data[f"leave_{r_['eid']}"] = r_["leave"]
         data[f"efka_{r_['eid']}"] = r_["efka_days"]  # ← οδηγεί τη μισθοδοσία
-    r = c.post(f"/attendance/approve?y={y}&m={m}", data=data)
+    # Ήρθαμε από την Επισκόπηση (Referer) -> η σελίδα κρατά `back`, και η
+    # έγκριση γυρίζει στην Επισκόπηση (ολόκληρη σελίδα + toast μετά το settle)
+    body = c.get(f"/attendance/?y={y}&m={m}",
+                 headers={"Referer": "http://localhost/"}).get_data(as_text=True)
+    if 'name="back" value="dashboard"' not in body:
+        fails.append("οι Παρουσίες δεν θυμούνται ότι ήρθαμε από την Επισκόπηση")
+    r = c.post(f"/attendance/approve?y={y}&m={m}", data={**data, "back": "dashboard"})
     ok = (y, m) in proj.attendance_sheets
     print(f"  {'OK  ' if ok else 'FAIL'} εγκρίθηκε το συγκεντρωτικό {m}/{y}")
     if not ok:
         fails.append("η έγκριση παρουσιών απέτυχε")
+    ok = (r.headers.get("HX-Retarget") == "body" and r.headers.get("HX-Push-Url") == "/"
+          and "Εγκρίθηκε" in json.loads(r.headers.get("HX-Trigger-After-Settle", "{}"))
+          .get("flash", {}).get("msg", ""))
+    print(f"  {'OK  ' if ok else 'FAIL'} μετά την έγκριση -> πίσω στην Επισκόπηση")
+    # Χάρτης κανόνων: ο κόμβος της έγκρισης δείχνει «έγινε» για την περίοδο
+    # και ανοίγει το modal της υποχρέωσης
+    _appr = next(o for o in proj.obligations.values()
+                 if o.obligation_type == "ATTENDANCE_APPROVAL"
+                 and (o.period_year, o.period_month) == (y, m))
+    body = c.get(f"/rules/flow?y={y}&m={m}").get_data(as_text=True)
+    if f"/obligations/modal?id={_appr.obligation_id}" not in body or "gs-done" not in body:
+        fails.append("ο Χάρτης κανόνων δεν δείχνει την κατάσταση της περιόδου")
+    if not ok:
+        fails.append("η έγκριση από Επισκόπηση δεν επιστρέφει στην Επισκόπηση")
 
     # 3. τώρα τρέχει η μισθοδοσία
     r = c.post("/payroll/run", data={"y": y, "m": m})

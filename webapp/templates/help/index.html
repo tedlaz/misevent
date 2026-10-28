@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% block title %}Βοήθεια{% endblock %}
+{% block heading %}❓ Βοήθεια{% endblock %}
+{% block subheading %}οδηγίες χρήσης — βήμα-βήμα{% endblock %}
+
+{% block content %}
+<div class="help-wrap">
+  {% include "help/_nav.html" %}
+  <div class="help-main">
+    {% if results is not none %}
+      <div class="card">
+        <h2>Αποτελέσματα για «{{ q }}» <span class="norm">— {{ results|length }}</span></h2>
+        {% for r in results %}
+          <a class="help-hit" href="{{ url_for('help.article', slug=r.slug) }}">
+            <b>{{ r.icon }} {{ r.title }}</b>
+            <span class="muted">… {{ r.snippet }} …</span></a>
+        {% else %}
+          <div class="empty">Δεν βρέθηκε τίποτα. Δοκίμασε άλλη λέξη (π.χ. «ΤΕΚΑ»,
+            «αποχώρηση», «ημέρες ΕΦΚΑ»).</div>
+        {% endfor %}
+      </div>
+    {% else %}
+      <div class="card help-intro">
+        <h2>Καλώς ήρθες στη Βοήθεια</h2>
+        <p>Εδώ θα βρεις οδηγίες για κάθε οθόνη και κάθε διαδικασία της εφαρμογής.
+          Αν είσαι καινούργιος, ξεκίνα από τα <a class="lnk"
+          href="{{ url_for('help.article', slug='start') }}">Πρώτα βήματα</a> και μετά
+          διάβασε τον <a class="lnk" href="{{ url_for('help.article', slug='monthly-cycle') }}">μηνιαίο κύκλο</a>.</p>
+        <div class="hint">💡 Σε κάθε οθόνη υπάρχει το κουμπί <span class="ui">❓</span> πάνω
+          δεξιά: ανοίγει κατευθείαν τις οδηγίες εκείνης της οθόνης.</div>
+        <p><a class="run" href="{{ url_for('help.book') }}" target="_blank">📕 Κατέβασε όλο τον
+          οδηγό ως βιβλίο PDF</a>
+          <span class="muted" style="font-size:12.5px">— για εκτύπωση ή ανάγνωση εκτός
+          εφαρμογής· φτιάχνεται κάθε φορά από τα ίδια άρθρα, άρα είναι πάντα ενημερωμένο.</span></p>
+      </div>
+      {% for g, items in groups.items() %}
+        <h3 class="help-gh">{{ g }}</h3>
+        <div class="help-cards">
+          {% for t in items %}
+            <a class="card help-card" href="{{ url_for('help.article', slug=t.slug) }}">
+              <span class="ic">{{ t.icon }}</span><b>{{ t.title }}</b>
+              <span class="muted">{{ t.summary }}</span></a>
+          {% endfor %}
+        </div>
+      {% endfor %}
+    {% endif %}
+  </div>
+</div>
+{% endblock %}
