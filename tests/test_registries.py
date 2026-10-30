@@ -164,3 +164,26 @@ def test_every_obligation_type_has_a_command():
 
     missing = sorted({t.command for t in ot.TYPES.values()} - set(COMMANDS))
     assert not missing, "Τύποι υποχρέωσης χωρίς εντολή: " + ", ".join(missing)
+
+
+# ------------------------------------------------------- 5. είδη αμοιβής
+def test_payment_kinds_consistent():
+    """ΣΙΩΠΗΛΟ #5: νέο είδος αμοιβής (ARCH_REF §6α.Ε) που ξεχάστηκε σε ένα από
+    τα dicts των πληρωμών. Δεν σκάει τίποτα — απλώς το καθολικό/κόστος/
+    Επισκόπηση δεν το μετρούν ή το βάζουν σε λάθος στήλη."""
+    from misevent.domain import scheduler
+    from webapp import queries as q
+
+    kinds = set(scheduler.PAYMENT_TYPES) | set(q.PAYMENT_KIND_LABELS)
+    for name, table in (("PAYMENT_COLUMN_OF", q.PAYMENT_COLUMN_OF),
+                        ("PAYMENT_OBLIGATION", q.PAYMENT_OBLIGATION)):
+        missing = sorted(kinds - set(table))
+        assert not missing, f"Είδη πληρωμής εκτός queries.{name}: " + ", ".join(missing)
+    pay = {k for k, col in q.PAYMENT_COLUMN_OF.items() if col == "salary"}
+    for name, table in (("PAYMENT_KIND_LABELS", q.PAYMENT_KIND_LABELS),
+                        ("PAYMENT_KINDS", q.PAYMENT_KINDS)):
+        missing = sorted(pay - set(table))
+        assert not missing, f"Αμοιβές εκτός queries.{name}: " + ", ".join(missing)
+    unknown = sorted((set(q.PAYMENT_OBLIGATION.values())
+                      | set(scheduler.PAYMENT_TYPES.values())) - set(ot.TYPES))
+    assert not unknown, "Άγνωστοι τύποι υποχρέωσης καταβολής: " + ", ".join(unknown)

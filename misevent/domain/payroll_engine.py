@@ -129,6 +129,17 @@ class PayrollResult:
     # στο φορολογητέο, ΕΚΤΟΣ της βάσης εισφορών και της ΑΠΔ.
     premium_exempt: float = 0.0
 
+    def __post_init__(self):
+        # Ταυτότητα: Αποδοχές − Εισφορές εργαζομένου − Φόροι = Καθαρό. Μαζί με
+        # το «Συνολικό κόστος = Αποδοχές + Εισφορές εργοδότη» δίνει και το
+        # «Κόστος = Εισφ. εργαζ. + Εισφ. εργοδ. + Φόροι + Καθαρό». Σκάει ΠΡΙΝ
+        # γραφτεί event — λάθος καθαρό δεν πρέπει να φτάσει σε πληρωμή.
+        if r2(self.gross - self.efka_employee - self.fmy) != r2(self.net):
+            raise ValueError(
+                f"Ασυμφωνία μισθοδοσίας: μικτά {self.gross} − εισφορές "
+                f"{self.efka_employee} − ΦΜΥ {self.fmy} ≠ καθαρό {self.net}"
+            )
+
 
 def labor_subsidy_full(
     monthly_gross: float, floor: float, weekly_hours: float, on: date,
@@ -203,7 +214,7 @@ def calc_monthly(
     της — services.contribution_rates)· None = καθολικοί συντελεστές."""
     daily = monthly_gross / base_days
     base = max(0.0, monthly_gross - unpaid_days * daily)
-    gross = max(0.0, base - sick) + premiums
+    gross = r2(max(0.0, base - sick) + premiums)
     rates = rates or efka_rates_for(period_end)
     exempt = min(r2(exempt), r2(premiums))
     insurable = min(max(gross - exempt, 0.0), rates.monthly_cap)
@@ -512,7 +523,7 @@ def _gift_result(
     birth_date: date | None = None, fmy_periods: float = ANNUAL_SALARIES,
     subsidy: float = 0.0, mother_pct: float = 0.0, youth_pct: float = 0.0,
 ) -> PayrollResult:
-    gross = base * (1 + GIFT_LEAVE_COEFFICIENT) if leave_coeff else base
+    gross = r2(base * (1 + GIFT_LEAVE_COEFFICIENT) if leave_coeff else base)
     rates = rates or efka_rates_for(on)
     full_emp = r2(gross * rates.employee)
     subsidy, code = _employee_subsidy(subsidy, gross, mother_pct, full_emp)
