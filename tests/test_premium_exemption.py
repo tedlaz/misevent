@@ -52,3 +52,34 @@ def test_part_time_and_before_november_2025_get_nothing():
     Emp.weekly_hours = 40.0
     assert PayrollService.premium_exempt(Emp, supplement, date(2025, 10, 31)) == 0.0
     assert PayrollService.premium_exempt(Emp, supplement, date(2025, 11, 28)) == 16.2
+
+
+def test_breakdown_splits_hour_value_class_and_night():
+    """Παράδειγμα: μισθός 1000 → ωρομίσθιο 6,00. Νύχτα εντός ωραρίου = μόνο
+    1,50 προσαύξηση. Υπερεργασία νύχτα = 6,00 αξία ώρας + 1,20 κλάση
+    + 1,80 νύχτα (7,20 × 25%) = 9,00 — εισφορές μόνο στα 6,00."""
+    from misevent.domain.work_hours import hourly_rate, pay_supplement
+    from misevent.rules import config
+    from webapp.queries import _premium_breakdown
+
+    rate = hourly_rate("monthly", 1000.0, 0.0, 40.0)
+    sup = pay_supplement(
+        rate, {"normal_n": 1, "overwork_n": 1}, config.work_hour_rules_for(date(2026, 2, 1))
+    )
+    assert sup["premium"] == 4.50  # 1,50 + 1,20 + 1,80
+    a = {"premium_lines": sup["lines"], "hourly_rate": rate}
+    keys = ("plain", "class_premium", "day_premium", "amount")
+    split = {
+        x["cls"]: tuple(x["rows"][0][k] for k in keys) for x in _premium_breakdown(a, 2026, 2)
+    }
+    assert split == {"normal": (0, 0, 1.50, 1.50), "overwork": (6.00, 1.20, 1.80, 9.00)}
+
+    steps = {x["cls"]: x["rows"][0]["steps"] for x in _premium_breakdown(a, 2026, 2)}
+    assert [(lbl, amt) for lbl, _f, amt in steps["overwork"]] == [
+        ("Κόστος υπερεργασίας", 6.00),
+        ("Προσαύξηση υπερεργασίας", 1.20),
+        ("Συνολικό κόστος υπερεργασίας", 7.20),
+        ("Προσαύξηση νύχτας", 1.80),
+        ("Σύνολο", 9.00),
+    ]
+    assert [(lbl, amt) for lbl, _f, amt in steps["normal"]] == [("Προσαύξηση νύχτας", 1.50)]

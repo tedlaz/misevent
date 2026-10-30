@@ -1879,6 +1879,57 @@ def payroll_analysis(y: int, m: int):
     return sorted(out, key=lambda r: r["name"])
 
 
+_CLASS_GEN = {
+    "extra": "πρόσθετης εργασίας",
+    "overwork": "υπερεργασίας",
+    "overtime": "υπερωρίας",
+    "illegal": "παράνομης υπερωρίας",
+}
+
+
+def _premium_steps(g, night, holiday, h, day_pct, plain, cls_prem, day_prem, amount):
+    """Ο υπολογισμός μιας γραμμής βήμα-βήμα για την απόδειξη: [(ετικέτα,
+    τύπος, ποσό)]. π.χ. υπερεργασία νύχτα 1 ω, ωρομίσθιο 6: κόστος 6,00 →
+    προσαύξηση 6 × 20% = 1,20 → συνολικό 7,20 → νύχτα 7,20 × 25% = 1,80 → 9,00."""
+    hrs = f"{h:g} ω"
+    day = " + ".join(
+        x for x, on in (("νύχτας", night), ("αργίας", holiday)) if on
+    )
+    if g["covered"]:
+        return [(
+            f"Προσαύξηση {day}",
+            f"ωρομίσθιο {money(g['hourly'])} × {day_pct}% × {hrs}"
+            " (η ώρα περιέχεται στον μισθό)",
+            amount,
+        )]
+    name = _CLASS_GEN.get(g["cls"], g["class_label"].lower())
+    subtotal = round(plain + cls_prem, 2)
+    steps = [(f"Κόστος {name}", f"ωρομίσθιο {money(g['hourly'])} × {hrs}", plain)]
+    if cls_prem:
+        steps += [
+            (
+                f"Προσαύξηση {name}",
+                f"ωρομίσθιο {money(g['hourly'])} × {g['class_pct']}% × {hrs}",
+                cls_prem,
+            ),
+            (
+                f"Συνολικό κόστος {name}",
+                f"{money(plain)} + {money(cls_prem)}",
+                subtotal,
+            ),
+        ]
+    if day_prem:
+        steps += [
+            (
+                f"Προσαύξηση {day}",
+                f"{money(subtotal)} × {day_pct}%",
+                day_prem,
+            ),
+            ("Σύνολο", f"{money(subtotal)} + {money(day_prem)}", amount),
+        ]
+    return steps
+
+
 def _premium_breakdown(a: dict, y: int, m: int) -> list:
     """Αναλύει τις προσαυξήσεις, ΟΜΑΔΟΠΟΙΗΜΕΝΕΣ ανά κλάση ωρομισθίου.
 
@@ -1913,15 +1964,29 @@ def _premium_breakdown(a: dict, y: int, m: int) -> list:
                 "rows": [],
                 "total": 0.0,
             }
+        # Διάσπαση ποσού: αξία ώρας (με εισφορές) + προσαύξηση κλάσης +
+        # προσαύξηση νύχτας/αργίας (επί του ωρομισθίου ΚΛΑΣΗΣ). Εντός
+        # ωραρίου η ώρα είναι ήδη στον μισθό — μένει μόνο νύχτα/αργία.
+        h = ln["hours"]
+        plain = 0.0 if g["covered"] else round(hourly * h, 2)
+        cls_prem = 0.0 if g["covered"] else round((g["class_rate"] - hourly) * h, 2)
+        day_pct = (night_pct if night else 0) + (holiday_pct if holiday else 0)
+        day_prem = round(ln["amount"] - plain - cls_prem, 2)
         g["rows"].append(
             {
                 "night": night,
                 "holiday": holiday,
                 "night_pct": night_pct if night else 0,
                 "holiday_pct": holiday_pct if holiday else 0,
-                "hours": ln["hours"],
+                "hours": h,
                 "mult": ln["mult"],
                 "amount": ln["amount"],
+                "plain": plain,
+                "class_premium": cls_prem,
+                "day_premium": day_prem,
+                "steps": _premium_steps(
+                    g, night, holiday, h, day_pct, plain, cls_prem, day_prem, ln["amount"]
+                ),
             }
         )
         g["total"] = round(g["total"] + ln["amount"], 2)

@@ -223,6 +223,14 @@
                     <td class="rt mono">×{{ '%g'|format(row.mult * 100) }}%</td>
                     <td class="rt mono amt">{{ row.amount|money }} €</td>
                   </tr>
+                  {% if row.steps %}
+                  <tr class="pd-steps"><td colspan="5">
+                    {% for label, formula, amt in row.steps %}
+                      <div><span>{{ label }}</span> = <span class="mono">{{ formula }}</span>
+                        = <b class="mono">{{ amt|money }} €</b></div>
+                    {% endfor %}
+                  </td></tr>
+                  {% endif %}
                 {% endfor %}
               </tbody>
             </table>

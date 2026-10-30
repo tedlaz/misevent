@@ -760,19 +760,19 @@ def _slip_page(pdf: ReportPDF, r: dict, year: int, month: int,
         pdf.cell(pdf.epw - 40, 3.6, tnote)
         pdf.set_y(y + 8.6)
         for row in g["rows"]:
-            if g["covered"]:
-                note = (f"    {num(row['hours'])} ω × {eur(g['hourly'])} × "
-                        f"{num(row['mult'] * 100)}% — μόνο η προσαύξηση "
-                        "(οι ώρες περιέχονται στον μισθό)")
-            else:
-                note = (f"    {num(row['hours'])} ω × {eur(g['hourly'])} × "
-                        f"{num(row['mult'])} (συνολικός συντελεστής "
-                        "κλάσης × νύχτας/αργίας)")
             _line(
                 pdf,
                 f"    {_hours(row['hours'])} — {_variant_label(row)}",
-                note, row["amount"], color=color, sign="+ ",
+                "", row["amount"], color=color, sign="+ ",
             )
+            # ο υπολογισμός βήμα-βήμα (queries._premium_steps)
+            for label, formula, amt in row.get("steps") or []:
+                if pdf.get_y() + 3.6 > pdf.page_break_trigger:
+                    pdf.add_page()
+                pdf.set_x(pdf.l_margin + 8)
+                pdf.font(6.8, color=MUTED)
+                pdf.cell(pdf.epw - 10, 3.6, f"{label} = {formula} = {eur(amt)}")
+                pdf.ln(3.6)
     if a.get("premium_total"):
         _subtotal(pdf, "Σύνολο πρόσθετων αμοιβών ωρών",
                   a["premium_total"], GREEN)

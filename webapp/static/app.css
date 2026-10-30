@@ -1129,6 +1129,9 @@ button.ghost.sm{padding:4px 10px;font-size:12px;border-radius:7px}
 .payslip .pd-tbl .mono{font-family:var(--mono);white-space:nowrap}
 .payslip .pd-tbl .oraro{display:flex;gap:4px;flex-wrap:wrap}
 .payslip .pd-tbl td.amt{font-weight:700;color:var(--c-prem)}
+.payslip .pd-tbl tr:has(+ tr.pd-steps) td{border-bottom:0}
+.payslip .pd-tbl tr.pd-steps td{padding:0 11px 8px 22px;font-size:11px;color:var(--muted);
+  line-height:1.6}
 
 .payslip .pd-total{display:flex;justify-content:space-between;align-items:center;
   padding:9px 13px;margin-top:2px;border-top:2px solid #E6E0FA;

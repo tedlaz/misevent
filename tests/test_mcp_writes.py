@@ -52,4 +52,9 @@ def test_mcp_writes_and_sync(fresh_system):
     assert not dup["ok"]
     assert not json.loads(mcp_server.record_leave(cid, eid, "xx", "2026-01-01",
                                                   "2026-01-01"))["ok"]
+    # Σενάρια αμοιβής υπάρχοντος εργαζομένου: ποσοστά/τέκνα από την απασχόληση
+    g = json.loads(mcp_server.gross_for_net(cid, 1000, employment_id=eid))
+    assert "questions" not in g and 1000 <= g["net"] <= 1000.01, g
+    a = json.loads(mcp_server.annual_cost(cid, employment_id=eid))
+    assert a["totals"]["cost"] > 0 and a["by_kind"], a
     sys.modules.pop("mcp_server", None)
