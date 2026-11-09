@@ -1130,6 +1130,8 @@ button.ghost.sm{padding:4px 10px;font-size:12px;border-radius:7px}
 .payslip .pd-tbl .oraro{display:flex;gap:4px;flex-wrap:wrap}
 .payslip .pd-tbl td.amt{font-weight:700;color:var(--c-prem)}
 .payslip .pd-tbl tr:has(+ tr.pd-steps) td{border-bottom:0}
+.payslip .pd-split{font-size:11px;color:var(--muted);margin-top:2px}
+.payslip .prem-det > .pd-split{text-align:right;padding:0 11px 8px}
 .payslip .pd-tbl tr.pd-steps td{padding:0 11px 8px 22px;font-size:11px;color:var(--muted);
   line-height:1.6}
 
@@ -2884,6 +2886,16 @@ nav.side .co{font-size:11.5px}
 .ecal-ev.absence{--c:#8B5CF6}
 .ecal-ev.absence.missing{--c:#DC2626}
 .ecal-ev.overtime{--c:var(--ecal-overtime)}
+/* ανά κλάση προσαύξησης· νύχτα/αργία = δεξιά λωρίδα */
+.ecal-ev.overtime.c-normal{--c:#64748B}
+.ecal-ev.overtime.c-extra{--c:#CA8A04}
+.ecal-ev.overtime.c-overtime{--c:#DC2626}
+.ecal-ev.overtime.c-illegal{--c:#7F1D1D}
+.ecal-ev.overtime.c-restday{--c:#6D28D9}
+.ecal-ev.rest{--c:var(--ecal-hol);font-weight:600}
+.ecal-ev.overtime.night{box-shadow:inset -3px 0 0 #4338CA}
+.ecal-ev.overtime.hol{box-shadow:inset -3px 0 0 var(--ecal-hol)}
+.ecal-ev.overtime.night.hol{box-shadow:inset -3px 0 0 var(--ecal-hol),inset -6px 0 0 #4338CA}
 .ecal-ev.leave{--c:var(--ecal-leave)}
 .ecal:has([data-k=plan]:not(:checked)) .ecal-ev.plan,
 .ecal:has([data-k=punch]:not(:checked)) .ecal-ev.punch,

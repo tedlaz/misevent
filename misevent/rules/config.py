@@ -1049,6 +1049,10 @@ class WorkHourRules:
     overwork_premium: float = 0.20  # υπερεργασία (40 → 45/48 ώρες/εβδομάδα)
     overtime_premium: float = 0.40  # νόμιμη υπερωρία
     illegal_premium: float = 0.80  # παράνομη υπερωρία
+    # Εργασία ΠΕΡΑ από τις ημέρες του συστήματος (6η ημέρα πενθημέρου, 7η
+    # εξαημέρου): ολόκληρη η ώρα + προσαύξηση, ΕΚΤΟΣ εβδομαδιαίου μετρητή.
+    # 40% = ΚΑΕΔ 182Β/182Γ (ν. 5053/2023)· 0% = απλό ωρομίσθιο (ΑΚ 904).
+    rest_day_premium: float = 0.40
     weekly_legal_5: int = 45  # νόμιμο εβδομαδιαίο ωράριο πενθημέρου
     weekly_legal_6: int = 48  # νόμιμο εβδομαδιαίο ωράριο εξαημέρου
     daily_legal_5: int = 9  # νόμιμο ημερήσιο ωράριο πενθημέρου
@@ -1294,6 +1298,7 @@ FAMILIES: dict[str, ParamFamily] = {f.key: f for f in [
             _pf("overwork_premium", "Υπερεργασία (%)", "premium"),
             _pf("overtime_premium", "Νόμιμη υπερωρία (%)", "premium"),
             _pf("illegal_premium", "Παράνομη υπερωρία (%)", "premium"),
+            _pf("rest_day_premium", "Εργασία 6ης ημέρας / ημέρας ανάπαυσης (%)", "premium"),
             _pf("weekly_legal_5", "Εβδομαδιαίο νόμιμο πενθημέρου (ώρες)", "int"),
             _pf("weekly_legal_6", "Εβδομαδιαίο νόμιμο εξαημέρου (ώρες)", "int"),
             _pf("daily_legal_5", "Ημερήσιο νόμιμο πενθημέρου (ώρες)", "int"),

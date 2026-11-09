@@ -59,6 +59,7 @@ CLASS_COLORS = {  # χρωματική ταυτότητα ανά κλάση ωρ
     "overwork": (176, 98, 22),
     "overtime": (154, 74, 30),
     "illegal": ROSE,
+    "restday": (109, 40, 217),
 }
 
 
@@ -454,22 +455,32 @@ def payroll_statement_pdf(year: int, month: int) -> bytes:
 
 # ---------------------------------------------------- Αποδείξεις αποδοχών
 def _line(pdf, label, note, amount, color=INK, bold=False, sign=""):
-    """Γραμμή ποσού: ετικέτα αριστερά (+ επεξήγηση από κάτω), ποσό δεξιά."""
+    """Γραμμή ποσού: ετικέτα αριστερά, ποσό δεξιά. Η επεξήγηση μπαίνει
+    ΔΙΠΛΑ στην ετικέτα όταν χωρά πριν τη στήλη ποσών — αλλιώς από κάτω."""
+    width = pdf.epw - 40
+    pdf.font(8.4, bold=bold)
+    label_w = pdf.get_string_width(label) + 3
+    pdf.font(6.8)
+    inline = bool(note) and label_w + pdf.get_string_width(note) <= width
     y = pdf.get_y()
-    h = 5.2 if not note else 8.6
+    h = 8.6 if note and not inline else 5.2
     if y + h > pdf.page_break_trigger:
         pdf.add_page()
         y = pdf.get_y()
     pdf.set_xy(pdf.l_margin + 2, y)
     pdf.font(8.4, bold=bold)
-    pdf.cell(pdf.epw - 40, 5.2, label)
+    pdf.cell(width, 5.2, label)
     pdf.set_xy(pdf.w - pdf.r_margin - 38, y)
     pdf.font(8.8, bold=True, color=color)
     pdf.cell(36, 5.2, f"{sign}{eur(amount)}", align="R")
     if note:
-        pdf.set_xy(pdf.l_margin + 2, y + 4.6)
         pdf.font(6.8, color=MUTED)
-        pdf.cell(pdf.epw - 40, 3.6, note)
+        if inline:
+            pdf.set_xy(pdf.l_margin + 2 + label_w, y)
+            pdf.cell(width - label_w, 5.2, note)
+        else:
+            pdf.set_xy(pdf.l_margin + 2, y + 4.6)
+            pdf.cell(width, 3.6, note)
     pdf.set_y(y + h)
 
 
@@ -629,14 +640,22 @@ def _efka_deduction_lines(pdf: ReportPDF, a: dict):
     for i, d in enumerate(a["efka_detail"]):
         kpk = f" · ΚΠΚ {d['kpk']}" if d.get("kpk") else ""
         _line(pdf, f"Εισφορές — {d['label']}{kpk}",
-              f"{num(round(d['employee'] * 100, 2))}% επί των ασφαλιστέων "
-              "αποδοχών (μικτά έως το πλαφόν ΕΦΚΑ)",
+              f"{eur(d['insurable'])} × {num(round(d['employee'] * 100, 2))}%",
               round(d["amount"] + (sub if i == 0 else 0), 2),
               color=ROSE, sign="− ")
     if sub:
         _line(pdf, labels.SUBSIDY_LABELS[a.get("subsidy_code") or "102"],
-              "μέρος της εισφοράς που ΔΕΝ παρακρατείται — καλύπτεται από "
-              "την επιδότηση", sub, color=GREEN, sign="+ ")
+              a.get("subsidy_formula") or "μέρος της εισφοράς που ΔΕΝ "
+              "παρακρατείται — καλύπτεται από την επιδότηση",
+              sub, color=GREEN, sign="+ ")
+
+
+def _taxable_lines(pdf: ReportPDF, a: dict):
+    """Σύνολο εισφορών και αμέσως μετά το φορολογητέο, πριν τον ΦΜΥ."""
+    _subtotal(pdf, "Σύνολο εισφορών", a["efka_employee"], ROSE)
+    _line(pdf, "Φορολογητέο",
+          f"μικτά {eur(a['gross'])} − εισφορές {eur(a['efka_employee'])}",
+          a["taxable"], bold=True)
 
 
 def _employer_cost_lines(pdf: ReportPDF, a: dict, note: str):
@@ -743,11 +762,9 @@ def _slip_page(pdf: ReportPDF, r: dict, year: int, month: int,
             title = f"{g['class_label']} — προσαύξηση νύχτας/αργίας"
             tnote = ("ώρες εντός ωραρίου: καλύπτονται από τον μισθό — "
                      "καταβάλλεται μόνο η προσαύξηση")
-        else:
+        else:  # ο υπολογισμός φαίνεται στα βήματα κάθε γραμμής
             title = (f"{g['class_label']} (+{g['class_pct']}%)")
-            tnote = (f"ωρομίσθιο κλάσης {eur(g['class_rate'])} = "
-                     f"{eur(g['hourly'])} × {num(1 + g['class_pct'] / 100)} — "
-                     "πληρώνεται ολόκληρη, πέραν του ωραρίου")
+            tnote = ""
         y = pdf.get_y()
         if y + 9 > pdf.page_break_trigger:
             pdf.add_page()
@@ -755,10 +772,11 @@ def _slip_page(pdf: ReportPDF, r: dict, year: int, month: int,
         pdf.set_xy(pdf.l_margin + 2, y)
         pdf.font(8.2, bold=True, color=color)
         pdf.cell(pdf.epw - 40, 4.8, title)
-        pdf.set_xy(pdf.l_margin + 2, y + 4.4)
-        pdf.font(6.8, color=MUTED)
-        pdf.cell(pdf.epw - 40, 3.6, tnote)
-        pdf.set_y(y + 8.6)
+        if tnote:
+            pdf.set_xy(pdf.l_margin + 2, y + 4.4)
+            pdf.font(6.8, color=MUTED)
+            pdf.cell(pdf.epw - 40, 3.6, tnote)
+        pdf.set_y(y + (8.6 if tnote else 5.2))
         for row in g["rows"]:
             _line(
                 pdf,
@@ -766,16 +784,27 @@ def _slip_page(pdf: ReportPDF, r: dict, year: int, month: int,
                 "", row["amount"], color=color, sign="+ ",
             )
             # ο υπολογισμός βήμα-βήμα (queries._premium_steps)
-            for label, formula, amt in row.get("steps") or []:
+            texts = [f"{lbl} = {f} = {eur(amt)}" for lbl, f, amt in row.get("steps") or []]
+            if "insured" in row:
+                texts.append(f"Με εισφορές {eur(row['insured'])} · "
+                             f"Χωρίς εισφορές {eur(row['exempt'])}")
+            if texts:  # συνεχόμενο κείμενο — αναδιπλώνεται μόνο όταν δεν χωρά
                 if pdf.get_y() + 3.6 > pdf.page_break_trigger:
                     pdf.add_page()
                 pdf.set_x(pdf.l_margin + 8)
                 pdf.font(6.8, color=MUTED)
-                pdf.cell(pdf.epw - 10, 3.6, f"{label} = {formula} = {eur(amt)}")
-                pdf.ln(3.6)
+                # πλάτος ως τη στήλη των ποσών (38 mm δεξιά) — όχι από κάτω τους
+                pdf.multi_cell(pdf.epw - 48, 3.4, " · ".join(texts))
     if a.get("premium_total"):
         _subtotal(pdf, "Σύνολο πρόσθετων αμοιβών ωρών",
                   a["premium_total"], GREEN)
+        exempt = a.get("premium_exempt") or 0.0
+        pdf.set_x(pdf.l_margin + 2)
+        pdf.font(6.8, color=MUTED)
+        pdf.cell(pdf.epw - 40, 3.6,
+                 f"εκ των οποίων με εισφορές {eur(a['premium_total'] - exempt)} · "
+                 f"χωρίς εισφορές {eur(exempt)}")
+        pdf.ln(4.2)
 
     # -- ΑΣΘΕΝΕΙΑ ----------------------------------------------------------
     if a.get("sick_deduction"):
@@ -802,6 +831,7 @@ def _slip_page(pdf: ReportPDF, r: dict, year: int, month: int,
     # -- ΚΡΑΤΗΣΕΙΣ ---------------------------------------------------------
     pdf.section("Κρατήσεις εργαζομένου", ROSE, "minus")
     _efka_deduction_lines(pdf, a)
+    _taxable_lines(pdf, a)
     _line(pdf, "Φόρος μισθωτών υπηρεσιών (ΦΜΥ)",
           f"επί φορολογητέου {eur(a['taxable'])} — αναγωγή σε ετήσιο ×14, "
           "κλίμακα & μείωση τέκνων, διά 14",
@@ -1131,6 +1161,7 @@ def _gift_slip_page(pdf: ReportPDF, r: dict, kind: str, year: int,
     # -- ΚΡΑΤΗΣΕΙΣ ---------------------------------------------------------
     pdf.section("Κρατήσεις εργαζομένου", ROSE, "minus")
     _efka_deduction_lines(pdf, a)
+    _taxable_lines(pdf, a)
     _line(pdf, "Φόρος μισθωτών υπηρεσιών (ΦΜΥ)",
           f"επί φορολογητέου {eur(a['taxable'])} — μέσος μηνιαίος "
           "συντελεστής (φορολογείται μαζί με τις λοιπές αποδοχές)",

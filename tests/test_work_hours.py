@@ -10,7 +10,7 @@ Tests κατάταξης ωρών εργασίας (work_hours.py — κανόν
 Εκτέλεση: python test_work_hours.py
 """
 
-from datetime import date
+from datetime import date, timedelta
 from types import SimpleNamespace
 
 import _bootstrap  # noqa: F401  # ρίζα project στο sys.path + cwd
@@ -63,12 +63,12 @@ def test_night_hours():
 
 
 def test_sunday_is_holiday():
-    """Κυριακή: προσαύξηση 75%, εκτός υπερεργασίας (normal rate)."""
+    """Κυριακή πριν τις 40ω της εβδομάδας: εντός ωραρίου, μόνο 75%."""
     buckets = wh.classify_shifts({SUN: ["10:00-14:00"]}, 40, 5)
     fields = wh.sheet_fields_from_buckets(buckets)
     assert fields["normal_h"] == 4.0
     assert supplement(buckets) == 30.0  # 4ω x 75% x 10€
-    print("OK Κυριακή: 75%, χωρίς υπερεργασία")
+    print("OK Κυριακή: 75%")
 
 
 def test_public_holiday():
@@ -166,15 +166,33 @@ def test_weekly_overtime_45_plus():
     print("OK εβδομαδιαία κλιμάκωση: normal -> υπερεργασία -> υπερωρία")
 
 
-def test_saturday_excluded_from_overwork():
-    """Πενθήμερο που δούλεψε και Σάββατο: οι ώρες Σαββάτου ΔΕΝ μετρούν
-    στην υπερεργασία (parousies.md §Υπερεργασία)."""
-    shifts = {d: ["09:00-17:00"] for d in (MON, TUE, WED, THU, FRI)}  # 40ω
-    shifts[SAT] = ["09:00-13:00"]  # +4ω Σάββατο
+def test_sixth_day_is_rest_day_work():
+    """Σεπτ. 2026, πενθήμερο 40ω. Εβδ. 1: Δευ–Πεμ 8ω + Παρ 15:00-00:00 (9η
+    ώρα = ημερήσια υπερεργασία), Σάββατο 19-23 = 6η ημέρα. Εβδ. 2: Δευ–Παρ,
+    Κυριακή 19-23 = 6η ημέρα ΚΑΙ αργία. Οι ώρες 6ης ημέρας ΔΕΝ είναι
+    υπερεργασία (ΚΑΕΔ 182Β/182Γ, νομολογία) — `restday`, ολόκληρη ώρα +40%."""
+    d = date(2026, 8, 31)  # Δευτέρα
+    days = [d + timedelta(days=i) for i in range(14)]
+    shifts = {x: ["09:00-17:00"] for x in days[:4] + days[7:12]}
+    shifts[days[4]] = ["15:00-00:00"]
+    shifts[days[5]] = ["19:00-23:00"]  # Σάββατο
+    shifts[days[13]] = ["19:00-23:00"]  # Κυριακή
     buckets = wh.classify_shifts(shifts, 40, 5)
-    # Χωρίς την εξαίρεση, το Σάββατο θα ήταν υπερεργασία (40->44)
-    assert by_rate(buckets) == {"normal": 44.0}
-    print("OK το Σάββατο πενθημέρου δεν μετρά στην υπερεργασία")
+    assert by_rate(buckets) == {"normal": 80.0, "overwork": 1.0, "restday": 8.0}
+    assert {b.day for b in buckets if b.rate == "restday"} == {days[5], days[13]}
+    assert all(b.holiday for b in buckets if b.day == days[13])
+    # ωρομίσθιο 10: Σάββατο 3ω ημέρα 14 + 1ω νύχτα 17,5· Κυριακή 3ω αργία
+    # 10×1,4×1,75 = 24,5 + 1ω νύχτα-αργία 10×1,4×2 = 28 — συν η 9η ώρα Παρ
+    # (νύχτα υπερεργασία 10×1,2×1,25 = 15) και η 22-23 Παρ (νύχτα εντός 2,5)
+    assert supplement(buckets) == round(3 * 14 + 17.5 + 3 * 24.5 + 28 + 15 + 2.5, 2)
+
+
+def test_rest_day_over_eight_hours_is_overtime():
+    """6η ημέρα 10ω: οι 8 πρώτες `restday`, οι 2 επόμενες υπερωρία."""
+    shifts = {d: ["09:00-17:00"] for d in (MON, TUE, WED, THU, FRI)}
+    shifts[SAT] = ["08:00-18:00"]
+    assert by_rate(wh.classify_shifts(shifts, 40, 5)) == {
+        "normal": 40.0, "restday": 8.0, "overtime": 2.0}
 
 
 def test_night_and_holiday_stack():

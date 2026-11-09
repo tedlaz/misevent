@@ -245,6 +245,21 @@ def gross_for_net(company_id: str, net: float, employment_id: str = "",
         if out["gross"] < floor:
             who["assumptions"].append(
                 f"⚠️ Κάτω από τον κατώτατο μισθό ({floor:.2f} €) για πλήρη απασχόληση")
+        # Επιδότηση εργατικής εισφοράς (ΑΠΔ 102): μόνο με μισθό ΑΚΡΙΒΩΣ στο
+        # κατώτατο όριο. Πάνω από αυτό χάνεται — το κόστος μένει στον εργοδότη.
+        if emp := who["emp"]:
+            floor = config.minimum_floor_value(
+                "monthly", emp.weekly_hours, end, emp.total_service_years(end),
+                emp.married, emp.extra_allowances_pct)
+            lost = svc.labor_subsidy_full(emp, floor, emp.weekly_hours, end)
+        else:
+            lost = pe.labor_subsidy_full(floor, floor, 40.0, end)
+        if lost and out["gross"] > floor:
+            out["labor_subsidy_lost"] = round(lost, 2)
+            who["assumptions"].append(
+                f"ℹ️ Μισθός πάνω από τον κατώτατο ({floor:.2f} €): χάνεται η επιδότηση "
+                f"εργατικής εισφοράς του εργαζομένου ({lost:.2f} €/μήνα, ΑΠΔ 102). "
+                "Για τα ίδια καθαρά ο εργοδότης επιβαρύνεται και με αυτό το ποσό")
         return {**out, "period": f"{end.month}/{end.year}",
                 "assumptions": who["assumptions"],
                 "next": "Ετήσιο κόστος: annual_cost με αυτό το monthly_gross"}

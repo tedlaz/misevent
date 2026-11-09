@@ -226,9 +226,10 @@
                   {% if row.steps %}
                   <tr class="pd-steps"><td colspan="5">
                     {% for label, formula, amt in row.steps %}
-                      <div><span>{{ label }}</span> = <span class="mono">{{ formula }}</span>
-                        = <b class="mono">{{ amt|money }} €</b></div>
+                      {{ label }} = {{ formula }} = <b>{{ amt|money }} €</b> ·
                     {% endfor %}
+                    Με εισφορές <b>{{ row.insured|money }} €</b>
+                    · Χωρίς εισφορές <b>{{ row.exempt|money }} €</b>
                   </td></tr>
                   {% endif %}
                 {% endfor %}
@@ -241,6 +242,10 @@
         <span>Σύνολο προσαυξήσεων ωρών</span>
         <b>{{ a.premium_total|money }} €</b>
       </div>
+      <div class="pd-split">εκ των οποίων με εισφορές
+        <b class="mono">{{ (a.premium_total - (a.premium_exempt or 0))|money }} €</b>
+        · χωρίς εισφορές <b class="mono">{{ (a.premium_exempt or 0)|money }} €</b>
+        {% if a.premium_exempt %}(Εγκ. e-ΕΦΚΑ 21/2025){% endif %}</div>
     </details>
     {% endif %}
 
@@ -262,9 +267,14 @@
         {% if a.subsidy_employee %}
         <tr class="l-subsidy">
           <td class="lt"><span class="dot"></span>+ {{ SUBSIDY_LABELS[a.subsidy_code or '102'] }}
-            <small>δεν παρακρατείται — παρακρατούνται
-              {{ a.efka_employee|money }} €</small></td>
+            <small>{{ a.subsidy_formula or 'δεν παρακρατείται' }}</small></td>
           <td class="lv">+ {{ a.subsidy_employee|money }} €</td>
+        </tr>
+        <tr class="l-efka">
+          <td class="lt"><span class="dot"></span>= Σύνολο εισφορών
+            <small>{{ (a.efka_employee + a.subsidy_employee)|money }} −
+              {{ a.subsidy_employee|money }} = {{ a.efka_employee|money }} €</small></td>
+          <td class="lv sub">− {{ a.efka_employee|money }} €</td>
         </tr>
         {% endif %}
         <tr class="l-taxable">

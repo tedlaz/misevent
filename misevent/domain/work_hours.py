@@ -17,15 +17,20 @@
                  του νόμιμου ημερήσιου 9/8 ωρών) — 40%
        illegal   παράνομη υπερωρία (πάνω από 3 ώρες/ημέρα ή 150 ώρες/έτος
                  υπερωρίας) — 80%
+       restday   εργασία σε ημέρα ΠΕΡΑ από τις ημέρες του συστήματος (6η
+                 εργάσιμη ημέρα πενθημέρου, 7η εξαημέρου — π.χ. Σάββατο ή
+                 Κυριακή μετά από Δευ–Παρ) — 40% (`rest_day_premium`, ΚΑΕΔ
+                 182Β/182Γ). Ολόκληρη η ώρα, ΕΚΤΟΣ εβδομαδιαίου μετρητή
+                 (νομολογία: δεν είναι υπερεργασία)· πάνω από 8ω εκείνη την
+                 ημέρα = υπερωρία. Την Κυριακή + αργία 75%.
 
 Οι προσαυξήσεις των αξόνων ΑΘΡΟΙΖΟΝΤΑΙ: π.χ. υπερεργασία νύχτα σε αργία =
 20% + 25% + 75%. Η αναφορά δίνει το ΕΠΙΠΛΕΟΝ κόστος (προσαύξηση) πάνω από
 το κανονικό ωρομίσθιο, που ήδη καλύπτεται από τον μισθό.
 
 Απλοποιήσεις (σημειωμένες για μελλοντική επέκταση):
-- Ώρες την 6η ημέρα πενθημέρου (Σάββατο) ή Κυριακή ΔΕΝ μετρούν στην
-  υπερεργασία (parousies.md §Υπερεργασία)· κατατάσσονται `normal` (με την
-  προσαύξηση αργίας όπου ισχύει) και δεν προωθούν τον εβδομαδιαίο μετρητή.
+- «6η ημέρα» = η 6η ημέρα με εργασία μέσα στην εβδομάδα (Δευ–Κυρ), όποια κι
+  αν είναι — όχι συγκεκριμένη ημερομηνία του προγράμματος.
 - Η νομιμότητα υπερωρίας κρίνεται ΜΟΝΟ από τα όρια (3 ώρες/ημέρα,
   150/έτος) — δεν ελέγχεται αναγγελία Ε8 στο ΕΡΓΑΝΗ.
 - Βάρδια που περνά τα μεσάνυχτα ανήκει στην εργάσιμη ημέρα που ΑΡΧΙΣΕ
@@ -49,6 +54,7 @@ RATE_LABELS = {
     "overwork": "Υπερεργασία",
     "overtime": "Υπερωρία",
     "illegal": "Παράνομη υπερωρία",
+    "restday": "Ημέρα ανάπαυσης",
 }
 
 
@@ -118,16 +124,14 @@ def classify_shifts(
         night_from, night_to = r.night_start * 60, r.night_end * 60
         weekly_worked = 0  # λεπτά που μετρούν στον εβδομαδιαίο μετρητή
 
-        for d in weeks[monday]:
+        for n, d in enumerate(weeks[monday], 1):
             if year_seen != d.year:  # νέο έτος: μηδενίζει το όριο των 150 ωρών
                 year_seen, overtime_year = d.year, 0
             daily_worked = 0
             overtime_day = 0
-            # Ώρες 6ης ημέρας πενθημέρου (Σάββατο) ή Κυριακής: εκτός
-            # υπερεργασίας — δεν προωθούν τον εβδομαδιαίο μετρητή.
-            counts_weekly = not (
-                d.weekday() == 6 or (weekly_system == 5 and d.weekday() == 5)
-            )
+            # Ημέρα ΠΕΡΑ από τις ημέρες του συστήματος (6η πενθημέρου, 7η
+            # εξαημέρου): εκτός εβδομαδιαίου μετρητή — δεν είναι υπερεργασία.
+            rest = n > weekly_system
             for shift in shifts_by_day[d]:
                 start, end = _parse_shift(shift)
                 for m in range(start, end):
@@ -141,9 +145,9 @@ def classify_shifts(
                     # εβδομαδιαίο μετρητή, αλλιώς μετρά ΔΥΟ φορές (10ωρη ημέρα
                     # σε εβδομάδα 42ω = 2 ώρες υπέρβασης, όχι 4 — parousies.md).
                     by_day = daily_worked >= overwork_day
-                    if daily_worked >= legal_day or (
-                        counts_weekly and weekly_worked >= legal_wk
-                    ):
+                    if rest and not by_day:
+                        rate = "restday"  # έως 8ω· πάνω από αυτές υπερωρία
+                    elif daily_worked >= legal_day or weekly_worked >= legal_wk or rest:
                         # Υπερωρία: νόμιμη έως 3 ώρες/ημέρα ΚΑΙ 150 ώρες/έτος
                         if (
                             overtime_day < r.overtime_day_cap * 60
@@ -158,11 +162,8 @@ def classify_shifts(
                         # Ημερήσια υπερεργασία: ώρες πάνω από 8/ημέρα και έως το
                         # ημερήσιο νόμιμο (πενθήμερο: η 9η ώρα· εξαήμερο: κενή
                         # ζώνη, αφού 8=8 -> η 9η ώρα πιάστηκε ήδη ως υπερωρία).
-                        # Ισχύει ΣΕ ΚΑΘΕ ΠΕΡΙΠΤΩΣΗ (και σε ημέρες εκτός του
-                        # εβδομαδιαίου μετρητή) και κυριαρχεί του εβδομαδιαίου.
+                        # Κυριαρχεί του εβδομαδιαίου κανόνα.
                         rate = "overwork"
-                    elif not counts_weekly:
-                        rate = "normal"
                     elif weekly_worked >= 40 * 60:
                         rate = "overwork"
                     elif weekly_worked >= contract_wk:
@@ -171,7 +172,7 @@ def classify_shifts(
                         rate = "normal"
 
                     daily_worked += 1
-                    if counts_weekly and not by_day:
+                    if not (by_day or rest):
                         weekly_worked += 1
                     key = (d, rate, night, holiday)
                     out[key] = out.get(key, 0) + 1
@@ -201,8 +202,8 @@ def hourly_rate(
 # Οι συνδυασμοί ΔΕΝ είναι αθροιστικοί μεταξύ των αξόνων: το ωρομίσθιο της
 # κλάσης πολλαπλασιάζεται με (1 + νύχτα 25% + αργία 75%) — π.χ. υπερεργασία
 # νύχτα = 1.20 x 1.25 = 1.50, ΟΧΙ 1 + 0.20 + 0.25. Γι' αυτό το φύλλο κρατά
-# τον ΠΛΗΡΗ πίνακα 5 x 2 x 2 = 20 πεδίων, όχι σύνολα ανά άξονα.
-RATE_CLASSES = ("normal", "extra", "overwork", "overtime", "illegal")
+# τον ΠΛΗΡΗ πίνακα 6 x 2 x 2 = 24 πεδίων, όχι σύνολα ανά άξονα.
+RATE_CLASSES = ("normal", "extra", "overwork", "overtime", "illegal", "restday")
 
 # κατάληξη πεδίου: (νύχτα;, αργία;) — "" = ημέρα/εργάσιμη
 VARIANTS = {
@@ -224,7 +225,7 @@ SHEET_HOUR_FIELDS = tuple(f"{cls}{v}" for cls in RATE_CLASSES for v in VARIANTS)
 
 
 def sheet_fields_from_buckets(buckets: list[HourBucket]) -> dict:
-    """Συμπτύσσει τα buckets της κατάταξης στα 20 πεδία του φύλλου (ώρες)."""
+    """Συμπτύσσει τα buckets της κατάταξης στα 24 πεδία του φύλλου (ώρες)."""
     out = dict.fromkeys(SHEET_HOUR_FIELDS, 0.0)
     for b in buckets:
         v = {
@@ -244,6 +245,7 @@ def _class_pct(rules: WorkHourRules) -> dict:
         "overwork": rules.overwork_premium,
         "overtime": rules.overtime_premium,
         "illegal": rules.illegal_premium,
+        "restday": rules.rest_day_premium,
     }
 
 
@@ -274,7 +276,7 @@ def class_rate(cls: str, hourly: float, rules: WorkHourRules) -> float:
 
 
 def pay_supplement(rate: float, hours: dict, rules: WorkHourRules) -> dict:
-    """Γραμμές επιπλέον αμοιβών από τα 20 πεδία ωρών του φύλλου.
+    """Γραμμές επιπλέον αμοιβών από τα 24 πεδία ωρών του φύλλου.
 
     Επιστρέφει {"lines": {field: {label, hours, mult, amount, premium}},
     "total", "premium"} — οι γραμμές της απόδειξης αποδοχών. Ποσό = κανονικό

@@ -83,3 +83,18 @@ def test_breakdown_splits_hour_value_class_and_night():
         ("Σύνολο", 9.00),
     ]
     assert [(lbl, amt) for lbl, _f, amt in steps["normal"]] == [("Προσαύξηση νύχτας", 1.50)]
+
+
+def test_breakdown_splits_insured_and_exempt():
+    """Γραμμή υπερεργασίας νύχτα 9,00: με εισφορές η αξία ώρας 6,00, χωρίς
+    εισφορές οι προσαυξήσεις 3,00 — μόνο όταν ισχύει η απαλλαγή."""
+    from misevent.domain.work_hours import pay_supplement
+    from misevent.rules import config
+    from webapp.queries import _premium_breakdown
+
+    sup = pay_supplement(6.0, {"overwork_n": 1}, config.work_hour_rules_for(date(2026, 2, 1)))
+    a = {"premium_lines": sup["lines"], "hourly_rate": 6.0}
+    row = _premium_breakdown({**a, "premium_exempt": 3.0}, 2026, 2)[0]["rows"][0]
+    assert (row["insured"], row["exempt"]) == (6.00, 3.00)
+    row = _premium_breakdown(a, 2026, 2)[0]["rows"][0]  # μερική: όλο με εισφορές
+    assert (row["insured"], row["exempt"]) == (9.00, 0.0)

@@ -154,7 +154,7 @@ class SheetsMixin:
             out[emp.employment_id] = {
                 "name": emp.full_name,
                 "hourly_rate": rate,
-                # τα 20 πεδία (κλάση x ημέρα/νύχτα x εργάσιμη/αργία), σε ώρες
+                # τα 24 πεδία (κλάση x ημέρα/νύχτα x εργάσιμη/αργία), σε ώρες
                 **fields,
                 "supplement": work_hours.pay_supplement(rate, fields, rules)["total"],
             }

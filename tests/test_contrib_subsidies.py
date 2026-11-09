@@ -148,8 +148,10 @@ def test_payslip_itemizes_subsidies(monkeypatch):
     monkeypatch.setattr(pr, "_line", lambda _pdf, label, _note, amount, sign="",
                         **_k: lines.append((label, sign, amount)))
     monkeypatch.setattr(pr, "_subtotal", lambda *_a: None)
-    a = {"efka_detail": [{"label": "ΕΦΚΑ", "employee": 0.1337, "amount": 150.0},
-                         {"label": "ΤΕΚΑ", "employee": 0.0, "amount": 10.0}],
+    a = {"efka_detail": [{"label": "ΕΦΚΑ", "employee": 0.1337, "amount": 150.0,
+                          "insurable": 1500.0},
+                         {"label": "ΤΕΚΑ", "employee": 0.0, "amount": 10.0,
+                          "insurable": 1500.0}],
          "subsidy_employee": 50.0, "subsidy_code": "103",
          "gross": 1500.0, "efka_employer": 226.85, "subsidy_employer": 99.9}
     pr._efka_deduction_lines(None, a)
@@ -161,3 +163,18 @@ def test_payslip_itemizes_subsidies(monkeypatch):
         ("Ασφαλιστικές εισφορές εργοδότη", "+ ", 326.75),
         (pr.labels.SUBSIDY_LABELS["107"], "− ", 99.9),
     ]
+
+
+def test_subsidy_formula_on_payslip():
+    """«Επιδότηση εργατικής εισφοράς»: κατώτατος × ποσοστό (+ αναλογία)."""
+    from misevent.rules import config
+    from webapp.queries import _subsidy_formula
+
+    on = date(2026, 3, 31)
+    base = config.minimum_wage_for(on).monthly
+    full = round(base * config.labor_subsidy_for(on).pct, 2)
+    a = {"subsidy_employee": full, "subsidy_code": "102"}
+    assert _subsidy_formula(a, on).startswith(f"{base:.2f}".replace(".", ",") + " € × 6,67% = ")
+    a["subsidy_employee"] = round(full / 2, 2)
+    assert "αναλογία 50%" in _subsidy_formula(a, on)
+    assert _subsidy_formula({"subsidy_employee": 0}, on) == ""

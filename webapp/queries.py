@@ -1266,6 +1266,7 @@ def gift_analysis(kind: str, year: int, month: int | None = None):
         )
         a["kind"] = kind
         a["insurable"] = round(g.gross, 2)
+        a["subsidy_formula"] = _subsidy_formula(a, ref)
         a["efka_cap"] = config.efka_rates_for(ref).monthly_cap
         a["capped"] = False  # τα Δώρα δεν πλαφονάρονται
         a["tax_detail"] = _tax_breakdown(
@@ -1530,6 +1531,34 @@ def payments_by_period():
     }
     totals["total"] = round(sum(r["total"] for r in rows), 2)
     return rows, totals
+
+
+def _pct(x: float) -> str:
+    """0.0667 -> «6,67%»."""
+    return f"{x * 100:.2f}".rstrip("0").rstrip(".").replace(".", ",") + "%"
+
+
+def _subsidy_formula(a: dict, on: date) -> str:
+    """Πώς προέκυψε η επιδότηση εισφοράς εργαζομένου, για την απόδειξη:
+    102 = ποσοστό × ΣΚΕΤΟΣ κατώτατος (`pe.labor_subsidy_full`), 103 =
+    ποσοστό μητέρας × ασφαλιστέες. Όταν το ποσό διαφέρει από το πλήρες
+    (ημέρες ÷25, κλάσμα Δώρου, όριο εισφοράς), φαίνεται και η αναλογία."""
+    sub = a.get("subsidy_employee") or 0.0
+    if not sub:
+        return ""
+    try:
+        if a.get("subsidy_code") == "103":
+            base, pct = a.get("insurable") or 0.0, config.mother_subsidy_for(on).pct
+        else:
+            base = config.minimum_wage_for(on).monthly
+            pct = config.labor_subsidy_for(on).pct
+    except ValueError:  # κατάργηση κανόνα μετά τον υπολογισμό
+        return ""
+    s = f"{money(base)} € × {_pct(pct)}"
+    full = base * pct
+    if full and abs(round(full, 2) - sub) >= 0.01:
+        s += f" × αναλογία {_pct(sub / full)}"
+    return f"{s} = {money(sub)} €"
 
 
 def _efka_breakdown(emp, gross, efka_employee, on_date, efka_employer=None,
@@ -1868,6 +1897,7 @@ def payroll_analysis(y: int, m: int):
             min(contrib_gross, config.efka_rates_for(on).monthly_cap), 2
         )
         a["efka_cap"] = config.efka_rates_for(on).monthly_cap
+        a["subsidy_formula"] = _subsidy_formula(a, on)
         out.append(
             {
                 "eid": p.employee_id,
@@ -1884,6 +1914,7 @@ _CLASS_GEN = {
     "overwork": "υπερεργασίας",
     "overtime": "υπερωρίας",
     "illegal": "παράνομης υπερωρίας",
+    "restday": "ημέρας ανάπαυσης",
 }
 
 
@@ -1946,6 +1977,11 @@ def _premium_breakdown(a: dict, y: int, m: int) -> list:
     rules = config.work_hour_rules_for(date(y, m, 1))
     night_pct = round(rules.night_premium * 100)
     holiday_pct = round(rules.holiday_premium * 100)
+    # Μερίδιο απαλλαγής εισφορών (Εγκ. e-ΕΦΚΑ 21/2025): το αποθηκευμένο
+    # `premium_exempt` επί το σύνολο των προσαυξήσεων — 0 για μερική
+    # απασχόληση ή πριν τις 11/2025 (βλ. PayrollService.premium_exempt).
+    prem_total = sum(ln.get("premium", 0.0) for ln in lines.values())
+    share = (a.get("premium_exempt") or 0.0) / prem_total if prem_total else 0.0
     groups: dict[str, dict] = {}
     for f, ln in lines.items():
         cls = ln["cls"]
@@ -1972,6 +2008,7 @@ def _premium_breakdown(a: dict, y: int, m: int) -> list:
         cls_prem = 0.0 if g["covered"] else round((g["class_rate"] - hourly) * h, 2)
         day_pct = (night_pct if night else 0) + (holiday_pct if holiday else 0)
         day_prem = round(ln["amount"] - plain - cls_prem, 2)
+        exempt = round(ln.get("premium", 0.0) * share, 2)
         g["rows"].append(
             {
                 "night": night,
@@ -1987,6 +2024,8 @@ def _premium_breakdown(a: dict, y: int, m: int) -> list:
                 "steps": _premium_steps(
                     g, night, holiday, h, day_pct, plain, cls_prem, day_prem, ln["amount"]
                 ),
+                "insured": round(ln["amount"] - exempt, 2),  # με εισφορές
+                "exempt": exempt,  # χωρίς εισφορές
             }
         )
         g["total"] = round(g["total"] + ln["amount"], 2)

@@ -326,6 +326,7 @@
             "overwork_premium": 0.2,
             "overtime_premium": 0.4,
             "illegal_premium": 0.8,
+            "rest_day_premium": 0.4,
             "weekly_legal_5": 45,
             "weekly_legal_6": 48,
             "daily_legal_5": 9,

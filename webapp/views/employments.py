@@ -1077,20 +1077,23 @@ def modal_close():
 
 
 # Ώρες ΠΕΡΑΝ ωραρίου στο ημερολόγιο — ετικέτα ανά κλάση της κατάταξης
-_OVER_LABELS = {"extra": "ΠΡΟΣΘΕΤΗ ΕΡΓΑΣΙΑ", "overwork": "ΥΠΕΡΕΡΓΑΣΙΑ",
-                "overtime": "ΥΠΕΡΩΡΙΑ", "illegal": "ΠΑΡΑΝΟΜΗ ΥΠΕΡΩΡΙΑ"}
+_OVER_LABELS = {"normal": "ΠΡΟΣΑΥΞΗΣΗ", "extra": "ΠΡΟΣΘΕΤΗ ΕΡΓΑΣΙΑ",
+                "overwork": "ΥΠΕΡΕΡΓΑΣΙΑ", "overtime": "ΥΠΕΡΩΡΙΑ",
+                "illegal": "ΠΑΡΑΝΟΜΗ ΥΠΕΡΩΡΙΑ",
+                "restday": "ΗΜΕΡΑ ΑΝΑΠΑΥΣΗΣ"}
 
 
 def _over_hours(e, year: int, month: int) -> dict:
-    """{ημέρα: {κλάση: ώρες}} πέραν ωραρίου — η ΙΔΙΑ κατάταξη με τη
-    μισθοδοσία (`svc.month_premiums`): ανοχή κάρτας, στρογγυλοποίηση,
-    πρόσθετη/υπερεργασία/υπερωρία κατά το εβδομαδιαίο ωράριο."""
+    """{ημέρα: {(κλάση, νύχτα, αργία): ώρες}} με προσαύξηση — η ΙΔΙΑ
+    κατάταξη με τη μισθοδοσία (`svc.month_premiums`): ανοχή κάρτας,
+    στρογγυλοποίηση, πρόσθετη/υπερεργασία/υπερωρία κατά το εβδομαδιαίο
+    ωράριο, και οι εντός ωραρίου ώρες νύχτας/αργίας."""
     out = {}
     for day in svc.month_premiums(e, year, month)["days"]:
         for ln in day["lines"]:
-            if ln["cls"] in _OVER_LABELS:
-                cls = out.setdefault(day["day"], {})
-                cls[ln["cls"]] = cls.get(ln["cls"], 0) + ln["hours"]
+            key = (ln["cls"], ln["night"], ln["holiday"])
+            cls = out.setdefault(day["day"], {})
+            cls[key] = cls.get(key, 0) + ln["hours"]
     return out
 
 
@@ -1125,9 +1128,16 @@ def _calendar_day(e, d: date, over: dict | None = None) -> list:
             out.append(("punch", f"{a}-{b}", "ΚΑΡΤΑ ΕΡΓΑΣΙΑΣ"))
     if over is None:
         over = _over_hours(e, d.year, d.month)
-    for cls, h in over.get(d, {}).items():
+    # χρώμα ανά κλάση (c-*) + σήμανση νύχτας/αργίας (night/hol)
+    for (cls, night, hol), h in over.get(d, {}).items():
         m = round(h * 60)
-        out.append(("overtime", f"+{m // 60}:{m % 60:02d}", _OVER_LABELS[cls]))
+        tags = [t for t, on in (("ΝΥΧΤΑ", night), ("ΑΡΓΙΑ", hol)) if on]
+        label = " · ".join(([] if cls == "normal" else [_OVER_LABELS[cls]]) + tags)
+        k = f"overtime c-{cls}" + (" night" if night else "") + (" hol" if hol else "")
+        out.append((k, f"+{m // 60}:{m % 60:02d}", label))
+    # Κυριακή > 5ω: αναπληρωματική ανάπαυση την επόμενη εβδομάδα (ΒΔ 748/1966)
+    if d.weekday() == 6 and sum(over.get(d, {}).values()) > 5:
+        out.append(("rest", "", "ΔΙΚΑΙΟΥΤΑΙ ΑΝΑΠΛΗΡΩΜΑΤΙΚΟ ΡΕΠΟ"))
     # ΑΠΟΥΣΙΑ (απολογιστικό): λιγότερες ώρες κάρτας από το πρόγραμμα -> λόγος
     if proj.schedule_system_on(d) == "retro":
         code = e.absence_reasons.get(d, "")

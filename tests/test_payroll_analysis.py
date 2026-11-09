@@ -66,13 +66,12 @@ def setup():
 def test_draft_proposes_hours():
     """Το προσχέδιο προτείνει τις ώρες προσαυξήσεων από τις βάρδιες."""
     svc, proj, eid = setup()
-    # Κυριακή 12/7 βάρδια 22:00-02:00: 4ω νύχτα, 2ω αργία (οι 2 μετά τα
-    # μεσάνυχτα είναι Δευτέρα)
+    # Κυριακή 12/7 22:00-02:00, μετά από Δευ-Παρ: 6η ημέρα (ημέρα ανάπαυσης)
+    # 4ω νύχτα, οι 2 πριν τα μεσάνυχτα και αργία (οι 2 μετά είναι Δευτέρα)
     svc.record_attendance(eid, date(2026, 7, 12), ["22:00-02:00"])
     d = svc.attendance_draft(2026, 7)[eid]
-    # 2ω Κυριακή-νύχτα (normal_nh), 2ω Δευτέρα-νύχτα (normal_n)
-    assert d["normal_nh"] == 2.0 and d["normal_n"] == 2.0
-    assert d["overwork"] == d["overtime"] == d["illegal"] == 0.0
+    assert d["restday_nh"] == 2.0 and d["restday_n"] == 2.0
+    assert d["normal_nh"] == d["overwork"] == d["overtime"] == 0.0
     print("OK το προσχέδιο προτείνει τον πίνακα ωρών από τις βάρδιες")
 
 
@@ -83,23 +82,23 @@ def test_payroll_includes_premiums():
     svc.approve_attendance(2026, 7)
     res = svc.run_monthly_payroll(2026, 7)
     r = res[0][1]
-    # ωρομίσθιο 9€, εντός ωραρίου: 2ω νύχτα-αργία x 100% + 2ω νύχτα x 25%
-    # = 18 + 4.5 = 22.5€
-    assert r.premiums == 22.5
+    # ωρομίσθιο 9€, ημέρα ανάπαυσης +40% (ολόκληρη η ώρα): 2ω νύχτα-αργία
+    # 9 x 1,40 x 2,00 x 2 = 50,40 + 2ω νύχτα 9 x 1,40 x 1,25 x 2 = 31,50
+    assert r.premiums == 81.9
     assert r.base_gross == 1500.0
-    assert r.gross == 1522.5
+    assert r.gross == 1581.9
 
     ev = [x for _, x in svc.store.load()
           if type(x).__name__ == "MonthlyPayrollCalculated"][0]
-    assert ev.premiums == 22.5
+    assert ev.premiums == 81.9
     a = ev.analysis
     assert a["hourly_rate"] == 9.0
-    assert a["premium_lines"]["normal_nh"]["hours"] == 2.0
-    assert a["premium_lines"]["normal_nh"]["mult"] == 1.0
-    assert a["premium_lines"]["normal_nh"]["amount"] == 18.0
-    assert a["premium_lines"]["normal_n"]["amount"] == 4.5
-    assert a["gross"] == 1522.5 and a["net"] == ev.net
-    print("OK μικτά 1522.50 = 1500 + 22.50 προσαυξήσεις, με ανάλυση στο event")
+    assert a["premium_lines"]["restday_nh"]["hours"] == 2.0
+    assert a["premium_lines"]["restday_nh"]["mult"] == 2.8
+    assert a["premium_lines"]["restday_nh"]["amount"] == 50.4
+    assert a["premium_lines"]["restday_n"]["amount"] == 31.5
+    assert a["gross"] == 1581.9 and a["net"] == ev.net
+    print("OK μικτά 1581.90 = 1500 + 81.90 προσαυξήσεις, με ανάλυση στο event")
 
 
 def test_manual_hours_override():
@@ -127,15 +126,15 @@ def test_sheet_hours_and_payroll_analysis():
     rebuilt.rebuild(svc.store)
     line = rebuilt.attendance_sheets[(2026, 7)].lines[eid]
     assert (
-        line["normal_n"], line["normal_nh"],
-        line["overwork"], line["overtime"], line["illegal"],
+        line["restday_n"], line["restday_nh"],
+        line["normal_nh"], line["overwork"], line["illegal"],
     ) == (2.0, 2.0, 0.0, 0.0, 0.0)
 
     payroll, = [p for p in rebuilt.payrolls if p.employee_id == eid]
-    assert payroll.gross == 1522.5 and payroll.premiums == 22.5
+    assert payroll.gross == 1581.9 and payroll.premiums == 81.9
     analysis = payroll.analysis
-    assert analysis["premium_lines"]["normal_nh"]["label"] == (
-        "Εντός ωραρίου (νύχτα + αργία)"
+    assert analysis["premium_lines"]["restday_nh"]["label"] == (
+        "Ημέρα ανάπαυσης (νύχτα + αργία)"
     )
     assert analysis["base_gross"] == 1500.0
     print("OK ώρες στο φύλλο + ανάλυση στη μισθοδοσία, μετά από replay")

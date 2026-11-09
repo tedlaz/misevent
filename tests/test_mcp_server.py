@@ -63,6 +63,14 @@ def test_pay_scenarios_hypothetical(fresh_system):
                                           if birth else None)
         assert less.net < 1200
 
+    # 1200 καθαρά > κατώτατος: χάνεται η επιδότηση εργατικής εισφοράς (ΑΠΔ 102)
+    on = mcp_server.date(2026, 3, 31)
+    lost = mcp_server.pe.labor_subsidy_full(
+        mcp_server.config.minimum_wage_for(on).monthly,
+        mcp_server.config.minimum_wage_for(on).monthly, 40.0, on)
+    assert lost and r["labor_subsidy_lost"] == round(lost, 2)
+    assert any("επιδότηση εργατικής εισφοράς" in x for x in r["assumptions"])
+
     a = json.loads(mcp_server.annual_cost(cid, monthly_gross=r["gross"], children=0,
                                           year=2026))
     assert set(a["by_kind"]) == {"Μισθοί (12)", "Δώρο Πάσχα", "Δώρο Χριστουγέννων",

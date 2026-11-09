@@ -15,8 +15,8 @@ def test_calendar_uses_payroll_classification(fresh_system):
     e = proj.employments[eid]
     with create_app().test_request_context():
         over = _over_hours(e, 2026, 2)
-        small = [i for i in _calendar_day(e, SMALL, over) if i[0] == "overtime"]
-        big = [i for i in _calendar_day(e, BIG, over) if i[0] == "overtime"]
+        small = [i for i in _calendar_day(e, SMALL, over) if i[0].startswith("overtime")]
+        big = [i for i in _calendar_day(e, BIG, over) if i[0].startswith("overtime")]
     assert small == []  # λεπτά εντός ανοχής: τίποτα
     assert sum(int(h[1:].split(":")[0]) * 60 + int(h.split(":")[1])
                for _k, h, _l in big) == 120  # οι 2 ώρες, όπως στη μισθοδοσία
