@@ -134,7 +134,14 @@ def param_entry(event: ParametersDefined):
     tuples και `inf`, όπως τα περιμένει το config."""
     v = event.values
     if event.family == "tax":
-        cls = config.TAX_MODELS.get(v.get("model", "standard"), config.TaxScale)
+        model = v.get("model", "standard")
+        if model not in config.TAX_MODELS:
+            # Σκάει, δεν υποχωρεί στο standard: σιωπηλά λάθος ΦΜΥ (όπως το _pick).
+            raise ValueError(
+                f"Άγνωστο φορολογικό καθεστώς «{model}» (κλίμακα ΦΜΥ από "
+                f"{event.valid_from}) — λείπει από το config.TAX_MODELS."
+            )
+        cls = config.TAX_MODELS[model]
         kwargs = {
             "brackets": tuple(
                 config.TaxBracket(

@@ -17,6 +17,7 @@ from misevent.integrations import apd_files
 from misevent.integrations import card_punches as cp
 from misevent.rules import config, constraints
 from misevent.rules import obligation_types as ot
+from misevent.rules import payment_kinds as pk
 from misevent.rules.calendar_gr import (
     day_ranges,
     holiday_names,
@@ -327,7 +328,7 @@ def emp_name(eid: str) -> str:
     return e.full_name if e else eid
 
 
-GIFT_LABELS = {"easter": "Δώρο Πάσχα", "christmas": "Δώρο Χριστουγέννων"}
+GIFT_LABELS = {k.kind: k.label for k in pk.GIFTS}
 
 
 def _exit_settled(employment_id: str):
@@ -827,9 +828,8 @@ def time_strip(ref: date) -> dict:
 # ΕΤΗΣΙΕΣ υποχρεώσεις (χωρίς μήνα περιόδου) -> μπαίνουν στον μήνα της
 # προθεσμίας τους (Μ. Τετάρτη / 21 Δεκ.)· το Επίδομα Αδείας έχει περίοδο.
 STRIP_BADGES = {
-    "EASTER_GIFT": ("🥚", "Δώρο Πάσχα"),
-    "CHRISTMAS_GIFT": ("🎄", "Δώρο Χριστουγέννων"),
-    "LEAVE_ALLOWANCE": ("🏖️", "Επίδομα Αδείας"),
+    k.calc_obligation: (k.icon, k.label) for k in pk.BONUSES
+} | {
     "severance": ("📤", "Αποζημίωση απόλυσης"),
     "leave_comp": ("🗓️", "Αποζημίωση αδείας"),
 }
@@ -1346,40 +1346,18 @@ PAYMENT_COLUMNS = [
     ("teka", "ΤΕΚΑ"),
     ("fmy", "ΦΜΥ"),
 ]
-PAYMENT_KIND_LABELS = {
-    "salary": "Μισθοδοσία",
-    "easter_gift": "Δώρο Πάσχα",
-    "christmas_gift": "Δώρο Χριστουγέννων",
-    "leave_allowance": "Επίδομα Αδείας",
-    "leave_compensation": "Αποζημίωση Αδείας",
-    "severance": "Αποζημίωση Απόλυσης",
-}
-# Ποια είδη πληρωμής πέφτουν σε ποια στήλη
-PAYMENT_COLUMN_OF = {
-    "salary": "salary",
-    "easter_gift": "salary",
-    "christmas_gift": "salary",
-    "leave_allowance": "salary",
-    "leave_compensation": "salary",
-    "severance": "salary",
-    "efka": "efka",
-    "teka": "teka",
-    "fmy": "fmy",
+# Παράγονται από το μητρώο `misevent/rules/payment_kinds.py` (ARCH_REF §6α.Ε).
+PAYMENT_KIND_LABELS = {k.payment_type: k.label for k in pk.KINDS}
+# Ποια είδη πληρωμής πέφτουν σε ποια στήλη: κάθε αμοιβή στους «μισθούς»
+PAYMENT_COLUMN_OF = {k.payment_type: "salary" for k in pk.KINDS} | {
+    t: t for t in pk.FUND_PAYMENTS
 }
 # Η ΥΠΟΧΡΕΩΣΗ ΚΑΤΑΒΟΛΗΣ κάθε είδους πληρωμής — από την προθεσμία της
 # προκύπτει ΠΟΤΕ πληρώνεται (μητρώο `obligation_types`, όχι hardcoded μήνες).
+# Οι αποζημιώσεις αποχώρησης εξοφλούνται μαζί με τους μισθούς.
 PAYMENT_OBLIGATION = {
-    "salary": "SALARY_PAYMENT",
-    "easter_gift": "EASTER_GIFT_PAYMENT",
-    "christmas_gift": "CHRISTMAS_GIFT_PAYMENT",
-    "leave_allowance": "LEAVE_ALLOWANCE_PAYMENT",
-    # οι αποζημιώσεις αποχώρησης εξοφλούνται μαζί με τους μισθούς
-    "leave_compensation": "SALARY_PAYMENT",
-    "severance": "SALARY_PAYMENT",
-    "efka": "EFKA_PAYMENT",
-    "teka": "TEKA_PAYMENT",
-    "fmy": "FMY_PAYMENT",
-}
+    k.payment_type: k.pay_obligation for k in pk.KINDS
+} | pk.FUND_PAYMENTS
 
 
 def period_gr(y: int, m: int) -> str:
@@ -1418,8 +1396,9 @@ def _payment_period(p) -> tuple[int, int]:
             due = None  # as_source χωρίς γνωστή πηγή
     if due is None:
         # Έσχατο fallback: ο μήνας που το Δώρο υπολογίστηκε/φορολογήθηκε
-        if p.payment_type.endswith("_gift") and not pm:
-            kind = p.payment_type.removesuffix("_gift")
+        k = pk.BY_PAYMENT.get(p.payment_type)
+        if k in pk.GIFTS and not pm:
+            kind = k.kind
             for g in proj.gifts:
                 if (g.gift_type == kind and g.year == py
                         and g.employee_id == p.beneficiary):
@@ -1444,7 +1423,7 @@ def _fmy_sources(y: int, m: int) -> list[str]:
         g.gift_type for g in proj.gifts if svc.gift_fmy_period(g) == (y, m)
     }
     for kind in sorted(kinds):
-        out.append(f"{PAYMENT_KIND_LABELS[kind + '_gift']} {y}")
+        out.append(f"{pk.BY_KIND[kind].label} {y}")
     if any(svc.allowance_fmy_period(a) == (y, m) for a in proj.allowances):
         out.append(f"Επίδομα Αδείας {y}")
     return out
@@ -2119,14 +2098,7 @@ def monthly_totals(year: int | None = None):
 # Τα ποσά κάθε γραμμής — ΜΙΑ πηγή για τη στρογγυλοποίηση και τα σύνολα.
 LEDGER_AMOUNTS = ("gross", "efka_employee", "fmy", "net", "cost")
 
-LEDGER_KINDS = (
-    ("payroll", "Περιόδου"),
-    ("easter", "Δώρο Πάσχα"),
-    ("christmas", "Δώρο Χριστ."),
-    ("allowance", "Επίδομα Αδείας"),
-    ("severance", "Αποζημίωση Απόλυσης"),
-    ("leave", "Αποζημίωση Αδείας"),
-)
+LEDGER_KINDS = tuple((k.kind, k.ledger_label) for k in pk.KINDS)
 
 
 def payroll_ledger(year: int, eids=None):
@@ -2211,9 +2183,9 @@ def ledger_totals(rows):
 
 # PaymentMade.payment_type -> είδος γραμμής του καθολικού. Τα Δώρα πληρώνονται
 # με μήνα 0 (ένα ανά έτος)· οι αποζημιώσεις με τους μισθούς (μήνας λήξης).
-PAYMENT_KINDS = {"salary": "payroll", "easter_gift": "easter",
-                 "christmas_gift": "christmas", "leave_allowance": "allowance",
-                 "leave_compensation": "leave", "severance": "severance"}
+PAYMENT_KINDS = {k.payment_type: k.kind for k in pk.KINDS}
+# Υποχρέωση υπολογισμού Δώρου/Επιδόματος -> είδος (detail_payload)
+CALC_KIND = {k.calc_obligation: k.kind for k in pk.BONUSES}
 
 
 def employee_pay_card(person_id: str, today: date | None = None):
@@ -3129,12 +3101,8 @@ def detail_payload(ob_id: str, ref: date):
         if not ob.fulfilled:
             d["steps"] += [f"⚠️ {w}" for w in payroll_warnings(y, m)]
 
-    elif t in ("EASTER_GIFT", "CHRISTMAS_GIFT", "LEAVE_ALLOWANCE"):
-        g = {
-            "EASTER_GIFT": "easter",
-            "CHRISTMAS_GIFT": "christmas",
-            "LEAVE_ALLOWANCE": "allowance",
-        }[t]
+    elif t in CALC_KIND:
+        g = CALC_KIND[t]
         d["rows"] = gift_rows(g, y, preview=not ob.fulfilled, month=m)
         d["totals"] = money_totals(d["rows"], ["Μικτά", "ΕΦΚΑ εργαζ.", "ΦΜΥ", "Καθαρά"])
         verb = "Υπολογίστηκε" if ob.fulfilled else "Θα υπολογιστεί"
@@ -3167,17 +3135,10 @@ def detail_payload(ob_id: str, ref: date):
     elif t in ot.PAYOUT_SOURCE:
         # Καταβολή Δώρου / Επιδόματος Αδείας στους δικαιούχους
         src = ot.PAYOUT_SOURCE[t]
-        g = {
-            "EASTER_GIFT": "easter",
-            "CHRISTMAS_GIFT": "christmas",
-            "LEAVE_ALLOWANCE": "allowance",
-        }[src]
+        kind = next(k for k in pk.BONUSES if k.pay_obligation == t)
+        g = kind.kind
         if ob.fulfilled:
-            ptype = {
-                "EASTER_GIFT_PAYMENT": "easter_gift",
-                "CHRISTMAS_GIFT_PAYMENT": "christmas_gift",
-                "LEAVE_ALLOWANCE_PAYMENT": "leave_allowance",
-            }[t]
+            ptype = kind.payment_type
             pays = [
                 p
                 for p in proj.payments

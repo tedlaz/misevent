@@ -8,6 +8,7 @@
 """
 
 from misevent.domain.events import PaymentMade
+from misevent.rules import payment_kinds as pk
 
 
 class PaymentsMixin:
@@ -27,8 +28,10 @@ class PaymentsMixin:
         αποχώρησης — άρα και όσες υπολογίστηκαν αφού είχαν ήδη πληρωθεί οι
         μισθοί εκείνου του μήνα εξοφλούνται με την επόμενη πληρωμή μισθών."""
         paid = {(p.payment_type, p.beneficiary) for p in self.proj.payments}
-        for ptype, events in (("leave_compensation", self.proj.leave_compensations),
-                              ("severance", self.proj.severances)):
+        for ptype, events in (
+            (pk.BY_KIND["leave"].payment_type, self.proj.leave_compensations),
+            (pk.BY_KIND["severance"].payment_type, self.proj.severances),
+        ):
             for ev in events:
                 t = ev.termination_date
                 if (t.year, t.month) <= (year, month) and \
@@ -50,7 +53,7 @@ class PaymentsMixin:
         for g in rows:
             self.store.append(
                 g.employee_id,
-                PaymentMade(f"{gift_type}_gift", year, 0, g.net, g.employee_id),
+                PaymentMade(pk.BY_KIND[gift_type].payment_type, year, 0, g.net, g.employee_id),
             )
         return sum(g.net for g in rows)
 
@@ -70,7 +73,8 @@ class PaymentsMixin:
         for a in rows:
             self.store.append(
                 a.employee_id,
-                PaymentMade("leave_allowance", year, month, a.net, a.employee_id),
+                PaymentMade(pk.BY_KIND["allowance"].payment_type, year, month, a.net,
+                            a.employee_id),
             )
         return sum(a.net for a in rows)
 

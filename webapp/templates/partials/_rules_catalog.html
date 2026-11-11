@@ -1,0 +1,67 @@
+{# Κατάλογος κανόνων-δεδομένων (Χάρτης κανόνων ④). ΠΑΡΑΓΩΓΟ των μητρώων
+   (`views/rules_map.param_catalog`): config.FAMILIES, obligation_types.TYPES,
+   payment_kinds.KINDS, projections.MISC_DEFAULTS. Η αλλαγή τιμών γίνεται
+   στη σελίδα «Παράμετροι»· εδώ μόνο ανάγνωση. #}
+<p class="muted" style="font-size:12.5px;margin-top:0">Κάθε γραμμή λέει <b>τι ισχύει</b>
+  σήμερα και <b>πού ζει</b> ο κανόνας στον κώδικα. Οι τιμές αλλάζουν από τη σελίδα
+  «Παράμετροι» (νέα γραμμή με ημερομηνία ισχύος)· η λίστα παράγεται από τα μητρώα,
+  άρα είναι πάντα ενημερωμένη.</p>
+
+<h3>Νομοθετικές παράμετροι <span class="muted mono" style="font-size:11px">rules/config.py → FAMILIES</span></h3>
+<table class="tbl">
+  <thead><tr><th>Οικογένεια</th><th>Σε ισχύ</th><th>Από</th><th>Πηγή</th><th>Διαβάζεται από</th></tr></thead>
+  <tbody>
+  {% for f in catalog.families %}
+    <tr>
+      <td><b>{{ f.label }}</b><br><code class="muted">{{ f.key }}</code></td>
+      <td style="font-size:12.5px">{{ f.values }}</td>
+      <td>{{ f.valid_from.strftime('%d/%m/%Y') if f.valid_from else '—' }}
+        {% if f.n > 1 %}<br><span class="muted" style="font-size:11px">{{ f.n }} εγγραφές</span>{% endif %}</td>
+      <td>{{ f.source }}</td>
+      <td><code>config.{{ f.reader or '—' }}()</code></td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+
+<h3>Υποχρεώσεις & προθεσμίες <span class="muted mono" style="font-size:11px">rules/obligation_types.py → TYPES</span></h3>
+<table class="tbl">
+  <thead><tr><th>Τύπος</th><th>Γέννηση</th><th>Προθεσμία</th><th>Προαπαιτεί</th><th>Παράταση</th><th>Εντολή</th></tr></thead>
+  <tbody>
+  {% for o in catalog.obligations %}
+    <tr>
+      <td>{{ o.icon }} <b>{{ o.label }}</b><br><code class="muted">{{ o.code }}</code></td>
+      <td>{{ o.spawn }}</td><td>{{ o.due }}</td>
+      <td style="font-size:12px"><code>{{ o.requires or '—' }}</code></td>
+      <td>{{ o.extension or '—' }}</td>
+      <td><code>{{ o.command }}</code></td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+
+<h3>Είδη αμοιβής <span class="muted mono" style="font-size:11px">rules/payment_kinds.py → KINDS</span></h3>
+<table class="tbl">
+  <thead><tr><th>Είδος</th><th>payment_type</th><th>Υπολογισμός</th><th>Καταβολή</th><th>Σήμα αρχείου</th></tr></thead>
+  <tbody>
+  {% for k in catalog.kinds %}
+    <tr>
+      <td>{{ k.icon }} <b>{{ k.label }}</b><br><code class="muted">{{ k.kind }}</code></td>
+      <td><code>{{ k.payment_type }}</code></td>
+      <td><code>{{ k.calc_obligation or '—' }}</code></td>
+      <td><code>{{ k.pay_obligation }}</code>{% if not k.closes %} <span class="muted">(μαζί με μισθούς)</span>{% endif %}</td>
+      <td>{{ k.short or '—' }}</td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+
+<h3>Διάφορα (προτιμήσεις) <span class="muted mono" style="font-size:11px">domain/projections.py → MISC_DEFAULTS</span></h3>
+<table class="tbl">
+  <thead><tr><th>Κλειδί</th><th>Τιμή</th><th>Προεπιλογή</th></tr></thead>
+  <tbody>
+  {% for m in catalog.misc %}
+    <tr><td><code>{{ m.key }}</code></td><td>{{ m.value }}</td><td class="muted">{{ m.default }}</td></tr>
+  {% endfor %}
+  </tbody>
+</table>

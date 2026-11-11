@@ -168,22 +168,22 @@ def test_every_obligation_type_has_a_command():
 
 # ------------------------------------------------------- 5. είδη αμοιβής
 def test_payment_kinds_consistent():
-    """ΣΙΩΠΗΛΟ #5: νέο είδος αμοιβής (ARCH_REF §6α.Ε) που ξεχάστηκε σε ένα από
-    τα dicts των πληρωμών. Δεν σκάει τίποτα — απλώς το καθολικό/κόστος/
-    Επισκόπηση δεν το μετρούν ή το βάζουν σε λάθος στήλη."""
-    from misevent.domain import scheduler
-    from webapp import queries as q
+    """ΣΙΩΠΗΛΟ #5: πληρωμή με `payment_type` ΕΚΤΟΣ μητρώου `payment_kinds`.
+    Δεν σκάει τίποτα — απλώς το καθολικό/κόστος/Επισκόπηση δεν τη μετρούν.
+    Τα dicts των queries/scheduler ΠΑΡΑΓΟΝΤΑΙ από το μητρώο· εδώ ελέγχεται
+    ότι κάθε ΣΤΑΘΕΡΟ payment_type που γράφει ο κώδικας είναι γνωστό."""
+    import ast
+    from pathlib import Path
 
-    kinds = set(scheduler.PAYMENT_TYPES) | set(q.PAYMENT_KIND_LABELS)
-    for name, table in (("PAYMENT_COLUMN_OF", q.PAYMENT_COLUMN_OF),
-                        ("PAYMENT_OBLIGATION", q.PAYMENT_OBLIGATION)):
-        missing = sorted(kinds - set(table))
-        assert not missing, f"Είδη πληρωμής εκτός queries.{name}: " + ", ".join(missing)
-    pay = {k for k, col in q.PAYMENT_COLUMN_OF.items() if col == "salary"}
-    for name, table in (("PAYMENT_KIND_LABELS", q.PAYMENT_KIND_LABELS),
-                        ("PAYMENT_KINDS", q.PAYMENT_KINDS)):
-        missing = sorted(pay - set(table))
-        assert not missing, f"Αμοιβές εκτός queries.{name}: " + ", ".join(missing)
-    unknown = sorted((set(q.PAYMENT_OBLIGATION.values())
-                      | set(scheduler.PAYMENT_TYPES.values())) - set(ot.TYPES))
-    assert not unknown, "Άγνωστοι τύποι υποχρέωσης καταβολής: " + ", ".join(unknown)
+    from misevent.rules import payment_kinds as pk
+
+    known = set(pk.BY_PAYMENT) | set(pk.FUND_PAYMENTS)
+    emitted = set()
+    for path in Path("misevent/app/services").glob("*.py"):
+        for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
+            if (isinstance(node, ast.Call) and getattr(node.func, "id", "") == "PaymentMade"
+                    and node.args and isinstance(node.args[0], ast.Constant)):
+                emitted.add(node.args[0].value)
+    assert {"salary", "efka"} <= emitted, "ο AST έλεγχος δεν βρήκε τίποτα"
+    unknown = sorted(emitted - known)
+    assert not unknown, "payment_type εκτός payment_kinds: " + ", ".join(unknown)

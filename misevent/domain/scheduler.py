@@ -57,6 +57,7 @@ from functools import singledispatchmethod
 
 import misevent.rules.config as config
 import misevent.rules.obligation_types as ot
+import misevent.rules.payment_kinds as pk
 from misevent.domain.events import (
     APDSubmitted,
     AttendanceSheetApproved,
@@ -91,15 +92,10 @@ CARD_TYPES = [t.code for t in ot.by_spawn("period_card")]
 ANNUAL_TYPES = [t.code for t in ot.by_spawn("annual")]
 
 # Ποιο event κλείνει ποια υποχρέωση: PaymentMade.payment_type -> τύπος
+# (μητρώο `payment_kinds` — οι αποζημιώσεις ΔΕΝ κλείνουν δική τους υποχρέωση)
 PAYMENT_TYPES = {
-    "salary": "SALARY_PAYMENT",
-    "efka": "EFKA_PAYMENT",
-    "teka": "TEKA_PAYMENT",
-    "fmy": "FMY_PAYMENT",
-    "easter_gift": "EASTER_GIFT_PAYMENT",
-    "christmas_gift": "CHRISTMAS_GIFT_PAYMENT",
-    "leave_allowance": "LEAVE_ALLOWANCE_PAYMENT",
-}
+    k.payment_type: k.pay_obligation for k in pk.KINDS if k.closes
+} | pk.FUND_PAYMENTS
 
 
 def _oid() -> str:

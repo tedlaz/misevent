@@ -7,6 +7,8 @@
 
 from flask import Blueprint, abort, render_template
 
+from misevent.rules import payment_kinds as pk
+
 from .. import queries as q
 from ..clock import today
 
@@ -17,4 +19,7 @@ bp = Blueprint("month", __name__, url_prefix="/month")
 def detail(y, m):
     if not (1 <= m <= 12 and 2000 <= y <= 2100):
         abort(404)
-    return render_template("month.html", d=q.month_detail(y, m, today()))
+    return render_template(
+        "month.html", d=q.month_detail(y, m, today()),
+        icons={k.kind: k.icon for k in pk.KINDS},
+    )

@@ -19,6 +19,7 @@ from fpdf.enums import XPos, YPos
 
 from misevent.domain import payroll_engine as pe
 from misevent.rules import calendar_gr, config
+from misevent.rules import payment_kinds as pk
 
 from . import clock, labels
 from . import queries as q
@@ -877,11 +878,7 @@ def payroll_slips_pdf(year: int, month: int, eid: str | None = None) -> bytes:
 
 
 # --------------------------------------- Δώρα εορτών & Επίδομα Αδείας
-GIFT_TITLES = {
-    "easter": "Δώρο Πάσχα",
-    "christmas": "Δώρο Χριστουγέννων",
-    "allowance": "Επίδομα Αδείας",
-}
+GIFT_TITLES = {k.kind: k.label for k in pk.BONUSES}
 
 
 def _coeff_pct(coeff: float) -> str:
@@ -2057,7 +2054,7 @@ def hourly_cost_pdf(year: int) -> bytes:
 EXPORT_DIR = Path("apodeijeis")
 
 # Κατάληξη ονόματος αρχείου ανά τύπο Δώρου/Επιδόματος (τακτική = καμία).
-GIFT_SUFFIX = {"easter": "ΔΠ", "christmas": "ΔΧ", "allowance": "EA"}
+GIFT_SUFFIX = {k.kind: k.short for k in pk.BONUSES}
 
 
 # ------------------------------------------------- Βεβαιώσεις εργαζομένου

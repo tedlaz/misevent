@@ -14,7 +14,7 @@ projection ενημερώνει το παρόν module μέσω set_overrides() 
 ξαναχτίζεται με replay).
 """
 
-from dataclasses import dataclass, fields
+from dataclasses import dataclass, field, fields
 from datetime import date
 
 TRIENNIUM_FREEZE_START = date(2012, 2, 14)
@@ -198,6 +198,11 @@ class TaxScale:
         return self.annual_tax_detail(annual_taxable, children, birth_date, on)["total"]
 
 
+def _ui(default, label: str, pct: bool = False):
+    """Πεδίο καθεστώτος ΦΜΥ που εμφανίζεται στη φόρμα (`pct` = ×100 στο UI)."""
+    return field(default=default, metadata={"label": label, "pct": pct})
+
+
 @dataclass(frozen=True)
 class TaxScaleYouth2026(TaxScale):
     """Καθεστώς ΦΜΥ «youth2026» — κλίμακα από 1/1/2026 (data/taxscales2026.md):
@@ -220,17 +225,21 @@ class TaxScaleYouth2026(TaxScale):
 
     # Συντελεστές ανά αριθμό τέκνων (0,1,2,3,4+) — η τελευταία τιμή ισχύει
     # και για περισσότερα τέκνα (εκτός του 3ου κλιμακίου, βλ. band3_step).
-    band1_child_rates: tuple = (0.09, 0.09, 0.09, 0.09, 0.0)
-    band2_child_rates: tuple = (0.20, 0.18, 0.16, 0.09, 0.0)
-    band3_child_rates: tuple = (0.26, 0.24, 0.22, 0.20, 0.18)
+    band1_child_rates: tuple = _ui((0.09, 0.09, 0.09, 0.09, 0.0),
+                                   "Συντελεστές 0–10 χιλ. ανά τέκνα (% — 0;1;2;3;4+)", pct=True)
+    band2_child_rates: tuple = _ui((0.20, 0.18, 0.16, 0.09, 0.0),
+                                   "Συντελεστές 10–20 χιλ. ανά τέκνα (% — 0;1;2;3;4+)", pct=True)
+    band3_child_rates: tuple = _ui((0.26, 0.24, 0.22, 0.20, 0.18),
+                                   "Συντελεστές 20–30 χιλ. ανά τέκνα (% — 0;1;2;3;4)", pct=True)
     # Περαιτέρω μείωση του 3ου κλιμακίου ανά τέκνο άνω των 4 (περ. δε)
-    band3_extra_child_step: float = 0.02
+    band3_extra_child_step: float = _ui(0.02, "Μείωση 20–30 χιλ. ανά τέκνο 5+ (μονάδες %)",
+                                        pct=True)
     band1_index: int = 0  # 0–10 χιλ.
     band2_index: int = 1  # 10–20 χιλ.
     band3_index: int = 2  # 20–30 χιλ.
-    youth_zero_max_age: int = 25  # έως 25: μηδενικός συντελεστής (1ο+2ο)
-    youth_low_max_age: int = 30  # 26–30: μειωμένος συντελεστής (1ο+2ο)
-    youth_low_rate: float = 0.09
+    youth_zero_max_age: int = _ui(25, "Μηδενικός συντελεστής έως ηλικία")  # 1ο+2ο
+    youth_low_max_age: int = _ui(30, "Μειωμένος συντελεστής έως ηλικία")  # 26–30
+    youth_low_rate: float = _ui(0.09, "Μειωμένος συντελεστής (%)", pct=True)
 
     model_key = "youth2026"
     model_label = "Κλίμακα 2026 (συντελεστές ανά τέκνα/ηλικία)"
@@ -284,6 +293,14 @@ def tax_model_param_fields(model: str) -> list[str]:
     cls = TAX_MODELS[model]
     base = {f.name for f in fields(TaxScale)}
     return [f.name for f in fields(cls) if f.name not in base]
+
+
+def tax_model_ui_fields(model: str) -> list:
+    """Τα πεδία ενός καθεστώτος που ρυθμίζει ο χρήστης (`dataclasses.Field`
+    με metadata από το `_ui`) — από αυτά παράγεται η φόρμα του /settings.
+    Νέο καθεστώς = πεδία με `_ui(...)`· καμία αλλαγή στο UI."""
+    names = set(tax_model_param_fields(model))
+    return [f for f in fields(TAX_MODELS[model]) if f.name in names and f.metadata]
 
 
 # --- Ενδεικτικές τιμές (ΕΠΙΒΕΒΑΙΩΣΤΕ πριν από χρήση) ---

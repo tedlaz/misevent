@@ -11,6 +11,7 @@ from datetime import date
 
 import misevent.domain.payroll_engine as pe
 import misevent.rules.obligation_types as ot
+import misevent.rules.payment_kinds as pk
 from misevent.domain.events import GiftCalculated, LeaveAllowanceCalculated
 
 from ._base import DISMISSAL_REASON
@@ -193,7 +194,7 @@ class GiftsMixin:
                 emp, year, month, exit_payroll["payroll"], exit_settlement=True
             )
 
-        gift_type = "easter" if month <= 4 else "christmas"
+        gift_type = pk.exit_gift_kind(month)
         if not any(
             g.employee_id == eid and g.gift_type == gift_type and g.year == year
             for g in self.proj.gifts

@@ -9,10 +9,16 @@
   <input class="tabradio" type="radio" name="_rm" id="rm-flow" checked>
   <input class="tabradio" type="radio" name="_rm" id="rm-checks">
   <input class="tabradio" type="radio" name="_rm" id="rm-calc">
+  <input class="tabradio" type="radio" name="_rm" id="rm-params">
   <div class="tabbar">
     <label for="rm-flow">① Ροή μήνα</label>
     <label for="rm-checks">② Έλεγχοι εγκυρότητας</label>
     <label for="rm-calc">③ Υπολογισμοί</label>
+    <label for="rm-params">④ Παράμετροι & μητρώα</label>
+  </div>
+  <div class="card tabpane rm-p-params">
+    <h2>Παράμετροι & μητρώα <span class="norm">— η τιμή σε ισχύ ({{ ref.strftime('%d/%m/%Y') }}) και πού ζει κάθε κανόνας</span></h2>
+    {% include "partials/_rules_catalog.html" %}
   </div>
   <div class="card tabpane rm-p-calc">
     <h2>Διαγράμματα υπολογισμών <span class="norm">— εναλλακτικές και τύποι, με τις τρέχουσες τιμές</span></h2>

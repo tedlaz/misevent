@@ -59,5 +59,44 @@ def test_rules_page_renders(fresh_system):
     assert "<svg" in body and "Έλεγχοι εγκυρότητας" in body
     assert "start_employment" in body
     assert "Αποχώρηση / απόλυση" in body and "fc-branches" in body
+    assert "Παράμετροι & μητρώα" in body and "config.minimum_wage_for()" in body
     flow = client.get("/rules/flow?y=2026&m=3").get_data(as_text=True)
     assert 'id="rules-flow"' in flow and "gs-" in flow
+
+
+def test_calc_flow_sources_exist():
+    """Οι παραπομπές `src` των διαγραμμάτων είναι κείμενο: μια μετονομασία
+    συνάρτησης δεν θα έσπαγε τίποτα — η σελίδα θα έδειχνε σε ανύπαρκτο σημείο."""
+    import re
+    from datetime import date
+    from pathlib import Path
+
+    from webapp.views.rules_map import calc_flows
+
+    code = "\n".join(p.read_text(encoding="utf-8") for p in Path("misevent").rglob("*.py"))
+    defined = set(re.findall(r"^\s*(?:def|class) (\w+)", code, re.M))
+    for f in calc_flows(date(2026, 3, 1)):
+        for token in f["src"].split(" · "):
+            if token.endswith(".py"):
+                assert Path("misevent", token).exists(), (f["key"], token)
+            else:
+                name = re.split(r"[./]", token)[-1]
+                assert name in defined, f"{f['key']}: «{token}» δεν υπάρχει"
+
+
+def test_param_catalog_covers_registries(fresh_system):
+    """Ο κατάλογος ④ έχει μία γραμμή ανά οικογένεια/υποχρέωση/είδος αμοιβής,
+    και κάθε οικογένεια βρίσκει τον reader της."""
+    from datetime import date
+
+    from misevent.rules import config
+    from misevent.rules import obligation_types as ot
+    from misevent.rules import payment_kinds as pk
+    from webapp import create_app  # noqa: F401  (στήνει το system)
+    from webapp.views.rules_map import param_catalog
+
+    c = param_catalog(date(2026, 3, 1))
+    assert [f["key"] for f in c["families"]] == list(config.FAMILIES)
+    assert all(f["reader"] for f in c["families"]), [f["key"] for f in c["families"]]
+    assert len(c["obligations"]) == len(ot.TYPES)
+    assert c["kinds"] == pk.KINDS

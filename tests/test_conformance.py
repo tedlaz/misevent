@@ -36,6 +36,8 @@ import _bootstrap  # noqa: F401  ΠΡΩΤΟ import (ρίζα στο sys.path + c
 
 from misevent.domain import payroll_engine as pe
 from misevent.domain import work_hours
+from misevent.domain.events import ParametersDefined
+from misevent.domain.projections import param_entry
 from misevent.rules import config
 
 FIXTURE = Path("tests/conformance/cases.json")
@@ -92,6 +94,15 @@ def _apply_params(params: dict) -> None:
             # πρώτης, η κλίμακα 2026 έχανε σιωπηλά τη λογική της.
             entries = [
                 _from_json(config.TAX_MODELS[r.get("model", "standard")], r)
+                for r in rows
+            ]
+        elif family == "severance":
+            # Πίνακες (`None` = ανοιχτό κλιμάκιο): ίδια διαδρομή με το replay.
+            entries = [
+                param_entry(ParametersDefined(
+                    family, date.fromisoformat(r["valid_from"]),
+                    {k: v for k, v in r.items() if k != "valid_from"},
+                ))
                 for r in rows
             ]
         else:
@@ -207,9 +218,14 @@ def case_leave_allowance(p):
 def case_severance(p):
     """Αποζημίωση απόλυσης: μήνες × μηνιαίες αποδοχές × 7/6, αυτοτελής φόρος,
     ΚΑΜΙΑ ασφαλιστική κράτηση."""
-    months = config.severance_months(p["service_years"], p.get("with_notice", False))
-    gross = round(months * p["monthly_gross"] * config.SEVERANCE_GIFT_FACTOR, 2)
-    tax = config.severance_tax(gross)
+    # `on` = ημ. απόλυσης: διαβάζεται η ΧΡΟΝΟΛΟΓΗΜΕΝΗ οικογένεια «severance»
+    # του fixture, όχι οι σταθερές του config (όπως το entitlements.py).
+    on = date.fromisoformat(p.get("term", "2026-06-30"))
+    months = config.severance_months(
+        p["service_years"], p.get("with_notice", False), on=on
+    )
+    gross = round(months * p["monthly_gross"] * config.severance_gift_factor(on), 2)
+    tax = config.severance_tax(gross, on=on)
     return {"months": months, "gross": gross, "tax": tax, "net": round(gross - tax, 2)}
 
 

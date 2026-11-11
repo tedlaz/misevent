@@ -11,6 +11,7 @@ import misevent.domain.payroll_engine as pe
 import misevent.integrations.ergani as ergani_mod
 import misevent.rules.config as config
 import misevent.rules.constraints as constraints
+import misevent.rules.payment_kinds as pk
 from misevent.domain.events import (
     ContractChanged,
     EmployeeTerminated,
@@ -430,7 +431,7 @@ class ContractMixin:
         emp = self._check_termination(employee_id, termination_date)
         year, month = termination_date.year, termination_date.month
 
-        gift_type = "easter" if month <= 4 else "christmas"
+        gift_type = pk.exit_gift_kind(month)
         gift_done = any(
             g.employee_id == employee_id and g.gift_type == gift_type
             and g.year == year

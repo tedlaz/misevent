@@ -174,7 +174,7 @@
         <ul class="mo-list">
           {% for r in d.extras %}
             <li class="kind-{{ r.kind }}" style="--i:{{ loop.index }}">
-              <span class="ic">{{ {'easter': '🐣', 'christmas': '🎄', 'allowance': '🏖️', 'severance': '📤', 'leave': '🗓️'}[r.kind] }}</span>
+              <span class="ic">{{ icons[r.kind] }}</span>
               <span class="lbl">{{ r.label }}<small>μικτά {{ r.gross|money }} € · κόστος {{ r.cost|money }} €</small></span>
               <b>{{ r.net|money }} €<small>καθαρά</small></b>
             </li>

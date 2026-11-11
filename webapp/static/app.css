@@ -265,7 +265,8 @@ button.tag.lnk-tag{font-family:inherit;font-size:10.5px;font-weight:700}
 .tabs:has(#tab-audit:checked) .tp-audit,
 .rmtabs:has(#rm-flow:checked) .rm-p-flow,
 .rmtabs:has(#rm-checks:checked) .rm-p-checks,
-.rmtabs:has(#rm-calc:checked) .rm-p-calc{display:block}
+.rmtabs:has(#rm-calc:checked) .rm-p-calc,
+.rmtabs:has(#rm-params:checked) .rm-p-params{display:block}
 /* ενεργή ετικέτα */
 #tab-general:checked ~ .tabbar label[for=tab-general],
 #tab-foreign:checked ~ .tabbar label[for=tab-foreign],
@@ -280,7 +281,8 @@ button.tag.lnk-tag{font-family:inherit;font-size:10.5px;font-weight:700}
 .tabs:has(#tab-audit:checked) .tabbar label[for=tab-audit],
 .rmtabs:has(#rm-flow:checked) .tabbar label[for=rm-flow],
 .rmtabs:has(#rm-checks:checked) .tabbar label[for=rm-checks],
-.rmtabs:has(#rm-calc:checked) .tabbar label[for=rm-calc]{
+.rmtabs:has(#rm-calc:checked) .tabbar label[for=rm-calc],
+.rmtabs:has(#rm-params:checked) .tabbar label[for=rm-params]{
   color:var(--ink);background:var(--card);border-color:var(--line);
   border-bottom:1px solid var(--card)}
 /* Χάρτης κανόνων — κατάσταση κόμβου του γράφου (ίδια χρώματα με το

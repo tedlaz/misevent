@@ -451,13 +451,94 @@ def calc_flows(on) -> list[dict]:
     ]
 
 
+# ---------------------------------------- Κατάλογος «πού ζει κάθε κανόνας»
+@lru_cache(maxsize=1)
+def _readers() -> dict[str, str]:
+    """Οικογένεια -> η συνάρτηση του config που τη διαβάζει (`_pick("<key>")`)."""
+    out = {}
+    tree = ast.parse(Path(inspect.getfile(config)).read_text(encoding="utf-8"))
+    for fn in tree.body:
+        if not isinstance(fn, ast.FunctionDef):
+            continue
+        for n in ast.walk(fn):
+            if (isinstance(n, ast.Call) and getattr(n.func, "id", "") == "_pick"
+                    and n.args and isinstance(n.args[0], ast.Constant)):
+                out.setdefault(n.args[0].value, fn.name)
+    return out
+
+
+def _fmt(value, kind: str) -> str:
+    ui = config.FIELD_KINDS[kind]["ui"]
+    if ui == "pct":
+        return f"{value * 100:g}%".replace(".", ",")
+    if ui == "money":
+        return f"{_eur(value)} €"
+    return f"{value:g}" if isinstance(value, float) else str(value)
+
+
+def param_catalog(on) -> dict:
+    """ΟΛΟΙ οι κανόνες-δεδομένα με την ΤΙΜΗ ΣΕ ΙΣΧΥ και το ΣΗΜΕΙΟ όπου ζουν —
+    παράγεται από τα μητρώα (config.FAMILIES, ot.TYPES, payment_kinds,
+    MISC_DEFAULTS), άρα δεν παλιώνει. Αντικαθιστά τους χειρόγραφους πίνακες
+    τιμών του docs/payroll_rules.md."""
+    from misevent.domain.projections import MISC_DEFAULTS
+    from misevent.rules import payment_kinds as pk
+
+    from ..system import svc
+    from .settings import SPAWN_LABELS, _due_text, _severance_row, _tax_row
+
+    families = []
+    for key, spec in config.FAMILIES.items():
+        entries, source = svc.parameter_entries(key)
+        cur = [e for e in entries if e.valid_from <= on]
+        e = cur[-1] if cur else None
+        if e is None or getattr(e, "repealed", False):
+            values = "— καταργήθηκε" if e else "— χωρίς εγγραφή σε ισχύ"
+        elif key == "tax":
+            r = _tax_row(e)
+            values = f"{r['model_label']} · {r['brackets']} · μειώσεις {r['reductions']}"
+        elif key == "severance":
+            r = _severance_row(e)
+            values = f"{r['months']} · ×{r['gift_factor']:.4g} · φόρος {r['tax']}"
+        else:
+            values = " · ".join(
+                f"{f.label}: {_fmt(getattr(e, f.name), f.kind)}" for f in spec.ui_fields()
+            )
+        families.append({
+            "key": key, "label": spec.label, "values": values,
+            "valid_from": e.valid_from if e else None,
+            "source": "event" if source == "events" else "προτεινόμενη (config)",
+            "reader": _readers().get(key, ""), "n": len(entries),
+        })
+    obligations = [
+        {
+            "code": t.code, "icon": t.icon, "label": t.label,
+            "spawn": SPAWN_LABELS.get(t.spawn, t.spawn),
+            "due": _due_text(ot.spec(t.code).due),
+            "requires": ", ".join(r[0] for r in t.requires),
+            "extension": (f"έως {ot.spec(t.code).extension.get('max_days')} ημ."
+                          if (ot.spec(t.code).extension or {}).get("allowed") else ""),
+            "command": t.command,
+        }
+        for t in ot.TYPES.values()
+    ]
+    misc = svc.misc_settings()
+    return {
+        "families": families,
+        "obligations": obligations,
+        "kinds": pk.KINDS,
+        "misc": [{"key": k, "value": misc.get(k, d), "default": d}
+                 for k, d in MISC_DEFAULTS.items()],
+    }
+
+
 @bp.get("/")
 def index():
     y, m = _period()
     return render_template(
         "rules_map.html", y=y, m=m, graph=_chain_graph(),
         status=period_status(y, m), vmap=validation_map(),
-        flows=calc_flows(today()), ref=today(),
+        flows=calc_flows(today()), ref=today(), catalog=param_catalog(today()),
         is_admin=bool(getattr(g, "user", None) and g.user.is_admin),
     )
 

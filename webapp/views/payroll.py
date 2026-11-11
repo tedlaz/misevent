@@ -4,6 +4,8 @@ import io
 
 from flask import Blueprint, abort, render_template, request, send_file
 
+from misevent.rules import payment_kinds as pk
+
 from .. import queries as q
 from ..clock import today
 from ..helpers import flash_to, pdf_response, run_command
@@ -11,10 +13,7 @@ from ..system import proj, svc
 
 bp = Blueprint("payroll", __name__, url_prefix="/payroll")
 
-GIFT_KINDS = [
-    ("easter", "Δώρο Πάσχα"),
-    ("christmas", "Δώρο Χριστουγέννων"),
-]
+GIFT_KINDS = [(k.kind, k.label) for k in pk.GIFTS]
 # Το Επίδομα Αδείας ΔΕΝ είναι ετήσιο: υπάρχει μία περίοδος ανά μήνα στον οποίο
 # κάποιος πήρε την πρώτη του κανονική άδεια (βλ. scheduler.py).
 
@@ -89,9 +88,9 @@ def analysis_modal():
     )
 
 
-GIFT_LABELS = dict(GIFT_KINDS) | {"allowance": "Επίδομα Αδείας"}
+GIFT_LABELS = {k.kind: k.label for k in pk.BONUSES}
 # Σύντομο σήμα είδους για το όνομα του PNG (ίδιο με τα ZIP των αποδείξεων)
-GIFT_SLUGS = {"easter": "ΔΠ", "christmas": "ΔΧ", "allowance": "ΕΑ"}
+GIFT_SLUGS = {k.kind: k.short for k in pk.BONUSES}
 
 
 @bp.get("/gift/analysis")
@@ -177,11 +176,7 @@ def print_slips():
     )
 
 
-GIFT_FILENAMES = {
-    "easter": "doro_pasxa",
-    "christmas": "doro_christougennon",
-    "allowance": "epidoma_adeias",
-}
+GIFT_FILENAMES = {k.kind: k.filename for k in pk.BONUSES}
 
 
 def _gift_args(kind):

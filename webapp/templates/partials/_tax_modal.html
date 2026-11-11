@@ -47,36 +47,27 @@
               value="{{ f.get('phaseout_per_1000', p.phaseout_per_1000) }}"></label>
         </div>
 
+        {# Παράμετροι καθεστώτων: παράγονται από τα πεδία `_ui(...)` κάθε κλάσης
+           του config.TAX_MODELS (views/settings._tax_model_forms). #}
+        {% for m in model_forms %}
         <div style="margin-top:12px;padding:10px;border:1px dashed #ccd2dd;border-radius:8px">
-          <b style="font-size:13px">Παράμετροι καθεστώτος 2026</b>
+          <b style="font-size:13px">Παράμετροι καθεστώτος «{{ m.label }}»</b>
           <span class="muted" style="font-size:12px">— διαβάζονται ΜΟΝΟ όταν
-            το καθεστώς είναι «Κλίμακα 2026»: οι συντελεστές των τριών πρώτων
-            κλιμακίων εξαρτώνται από τα τέκνα, και των δύο πρώτων επιπλέον
-            από την ηλικία</span>
+            αυτό είναι το επιλεγμένο καθεστώς</span>
           <div class="frm cols" style="margin-top:8px">
-            <label>Συντελεστές 0–10 χιλ. ανά τέκνα (% — 0;1;2;3;4+)
-              <input name="band1_child_rates" class="mono"
-                value="{{ f.get('band1_child_rates', p.band1_child_rates) }}"></label>
-            <label>Συντελεστές 10–20 χιλ. ανά τέκνα (% — 0;1;2;3;4+)
-              <input name="band2_child_rates" class="mono"
-                value="{{ f.get('band2_child_rates', p.band2_child_rates) }}"></label>
-            <label>Συντελεστές 20–30 χιλ. ανά τέκνα (% — 0;1;2;3;4)
-              <input name="band3_child_rates" class="mono"
-                value="{{ f.get('band3_child_rates', p.band3_child_rates) }}"></label>
-            <label>Μείωση 20–30 χιλ. ανά τέκνο 5+ (μονάδες %)
-              <input type="number" name="band3_extra_child_step" step="0.1" min="0"
-                value="{{ f.get('band3_extra_child_step', p.band3_extra_child_step) }}"></label>
-            <label>Μηδενικός συντελεστής έως ηλικία
-              <input type="number" name="youth_zero_max_age" step="1" min="15"
-                value="{{ f.get('youth_zero_max_age', p.youth_zero_max_age) }}"></label>
-            <label>Μειωμένος συντελεστής έως ηλικία
-              <input type="number" name="youth_low_max_age" step="1" min="15"
-                value="{{ f.get('youth_low_max_age', p.youth_low_max_age) }}"></label>
-            <label>Μειωμένος συντελεστής (%)
-              <input type="number" name="youth_low_rate" step="0.1" min="0"
-                value="{{ f.get('youth_low_rate', p.youth_low_rate) }}"></label>
+            {% for fl in m.fields %}
+            <label>{{ fl.label }}
+              {% if fl.list %}
+              <input name="{{ fl.name }}" class="mono"
+                value="{{ f.get(fl.name, p[fl.name]) }}">
+              {% else %}
+              <input type="number" name="{{ fl.name }}" step="{{ fl.step }}" min="0"
+                value="{{ f.get(fl.name, p[fl.name]) }}">
+              {% endif %}</label>
+            {% endfor %}
           </div>
         </div>
+        {% endfor %}
       </div>
       <div class="mfoot">
         <button type="button" class="ghost"

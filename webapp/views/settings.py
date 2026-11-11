@@ -446,6 +446,56 @@ def param_repeal(family):
 
 
 # --------------------------------------------------- Φορολογική κλίμακα
+def _mp_name(model: str, name: str) -> str:
+    """Όνομα input παραμέτρου καθεστώτος — με πρόθεμα, ώστε δύο καθεστώτα
+    με ίδιο πεδίο να μη συγκρούονται στη φόρμα."""
+    return f"{model}__{name}"
+
+
+def _mp_str(value, pct: bool) -> str:
+    k = 100 if pct else 1
+    if isinstance(value, (tuple, list)):
+        return ";".join(f"{v * k:g}" for v in value)
+    return f"{value * k:g}"
+
+
+def _tax_model_forms() -> list[dict]:
+    """Οι ενότητες «Παράμετροι καθεστώτος» του modal — μία ανά καθεστώς με
+    πεδία (config.tax_model_ui_fields)· παράγονται από τις κλάσεις."""
+    out = []
+    for model, cls in config.TAX_MODELS.items():
+        flds = [
+            {
+                "name": _mp_name(model, f.name),
+                "label": f.metadata["label"],
+                "list": f.type in (tuple, "tuple"),
+                "step": "1" if f.type in (int, "int") else "0.1",
+            }
+            for f in config.tax_model_ui_fields(model)
+        ]
+        if flds:
+            out.append({"key": model, "label": cls.model_label, "fields": flds})
+    return out
+
+
+def _tax_model_params(form, model: str) -> dict:
+    """Τα `model_params` του επιλεγμένου καθεστώτος από τη φόρμα."""
+    out = {}
+    for f in config.tax_model_ui_fields(model):
+        raw = form.get(_mp_name(model, f.name), "")
+        k = 100.0 if f.metadata["pct"] else 1.0
+        if f.type in (tuple, "tuple"):
+            vals = [v / k for v in _parse_numbers(raw, f.metadata["label"])]
+            if vals:
+                out[f.name] = vals
+            continue
+        nums = _parse_numbers(raw, f.metadata["label"])
+        if not nums:
+            continue
+        out[f.name] = int(nums[0]) if f.type in (int, "int") else nums[0] / k
+    return out
+
+
 def _tax_prefill(entry):
     """Προσυμπλήρωση της φόρμας κλίμακας (strings) — από υπάρχουσα εγγραφή
     ή τις ενδεικτικές προεπιλογές."""
@@ -457,14 +507,13 @@ def _tax_prefill(entry):
         "extra_child_reduction": "220",
         "phaseout_threshold": "12000",
         "phaseout_per_1000": "20",
-        "band1_child_rates": "9;9;9;9;0",
-        "band2_child_rates": "20;18;16;9;0",
-        "band3_child_rates": "26;24;22;20;18",
-        "band3_extra_child_step": "2",
-        "youth_zero_max_age": "25",
-        "youth_low_max_age": "30",
-        "youth_low_rate": "9",
     }
+    # Πεδία καθεστώτων: οι προεπιλογές της κλάσης, ή οι τιμές της εγγραφής.
+    for model in config.TAX_MODELS:
+        for fld in config.tax_model_ui_fields(model):
+            src = entry if entry is not None and type(entry).model_key == model else None
+            value = getattr(src, fld.name) if src else fld.default
+            p[_mp_name(model, fld.name)] = _mp_str(value, fld.metadata["pct"])
     if entry is None:
         return p
     lines = []
@@ -480,22 +529,6 @@ def _tax_prefill(entry):
         "phaseout_threshold": f"{entry.phaseout_threshold:g}",
         "phaseout_per_1000": f"{entry.phaseout_per_1000:g}",
     })
-    if type(entry).model_key == "youth2026":
-        p.update({
-            "band1_child_rates": ";".join(
-                f"{r * 100:g}" for r in entry.band1_child_rates
-            ),
-            "band2_child_rates": ";".join(
-                f"{r * 100:g}" for r in entry.band2_child_rates
-            ),
-            "band3_child_rates": ";".join(
-                f"{r * 100:g}" for r in entry.band3_child_rates
-            ),
-            "band3_extra_child_step": f"{entry.band3_extra_child_step * 100:g}",
-            "youth_zero_max_age": str(entry.youth_zero_max_age),
-            "youth_low_max_age": str(entry.youth_low_max_age),
-            "youth_low_rate": f"{entry.youth_low_rate * 100:g}",
-        })
     return p
 
 
@@ -512,7 +545,7 @@ def tax_modal():
         "partials/_tax_modal.html",
         edit=entry is not None,
         p=_tax_prefill(entry),
-        models=config.TAX_MODELS,
+        models=config.TAX_MODELS, model_forms=_tax_model_forms(),
     )
 
 
@@ -613,30 +646,7 @@ def tax_save():
         f = request.form
         vf = form_date(f, "valid_from")
         model = f.get("model", "standard")
-        model_params = {}
-        if model == "youth2026":
-            for band, what in (
-                ("band1_child_rates", "Συντελεστές 0–10 χιλ. ανά τέκνα"),
-                ("band2_child_rates", "Συντελεστές 10–20 χιλ. ανά τέκνα"),
-                ("band3_child_rates", "Συντελεστές 20–30 χιλ. ανά τέκνα"),
-            ):
-                rates = [
-                    r / 100.0 for r in _parse_numbers(f.get(band, ""), what)
-                ]
-                if rates:
-                    model_params[band] = rates
-            model_params["band3_extra_child_step"] = form_float(
-                f, "band3_extra_child_step", 2.0
-            ) / 100.0
-            model_params["youth_zero_max_age"] = form_int(
-                f, "youth_zero_max_age", 25
-            )
-            model_params["youth_low_max_age"] = form_int(
-                f, "youth_low_max_age", 30
-            )
-            model_params["youth_low_rate"] = form_float(
-                f, "youth_low_rate", 9.0
-            ) / 100.0
+        model_params = _tax_model_params(f, model)
         svc.define_tax_scale(
             vf,
             _parse_lines(f.get("brackets", ""), "Κλιμάκια"),
@@ -657,6 +667,7 @@ def tax_save():
     return _modal_error(
         "partials/_tax_modal.html", msg,
         edit=False, p=_tax_prefill(None), models=config.TAX_MODELS,
+        model_forms=_tax_model_forms(),
     )
 
 
