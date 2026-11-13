@@ -16,6 +16,7 @@ import misevent.rules.config as config
 from misevent.domain.events import LeaveCompensationCalculated, LeaveType, SeveranceCalculated
 
 from ._base import (
+    LEAVE_EXTRA_DAY_YEARS,
     LONG_SERVICE_ANY_EMPLOYER_YEARS,
     LONG_SERVICE_LEAVE_DAYS,
     LONG_SERVICE_SAME_EMPLOYER_YEARS,
@@ -172,14 +173,21 @@ class EntitlementsMixin:
         if emp.hire_date is None or emp.hire_date.year > year:
             return 0
         service_years = year - emp.hire_date.year
-        if self._long_service_leave(emp, year):
-            base = LONG_SERVICE_LEAVE_DAYS
-        else:
-            base = {0: 20, 1: 21}.get(service_years, 22)
+        base = self._leave_base(emp, year)
         if service_years == 0:
             months = 12 - emp.hire_date.month + 1
             return ceil(base * months / 12)
         return base
+
+    def _leave_base(self, emp, year: int) -> int:
+        """ΕΤΗΣΙΑ βάση άδειας (πενθήμερο), πριν από κάθε αναλογία: 20 / 21 /
+        22 κατά έτος υπηρεσίας· 25 με μακρά υπηρεσία· **+1 (26) μετά από
+        25 έτη** υπηρεσίας/προϋπηρεσίας (ΕΓΣΣΕ 2008-2009 αρ. 3)."""
+        if self._long_service_leave(emp, year):
+            on = min(date(year, 12, 31), emp.termination_date or date.max)
+            extra = emp.full_service_years(on) >= LEAVE_EXTRA_DAY_YEARS
+            return LONG_SERVICE_LEAVE_DAYS + (1 if extra else 0)
+        return {0: 20, 1: 21}.get(year - emp.hire_date.year, 22)
 
     @staticmethod
     def _long_service_leave(emp, year: int) -> bool:
@@ -289,13 +297,30 @@ class EntitlementsMixin:
         self.record_leave(employee_id, LeaveType.ANNUAL, date_from, date_to, notes)
         return {"days": days, "remaining": ent - taken - days, "entitlement": ent}
 
-    def leave_compensation_preview(self, employment_id, term=None):
+    def leave_compensation_preview(self, employment_id, term=None,
+                                   employer_fault=False):
         """Ανάλυση της αποζημίωσης μη ληφθείσας αδείας (χωρίς event) — ή None
-        αν δεν οφείλεται. Δικαίωμα: 1ο/2ο έτος υπηρεσίας αναλογικά 2 ημέρες
-        ανά μήνα υπηρεσίας στο έτος αποχώρησης (cap το ετήσιο), 3ο έτος+
-        ολόκληρο το ετήσιο δικαίωμα. Υπόλοιπο = δικαίωμα − ληφθείσες του έτους·
-        ημέρες αποζημίωσης = υπόλοιπο × 1,2 (πενθήμερο→εξαήμερο· εξαήμερο ×1)·
-        ποσό = ημέρες × ημερήσια αμοιβή (μισθός/25 ή ημερομίσθιο), ΜΟΝΟ ΦΜΥ.
+        αν δεν οφείλεται. Δικαίωμα: 1ο/2ο έτος υπηρεσίας αναλογικά, 3ο έτος+
+        ολόκληρο το ετήσιο. Υπόλοιπο = δικαίωμα − ληφθείσες του έτους· ποσό =
+        ημερομίσθια × ημερήσια αμοιβή, ΜΟΝΟ ΦΜΥ (Ν. 1346/1983 αρ. 1 παρ. 3 —
+        οι αποδοχές που θα έπαιρνε αν είχε λάβει την άδεια).
+
+        ⚠️ ΜΟΝΑΔΕΣ: δικαίωμα και ληφθείσες μετρώνται ΠΑΝΤΟΥ σε εργάσιμες
+        Δευ–Παρ (μονάδες ΠΕΝΘΗΜΕΡΟΥ: 20/21/22/25/26 — `working_days_in_range`),
+        και για εξαήμερο. Άρα:
+        - 1ο/2ο έτος: βάση × μήνες/12 σε μονάδες πενθημέρου (20/12 = 1,667
+          ημέρες/μήνα· 21/12 στο 2ο έτος ΜΕΤΑ τη συμπλήρωση 12μήνου). ΟΧΙ «2
+          ημέρες/μήνα»: αυτή είναι η αναλογία του ΕΞΑΗΜΕΡΟΥ (24/12) και μαζί
+          με το ×1,2 πλήρωνε 20% παραπάνω.
+        - Μισθωτός: ημερομίσθια = ημέρες × 1,2 (6/5) × μισθός/25 — σε ΚΑΘΕ
+          σύστημα (πενθήμερο 20 → 24, εξαήμερο 20 μονάδες = 24 ημέρες). Το 1ο
+          έτος βγαίνει ακριβώς «2 ημερομίσθια ανά μήνα».
+        - Ημερομίσθιος: ημέρες προγράμματος (× σύστημα/5) × αμοιβή ημέρας
+          (`pe.daily_day_pay`: πενθήμερο 8ωρο = ημερομίσθιο × 1,2).
+
+        `employer_fault`: ο εργαζόμενος ζήτησε την άδεια και ο εργοδότης δεν
+        τη χορήγησε → αποδοχές ΔΙΠΛΕΣ (+100%, αρ. 5 παρ. 1 ν. 539/1945). Το
+        κρίνει ο χρήστης· ΔΕΝ τεκμαίρεται ποτέ αυτόματα.
 
         Το `term` είναι ΥΠΟΘΕΤΙΚΗ ημ. αποχώρησης (προεπισκόπηση πριν την
         καταχώρησή της)."""
@@ -311,21 +336,32 @@ class EntitlementsMixin:
             # 3ο έτος υπηρεσίας+: δικαιούται ολόκληρο το ετήσιο δικαίωμα
             ent = full
         else:
-            # 1ο/2ο έτος: αναλογικά 2 ημέρες ανά μήνα υπηρεσίας στο έτος
-            # (από την πρόσληψη/αρχή έτους έως την αποχώρηση), cap το ετήσιο
+            # 1ο/2ο έτος: αναλογικά, βάση × μήνες υπηρεσίας στο έτος / 12
+            # (από την πρόσληψη/αρχή έτους έως την αποχώρηση), cap το ετήσιο.
+            # Βάση: 20 — 21 στο 2ο έτος μόνο αν συμπληρώθηκε ο 12μηνος —
+            # ή η μακρά υπηρεσία (25/26) όπου ισχύει.
             months = pe._allowance_months(year, emp.hire_date, term)
-            ent = min(2 * months, full)
-        leave_days = ent - self.annual_leave_taken(employment_id, year)
+            anniversary = date(emp.hire_date.year + 1, emp.hire_date.month, 1)
+            base = self._leave_base(emp, year)
+            if base == 21 and term < anniversary:
+                base = 20
+            ent = min(round(base * months / 12, 2), full)
+        leave_days = round(ent - self.annual_leave_taken(employment_id, year), 2)
         if leave_days <= 0:
             return None
-        factor = 1.0 if emp.scheduled_days_per_week() >= 6 else 1.2
-        comp_days = round(leave_days * factor, 2)
-        daily = emp.daily_wage if emp.pay_type == "daily" else emp.monthly_gross / 25.0
-        gross = round(comp_days * daily, 2)
+        if emp.pay_type == "daily":
+            dpw = emp.weekly_system or 5
+            comp_days = round(leave_days * dpw / 5, 2)
+            daily = pe.daily_day_pay(emp.daily_wage, emp.weekly_hours, dpw)
+        else:
+            comp_days = round(leave_days * 6 / 5, 2)
+            daily = emp.monthly_gross / 25.0
+        gross = round(comp_days * daily * (2 if employer_fault else 1), 2)
         fmy = pe.monthly_fmy(gross, emp.children_on(term), term, emp.birth_date)
         return {
             "leave_days": leave_days,
             "comp_days": comp_days,
+            "employer_fault": bool(employer_fault),
             "daily": round(daily, 2),
             "gross": gross,
             "fmy": fmy,
@@ -416,10 +452,11 @@ class EntitlementsMixin:
             None,
         )
 
-    def run_leave_compensation(self, employment_id):
+    def run_leave_compensation(self, employment_id, employer_fault=False):
         """Υπολογίζει & καταγράφει την αποζημίωση μη ληφθείσας αδείας
         (LeaveCompensationCalculated) — ξεχωριστή «μισθοδοσία», ΜΟΝΟ ΦΜΥ."""
-        a = self.leave_compensation_preview(employment_id)
+        a = self.leave_compensation_preview(employment_id,
+                                            employer_fault=employer_fault)
         if a is None:
             raise ValueError("Δεν υπάρχει υπόλοιπο κανονικής άδειας προς αποζημίωση")
         emp = self.proj.employments[employment_id]
@@ -434,6 +471,7 @@ class EntitlementsMixin:
                 a["gross"],
                 a["fmy"],
                 a["net"],
+                employer_fault=a["employer_fault"],
             ),
         )
         return a

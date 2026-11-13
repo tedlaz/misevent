@@ -44,6 +44,21 @@ def test_certificates(fresh_system):
         assert cert["periods"] and cert["days"] > 0
         assert sum(k["gross"] for k in cert["kinds"]) == t["gross"]
 
+        # ΕΠΙΓΝΩΣΗ ΕΚΚΡΕΜΟΤΗΤΩΝ: έτος σε εξέλιξη, ένας μόνο μήνας
+        # υπολογισμένος — η βεβαίωση το ξέρει και είναι προσωρινή.
+        pend = cert["pending"]
+        assert pend, pend
+        if year == today().year:
+            assert pend[0].startswith("Το έτος δεν έχει ολοκληρωθεί"), pend
+
+        # Δεδουλευμένα της ενεργής απασχόλησης (καρτέλα): ο υπολογισμένος
+        # μήνας μετρά, τα Δώρα/Επίδομα αναλογούν ως ποσό
+        a = q.accruals(emp, today())
+        if a is not None and today().year == year:
+            assert p.period_month in a["payroll_done"]
+            assert a["leave_entitlement"] > 0
+            assert all(b["gross"] >= 0 for b in a["bonuses"])
+
         ec = q.employment_certificate(person.person_id)
         assert ec["periods"][0]["date_from"] == min(
             proj.employments[e].hire_date for e in person.employment_ids)
@@ -52,6 +67,11 @@ def test_certificates(fresh_system):
     assert f"/persons/{person.person_id}/certificates" in c.get("/persons/").text
     modal = c.get(f"/persons/{person.person_id}/certificates")
     assert modal.status_code == 200 and "certificate/employment" in modal.text
+
+    warn = c.get(f"/persons/{person.person_id}/certificate-pending?year={year}")
+    assert warn.status_code == 200 and "ΠΡΟΣΩΡΙΝΗ" in warn.text
+    if emp.lifecycle == "active":
+        assert "Δεδουλευμένα έως σήμερα" in c.get(f"/employments/{emp.employment_id}").text
 
     base = f"/persons/{person.person_id}/certificate"
     for url in (f"{base}/tax?year={year}", f"{base}/employment"):

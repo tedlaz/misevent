@@ -274,13 +274,15 @@ def test_leave_compensation_prorated_second_year():
     # Ολοκληρωμένη πρόσληψη (αναγγελία Ε3) — χωρίς αυτήν δεν υπάρχει
     # σχέση προς λήξη (§5.7α)
     svc.record_external_hire_submission(eid)
-    # Αποχώρηση 20/3/2025 = 2ο ημερολογιακό έτος -> 3 μήνες × 2 = 6 ημέρες
+    # Αποχώρηση 20/3/2025 = 2ο ημερολογιακό έτος, ΠΡΙΝ τον 12μηνο (8/4):
+    # βάση 20 → 20 × 3/12 = 5 ημέρες πενθημέρου × 1,2 = 6 ημερομίσθια,
+    # δηλαδή ακριβώς «2 ημερομίσθια ανά μήνα» (ΟΧΙ 2 ημέρες × 1,2)
     svc.terminate(eid, date(2025, 3, 20))
     a = svc.run_leave_compensation(eid)
-    assert a["leave_days"] == 6            # min(2×3 μήνες, ετήσιο 21)
-    assert a["comp_days"] == 7.2           # 6 × 1,2
-    assert a["gross"] == 432.0             # 7,2 × (1500/25 = 60)
-    print("OK αποζημίωση αδείας 2ου έτους: 6 ημ αναλογικά x1,2 x60 = 432")
+    assert a["leave_days"] == 5
+    assert a["comp_days"] == 6.0
+    assert a["gross"] == 360.0             # 6 × (1500/25 = 60)
+    print("OK αποζημίωση αδείας 2ου έτους: 5 ημ x1,2 x60 = 360")
 
 
 def _svc_with_scheduler():
@@ -358,3 +360,74 @@ def test_closed_period_blocks_retroactive_hire_and_exit():
     svc.start_employment(pid2, date(2025, 4, 1), monthly_gross=1500.0,
                          weekly_pattern=FULL_WEEK)
     print("OK κλεισμένη μισθοδοσία μπλοκάρει αναδρομική πρόσληψη/αποχώρηση")
+
+
+def _leave_comp_case(hire, term, **kw):
+    """Μισθωτός 1500€ (ημερομίσθιο 60), καμία άδεια ληφθείσα."""
+    store = Database().store("test")
+    proj = Projections()
+    store.subscribe(proj.handle)
+    svc = PayrollService(store, proj)
+    svc.confirm_default_parameters()
+    svc.register_company(ame="1234567890", afm="999888771", legal_name="ΔΟΚΙΜΗ ΑΕ")
+    svc.define_branch(0)
+    pid = svc.register_person(
+        last_name="ΠΑΠΑΔΟΠΟΥΛΟΣ", first_name="ΙΩΑΝΝΗΣ",
+        father_name="Ν", mother_name="Μ", birth_date=date(1960, 5, 5),
+        afm="111222336", amka="05059012343", ama="123456789",
+    )
+    kw.setdefault("weekly_pattern", FULL_WEEK)
+    eid = svc.start_employment(pid, hire, monthly_gross=1500.0,
+                               weekly_hours=40.0, **kw)
+    insure(svc, eid)
+    svc.record_external_hire_submission(eid)
+    svc.terminate(eid, term)
+    return svc.leave_compensation_preview(eid)
+
+
+def test_leave_compensation_units():
+    """Ημέρες σε μονάδες ΠΕΝΘΗΜΕΡΟΥ, πληρωμή × 1,2 (6/5) × μισθός/25."""
+    # 1ο έτος: 6 μήνες (Ιούλ–Δεκ) → 20 × 6/12 = 10 ημ. → 12 ημερομίσθια
+    # = «2 ημερομίσθια ανά μήνα»
+    a = _leave_comp_case(date(2026, 7, 1), date(2026, 12, 15))
+    assert (a["leave_days"], a["comp_days"], a["gross"]) == (10, 12.0, 720.0)
+    # 2ο έτος ΜΕΤΑ τον 12μηνο: βάση 21 → 21 × 6/12 = 10,5 → 12,6 ημερομίσθια
+    a = _leave_comp_case(date(2025, 3, 1), date(2026, 6, 20))
+    assert (a["leave_days"], a["comp_days"]) == (10.5, 12.6)
+    # ΕΞΑΗΜΕΡΟ: ίδιες μονάδες (22 Δευ–Παρ = 26 ημέρες εξαημέρου) → ×1,2
+    six = {d: "09:00-15:40" for d in ("MON", "TUE", "WED", "THU", "FRI", "SAT")}
+    a = _leave_comp_case(date(2024, 4, 8), date(2026, 7, 15),
+                         weekly_pattern=six, weekly_system=6)
+    assert (a["leave_days"], a["comp_days"]) == (22, 26.4)
+    # 25 έτη υπηρεσίας/προϋπηρεσίας: 25 + 1 = 26 ημέρες (ΕΓΣΣΕ 2008-09)
+    a = _leave_comp_case(date(2024, 4, 8), date(2026, 7, 15), service_years=24.0)
+    assert a["leave_days"] == 26 and a["comp_days"] == 31.2
+
+
+def test_leave_compensation_employer_fault():
+    """Υπαιτιότητα εργοδότη (ζητήθηκε άδεια, δεν χορηγήθηκε): ΔΙΠΛΕΣ
+    αποδοχές, +100% (αρ. 5 παρ. 1 ν. 539/1945) — ΜΟΝΟ με ρητή επιλογή."""
+    base = _leave_comp_case(date(2024, 4, 8), date(2026, 7, 15))
+    from misevent.app.services import PayrollService  # noqa: F401
+    store = Database().store("test")
+    proj = Projections()
+    store.subscribe(proj.handle)
+    svc = PayrollService(store, proj)
+    svc.confirm_default_parameters()
+    svc.register_company(ame="1234567890", afm="999888771", legal_name="ΔΟΚΙΜΗ ΑΕ")
+    svc.define_branch(0)
+    pid = svc.register_person(
+        last_name="ΠΑΠΑΔΟΠΟΥΛΟΣ", first_name="ΙΩΑΝΝΗΣ",
+        father_name="Ν", mother_name="Μ", birth_date=date(1960, 5, 5),
+        afm="111222336", amka="05059012343", ama="123456789",
+    )
+    eid = svc.start_employment(pid, date(2024, 4, 8), monthly_gross=1500.0,
+                               weekly_hours=40.0, weekly_pattern=FULL_WEEK)
+    insure(svc, eid)
+    svc.record_external_hire_submission(eid)
+    pre = svc.termination_preview(eid, date(2026, 7, 15), employer_fault=True)
+    assert pre["leave_comp"]["gross"] == 2 * base["gross"]
+    svc.terminate(eid, date(2026, 7, 15), employer_fault=True)
+    ev = svc.leave_compensation(eid)
+    assert ev.employer_fault and ev.gross == 2 * base["gross"]
+    assert ev.comp_days == base["comp_days"]   # τα ημερομίσθια δεν αλλάζουν

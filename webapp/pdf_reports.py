@@ -576,6 +576,7 @@ def _wage_breakdown(emp, a: dict, on_date: date):
     mw = config.minimum_wage_for(on_date)
     rules = config.allowance_rules_for(on_date)
     tsy = emp.total_service_years(on_date)
+    married, extra_pct = emp.allowances_on(on_date)
     if daily:
         base_min = round(mw.daily, 2)
         tri_max, tri_pct = rules.daily_max_triennia, rules.daily_triennium_pct
@@ -589,12 +590,12 @@ def _wage_breakdown(emp, a: dict, on_date: date):
     if tri:
         rows.append((f"{tri} τριετίες (+{tri * tri_pct:.0%})",
                      round(base_min * tri * tri_pct, 2)))
-    if emp.married and rules.marriage_pct:
+    if married and rules.marriage_pct:
         rows.append((f"Επίδομα γάμου (+{rules.marriage_pct:.0%})",
                      round(base_min * rules.marriage_pct, 2)))
-    if emp.extra_allowances_pct:
-        rows.append((f"Λοιπές προσαυξήσεις (+{num(emp.extra_allowances_pct)}%)",
-                     round(base_min * emp.extra_allowances_pct / 100.0, 2)))
+    if extra_pct:
+        rows.append((f"Λοιπές προσαυξήσεις (+{num(extra_pct)}%)",
+                     round(base_min * extra_pct / 100.0, 2)))
     floor = round(sum(amt for _l, amt in rows), 2)
     extra = round(wage - floor, 2)
     if extra > 0.005:
@@ -1259,12 +1260,13 @@ def _leave_comp_slip_page(pdf: ReportPDF, ev, emp):
     _settlement_emp_card(pdf, emp)
 
     pdf.section("Αποδοχές", GREEN, "plus")
-    daily_pay = round(ev.gross / ev.comp_days, 2) if ev.comp_days else 0.0
-    factor = "×1 (εξαήμερο)" if emp.scheduled_days_per_week() >= 6 \
-        else "×1,2 (αναγωγή πενθημέρου σε εξαήμερο)"
+    fault = getattr(ev, "employer_fault", False)
+    daily_pay = (round(ev.gross / ev.comp_days / (2 if fault else 1), 2)
+                 if ev.comp_days else 0.0)
     _line(pdf, "Αποζημίωση μη ληφθείσας κανονικής αδείας",
-          f"{num(ev.leave_days)} ημέρες υπολοίπου {factor} = "
-          f"{num(ev.comp_days)} ημέρες × ημερήσια αμοιβή {eur(daily_pay)}",
+          f"{num(ev.leave_days)} ημέρες υπολοίπου → {num(ev.comp_days)} "
+          f"ημερομίσθια × ημερήσια αμοιβή {eur(daily_pay)}"
+          + (" × 2 (υπαιτιότητα εργοδότη, +100%)" if fault else ""),
           ev.gross, bold=True)
     _subtotal(pdf, "ΜΙΚΤΕΣ ΑΠΟΔΟΧΕΣ", ev.gross, NAVY)
 
@@ -2132,9 +2134,15 @@ def tax_certificate_pdf(person_id: str, year: int) -> bytes:
     pdf = ReportPDF(footer_note=f"Βεβαίωση αποδοχών {year} — {person.full_name}"
                                 f" — εκδόθηκε {dmy(today())}")
     pdf.add_page()
-    pdf.title_band("Βεβαίωση Αποδοχών", "για φορολογική χρήση",
-                   f"Έτος {year}", icon="euro")
+    pending = c["pending"]
+    pdf.title_band("Βεβαίωση Αποδοχών" + (" — ΠΡΟΣΩΡΙΝΗ" if pending else ""),
+                   "για φορολογική χρήση", f"Έτος {year}", icon="euro")
     _cert_parties(pdf, person)
+    if pending:
+        # Δεν «κρύβουμε» ότι λείπουν κινήσεις: η βεβαίωση λέει ΤΙ λείπει.
+        pdf.section("Εκκρεμότητες — τα ποσά δεν είναι οριστικά", AMBER, "clock",
+                    note=f"{len(pending)}")
+        _cert_text(pdf, "\n".join(f"• {x}" for x in pending))
 
     pdf.section("Περίοδος εργασίας", NAVY, "calendar",
                 note=f"σύνολο {c['days']} ημερολογιακές ημέρες")
@@ -2160,7 +2168,9 @@ def tax_certificate_pdf(person_id: str, year: int) -> bytes:
         f"ακαθάριστες αποδοχές {eur(t['gross'])}, από τις οποίες "
         f"παρακρατήθηκαν ασφαλιστικές εισφορές {eur(t['efka_employee'])} και "
         f"φόρος μισθωτών υπηρεσιών {eur(t['fmy'])}, με καθαρό πληρωτέο ποσό "
-        f"{eur(t['net'])}. Η βεβαίωση χορηγείται για φορολογική χρήση."))
+        f"{eur(t['net'])}. Η βεβαίωση χορηγείται για φορολογική χρήση."
+        + (" Είναι ΠΡΟΣΩΡΙΝΗ: εκκρεμούν οι κινήσεις που αναφέρονται παραπάνω."
+           if pending else "")))
     _cert_signature(pdf)
     return bytes(pdf.output())
 

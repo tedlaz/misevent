@@ -1,0 +1,10 @@
+{# Εκκρεμότητες βεβαίωσης αποδοχών (queries.year_pending). #}
+{% if pending %}
+  <div class="warnbox"><b>⚠️ Η βεβαίωση {{ year }} θα είναι ΠΡΟΣΩΡΙΝΗ</b> — εκκρεμούν:
+    <ul style="margin:4px 0 0 18px;padding:0">
+      {% for x in pending %}<li>{{ x }}</li>{% endfor %}
+    </ul></div>
+{% else %}
+  <p class="muted" style="font-size:12.5px">✓ Όλες οι κινήσεις του {{ year }} έχουν
+    ολοκληρωθεί — η βεβαίωση είναι οριστική.</p>
+{% endif %}

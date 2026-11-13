@@ -250,7 +250,7 @@ def gross_for_net(company_id: str, net: float, employment_id: str = "",
         if emp := who["emp"]:
             floor = config.minimum_floor_value(
                 "monthly", emp.weekly_hours, end, emp.total_service_years(end),
-                emp.married, emp.extra_allowances_pct)
+                *emp.allowances_on(end))
             lost = svc.labor_subsidy_full(emp, floor, emp.weekly_hours, end)
         else:
             lost = pe.labor_subsidy_full(floor, floor, 40.0, end)

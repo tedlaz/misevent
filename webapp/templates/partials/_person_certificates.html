@@ -5,10 +5,14 @@
   <form method="get" target="_blank" style="display:flex;gap:6px;align-items:center"
         action="{{ url_for('persons.certificate', person_id=person.person_id, kind='tax') }}">
     <input type="number" name="year" min="2000" max="2100" step="1"
-           style="max-width:90px" value="{{ cert_year }}">
+           style="max-width:90px" value="{{ cert_year }}"
+           hx-get="{{ url_for('persons.certificate_pending', person_id=person.person_id) }}"
+           hx-trigger="load, change" hx-target="#cert-pending" hx-swap="innerHTML">
     <button type="submit" class="ghost">Βεβαίωση αποδοχών (φορολογική)</button>
   </form>
   <a class="ghost" target="_blank"
      href="{{ url_for('persons.certificate', person_id=person.person_id, kind='employment') }}">
     Βεβαίωση εργασίας</a>
 </div>
+{# Τι λείπει για να είναι ΟΡΙΣΤΙΚΗ η βεβαίωση αποδοχών του έτους (htmx) #}
+<div id="cert-pending"></div>

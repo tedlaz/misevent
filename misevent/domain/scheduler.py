@@ -494,7 +494,7 @@ class ObligationScheduler:
                 continue
             f_new = config.minimum_floor_value(
                 e.pay_type, e.weekly_hours, period_end,
-                e.total_service_years(period_end), e.married, e.extra_allowances_pct,
+                e.total_service_years(period_end), *e.allowances_on(period_end),
             )
             salary = e.daily_wage if e.pay_type == "daily" else e.monthly_gross
             if salary < f_new - 0.005:  # παράβαση -> πάντα χρειάζεται
@@ -503,8 +503,7 @@ class ObligationScheduler:
                 ref_old = max(prev_end, e.hire_date)
                 f_old = config.minimum_floor_value(
                     e.pay_type, e.weekly_hours, ref_old,
-                    e.total_service_years(ref_old), e.married,
-                    e.extra_allowances_pct,
+                    e.total_service_years(ref_old), *e.allowances_on(ref_old),
                 )
                 if f_new > f_old + 0.005:  # ανέβηκε το όριο -> πέρασμα αύξησης
                     return True

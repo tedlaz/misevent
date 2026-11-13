@@ -80,6 +80,8 @@ FIXED_TERM_END_REASON = "ΛΗΞΗ_ΣΥΜΒΑΣΗΣ_ΟΡΙΣΜΕΝΟΥ"
 LONG_SERVICE_ANY_EMPLOYER_YEARS = 12.0
 LONG_SERVICE_SAME_EMPLOYER_YEARS = 10.0
 LONG_SERVICE_LEAVE_DAYS = 25
+# +1 ημέρα άδειας μετά από 25 έτη υπηρεσίας/προϋπηρεσίας (ΕΓΣΣΕ 2008-2009 αρ. 3)
+LEAVE_EXTRA_DAY_YEARS = 25.0
 
 
 def _decode_import(data) -> str:

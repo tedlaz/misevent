@@ -165,7 +165,7 @@ class GiftsMixin:
             return res
         return None
 
-    def _settle_exit_accruals(self, emp, with_notice=False):
+    def _settle_exit_accruals(self, emp, with_notice=False, employer_fault=False):
         """ΕΚΚΑΘΑΡΙΣΗ ΑΠΟΧΩΡΗΣΗΣ — ΟΛΟΙ οι υπολογισμοί γίνονται ΑΥΤΟΜΑΤΑ με την
         επιβεβαίωση της αποχώρησης, χωρίς χειροκίνητα κουμπιά:
 
@@ -205,7 +205,7 @@ class GiftsMixin:
 
         # Αποζημίωση μη ληφθείσας αδείας — μόνο αν υπάρχει υπόλοιπο
         if self.leave_compensation(eid) is None and self.leave_compensation_preview(eid):
-            self.run_leave_compensation(eid)
+            self.run_leave_compensation(eid, employer_fault)
 
         # Αποζημίωση απόλυσης — μόνο σε καταγγελία και μόνο αν οφείλεται
         if (

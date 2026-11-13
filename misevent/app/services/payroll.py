@@ -34,13 +34,14 @@ class PayrollMixin:
         if e.hire_date is None or e.hire_date > period_end:
             return None
         mw = config.minimum_wage_for(period_end)
+        married, extra = e.allowances_on(period_end)
         floor, desc = self.minimum_floor(
             e.pay_type,
             e.weekly_hours,
             period_end,
             service_years=e.total_service_years(period_end),
-            married=e.married,
-            extra_pct=e.extra_allowances_pct,
+            married=married,
+            extra_pct=extra,
         )
         suffix = f" [{desc}]" if desc else ""
         if e.pay_type == "monthly" and e.monthly_gross < floor:
@@ -115,8 +116,7 @@ class PayrollMixin:
                 e.weekly_hours,
                 period_end,
                 e.total_service_years(period_end),
-                e.married,
-                e.extra_allowances_pct,
+                *e.allowances_on(period_end),
             )
             ref_old = max(prev_end, e.hire_date)
             f_old = config.minimum_floor_value(
@@ -124,8 +124,7 @@ class PayrollMixin:
                 e.weekly_hours,
                 ref_old,
                 e.total_service_years(ref_old),
-                e.married,
-                e.extra_allowances_pct,
+                *e.allowances_on(ref_old),
             )
             increment = round(max(0.0, f_new - f_old), 2)
             old = e.daily_wage if e.pay_type == "daily" else e.monthly_gross
@@ -524,8 +523,7 @@ class PayrollMixin:
             weekly_hours,
             on,
             emp.total_service_years(on),
-            emp.married,
-            emp.extra_allowances_pct,
+            *emp.allowances_on(on),
         )
         return pe.labor_subsidy_full(wage, floor, weekly_hours, on)
 

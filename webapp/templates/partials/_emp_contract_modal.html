@@ -74,6 +74,23 @@
                 </select></label>
             </div>
           </div>
+
+          {# ④ ΠΡΟΣΑΥΞΗΣΕΙΣ ΚΑΤΩΤΑΤΟΥ — όρος σύμβασης, όχι στοιχείο προσώπου:
+             ο γάμος στο «🔄 Μεταβολή» του προσώπου ΔΕΝ τις αλλάζει μόνος του. #}
+          {% set mar = f.get('married', 'on' if e.married else '') %}
+          <div class="fsec fs-pay">
+            <div class="fs-h"><span class="fs-ic">💍</span>
+              <b>Προσαυξήσεις κατώτατου</b>
+              <span class="fs-hint">ανεβάζουν το κατώτατο όριο ελέγχου των
+                αποδοχών</span></div>
+            <div class="frm cols">
+              <label class="chk"><input type="checkbox" name="married" value="on"
+                {{ 'checked' if mar }}> Επίδομα γάμου 10%</label>
+              <label>Λοιπές προσαυξήσεις (%)<input type="number" step="0.01" min="0"
+                name="extra_allowances_pct"
+                value="{{ f.get('extra_allowances_pct', e.extra_allowances_pct) }}"></label>
+            </div>
+          </div>
         </div>
       </div>
       <div class="mfoot">

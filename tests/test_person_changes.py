@@ -71,3 +71,30 @@ def test_change_rejections():
         svc.change_person_details(pid, date(2026, 4, 1), birth_place="ΑΘΗΝΑ")
     svc.correct_person(pid, birth_place="ΑΘΗΝΑ")
     assert proj.persons[pid].birth_place == "ΑΘΗΝΑ"
+
+
+def test_marriage_allowance_changes_after_hire():
+    """Το επίδομα γάμου / λοιπές προσαυξήσεις αλλάζουν ΜΕΤΑ την πρόσληψη με
+    «Αλλαγή σύμβασης» και ελέγχονται αμέσως στο κατώτατο."""
+    from misevent.rules import config
+
+    svc, proj, eid = setup(date(2026, 4, 6), schedule=False)
+    emp = proj.employments[eid]
+    mw = config.minimum_wage_for(date(2026, 6, 1)).monthly
+    # Αποδοχές στον κατώτατο: ο γάμος (×1,10) τις αφήνει κάτω από το όριο
+    svc.change_contract(eid, date(2026, 6, 1), "monthly", monthly_gross=mw)
+    with pytest.raises(ValueError):
+        svc.change_contract(eid, date(2026, 7, 1), "monthly", monthly_gross=mw,
+                            married=True)
+    assert not emp.married
+    svc.change_contract(eid, date(2026, 7, 1), "monthly",
+                        monthly_gross=round(mw * 1.1, 2), married=True,
+                        extra_allowances_pct=0)
+    assert emp.married and emp.extra_allowances_pct == 0
+    svc.change_contract(eid, date(2026, 8, 1), "monthly",
+                        monthly_gross=round(mw * 1.2, 2), extra_allowances_pct=10)
+    assert emp.married and emp.extra_allowances_pct == 10   # γάμος αμετάβλητος
+    # Ισχύς στον χρόνο: πριν τη μεταβολή ισχύουν οι προηγούμενες τιμές
+    assert emp.allowances_on(date(2026, 6, 30)) == (False, 0.0)
+    assert emp.allowances_on(date(2026, 7, 15)) == (True, 0.0)
+    assert emp.allowances_on(date(2026, 8, 1)) == (True, 10.0)

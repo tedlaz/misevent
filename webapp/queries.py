@@ -2043,8 +2043,10 @@ def settlement_rows(kind: str, year: int | None = None,
             )
         else:
             note = (
-                f"{ev.leave_days:g} ημέρες υπολοίπου → {ev.comp_days:g} ημέρες "
-                f"αποζημίωσης (×1,2 αναγωγή πενθημέρου)"
+                f"{ev.leave_days:g} ημέρες υπολοίπου → {ev.comp_days:g} "
+                f"ημερομίσθια αποζημίωσης (×1,2 αναγωγή πενθημέρου)"
+                + (" × 2 (υπαιτιότητα εργοδότη)"
+                   if getattr(ev, "employer_fault", False) else "")
             )
         rows.append({
             "eid": ev.employee_id,
@@ -2339,7 +2341,112 @@ def tax_certificate(person_id: str, year: int, today: date) -> dict:
     kinds = [by_kind[k] for k, _l in LEDGER_KINDS if k in by_kind]
     return {"person": person, "year": year, "periods": periods,
             "days": sum((b - a).days + 1 for a, b in periods),
-            "kinds": kinds, "totals": ledger_totals(rows)}
+            "kinds": kinds, "totals": ledger_totals(rows),
+            "pending": year_pending(emps, year, last)}
+
+
+def year_pending(emps, year: int, last: date) -> list[str]:
+    """ΤΙ ΔΕΝ ΕΧΕΙ ΟΛΟΚΛΗΡΩΘΕΙ για τις απασχολήσεις `emps` στο έτος, έως
+    `last`: μήνες/Δώρα/Επίδομα που δεν υπολογίστηκαν, ποσά που υπολογίστηκαν
+    αλλά δεν καταβλήθηκαν, ΦΜΥ που δεν δηλώθηκε. Κενή λίστα = η βεβαίωση
+    αποδοχών είναι ΟΡΙΣΤΙΚΗ· αλλιώς είναι προσωρινή και λέει γιατί."""
+    out = []
+    if last < date(year, 12, 31):
+        out.append(f"Το έτος δεν έχει ολοκληρωθεί — περιλαμβάνονται κινήσεις "
+                   f"έως {last.strftime('%d/%m/%Y')}")
+    labels = dict(LEDGER_KINDS)
+    paid = {}
+    for pm in proj.payments:
+        k = (pm.beneficiary, PAYMENT_KINDS.get(pm.payment_type),
+             pm.period_year, pm.period_month)
+        paid[k] = paid.get(k, 0) + pm.amount
+    fmy_months = set()
+    for e in emps:
+        eid = e.employment_id
+        if not _employed_in(e, date(year, 1, 1), last):
+            continue
+        if e.migrated and e.payroll_start > date(year, 1, 1):
+            out.append(f"Μεταφορά από άλλο πρόγραμμα: οι αποδοχές πριν τις "
+                       f"{e.payroll_start.strftime('%d/%m/%Y')} δεν περιλαμβάνονται")
+        done = {p.period_month for p in proj.payrolls
+                if p.employee_id == eid and p.period_year == year}
+        for m in range(1, last.month + 1 if last.year == year else 13):
+            if m not in done and e.payroll_active_in_month(year, m):
+                out.append(f"Μισθοδοσία {m:02d}/{year}: δεν έχει υπολογιστεί")
+        gifts = {g.gift_type for g in proj.gifts
+                 if g.employee_id == eid and g.year == year}
+        for kind in ("easter", "christmas"):
+            due = min(pe.gift_payment_date(kind, year),
+                      e.termination_date or date.max)
+            if (kind not in gifts and e.payroll_start <= due <= last
+                    and svc.gift_preview_for(e, kind, year).gross > 0):
+                out.append(f"{labels[kind]} {year}: δεν έχει υπολογιστεί")
+        if (not any(a.employee_id == eid and a.year == year for a in proj.allowances)
+                and date(year, _allowance_month(e, year), 1) <= last
+                and svc.allowance_preview_for(e, year).gross > 0):
+            out.append(f"{labels['allowance']} {year}: δεν έχει υπολογιστεί")
+        for r in payroll_ledger(year, {eid}):
+            if r["fmy"]:
+                fmy_months.add(r["month"])
+            gift = r["kind"] in ("easter", "christmas")
+            got = paid.get((eid, r["kind"], year, 0 if gift else r["month"]), 0)
+            if r["net"] - got > 0.01:
+                out.append(f"{r['label']} {r['month']:02d}/{year}: υπολογίστηκε "
+                           f"αλλά δεν έχει καταβληθεί ({money(r['net'] - got)} €)")
+    for m in sorted(fmy_months):
+        ob = svc._obligation("FMY_SUBMISSION", year, m)
+        if ob is None or not ob.fulfilled:
+            out.append(f"Δήλωση ΦΜΥ {m:02d}/{year}: δεν έχει υποβληθεί")
+    return out
+
+
+def accruals(e, on: date) -> dict | None:
+    """ΔΕΔΟΥΛΕΥΜΕΝΑ μιας ΕΝΕΡΓΗΣ απασχόλησης έως `on`: μισθοδοσία του έτους,
+    κανονική άδεια, ασθένεια, Δώρα, Επίδομα Αδείας και τι θα όφειλε η
+    εταιρεία αν η σχέση έληγε την `on`. ΙΔΙΕΣ συναρτήσεις με την εκκαθάριση
+    αποχώρησης (`term=on` = υποθετική λήξη) — καμία δεύτερη αριθμητική."""
+    if e.lifecycle != "active" or e.hire_date > on:
+        return None
+    eid, y = e.employment_id, on.year
+    labels = dict(LEDGER_KINDS)
+    done = {p.period_month for p in proj.payrolls
+            if p.employee_id == eid and p.period_year == y}
+    months = [m for m in range(1, on.month + 1) if e.payroll_active_in_month(y, m)]
+    used, limit, since = e.sick_balance(on)
+
+    def bonus(kind, calc, preview):
+        if calc is not None:
+            return {"label": labels[kind], "done": True, "gross": calc.gross}
+        return {"label": labels[kind], "done": False, "gross": preview().gross}
+
+    gifts = {g.gift_type: g for g in proj.gifts if g.employee_id == eid and g.year == y}
+    allowance = next((a for a in proj.allowances
+                      if a.employee_id == eid and a.year == y), None)
+    leave = svc.leave_compensation_preview(eid, term=on)
+    sev = svc.severance_preview(eid, False, term=on)
+    sev_notice = svc.severance_preview(eid, True, term=on)
+    return {
+        "on": on,
+        "payroll_done": [m for m in months if m in done],
+        "payroll_missing": [m for m in months if m not in done],
+        "leave_entitlement": svc.annual_leave_entitlement(eid, y),
+        "leave_accrued": svc.annual_leave_accrued(eid, on),
+        "leave_taken": svc.annual_leave_taken(eid, y),
+        "sick_used": used, "sick_limit": limit, "sick_since": since,
+        "bonuses": [
+            bonus("easter", gifts.get("easter"),
+                  lambda: svc.gift_preview_for(e, "easter", y, term=on)),
+            bonus("christmas", gifts.get("christmas"),
+                  lambda: svc.gift_preview_for(e, "christmas", y, term=on)),
+            bonus("allowance", allowance,
+                  lambda: svc.allowance_preview_for(e, y, term=on)),
+        ],
+        "leave_comp": leave["gross"] if leave else 0.0,
+        "leave_comp_days": leave["leave_days"] if leave else 0,
+        "severance": sev["gross"] if sev else 0.0,
+        "severance_notice": sev_notice["gross"] if sev_notice else 0.0,
+        "service_years": round((on - e.hire_date).days / 365.25, 1),
+    }
 
 
 def employment_certificate(person_id: str) -> dict:

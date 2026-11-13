@@ -289,6 +289,19 @@ def certificates_modal(person_id):
                            person=person, cert_year=clock.today().year - 1)
 
 
+@bp.get("/<person_id>/certificate-pending")
+def certificate_pending(person_id):
+    """Εκκρεμότητες της βεβαίωσης αποδοχών του `?year=` (htmx στο modal)."""
+    year = request.args.get("year", type=int) or clock.today().year - 1
+    try:
+        _person, emps = q._person_hires(person_id)
+    except ValueError:
+        abort(404)
+    last = min(date(year, 12, 31), clock.today())
+    return render_template("partials/_cert_pending.html", year=year,
+                           pending=q.year_pending(emps, year, last))
+
+
 @bp.get("/<person_id>/certificate/<kind>")
 def certificate(person_id, kind):
     """Βεβαιώσεις εργαζομένου (PDF σε νέα καρτέλα): `tax` = ετήσια
@@ -462,8 +475,8 @@ def change(person_id):
         emp = next((proj.employments[e] for e in p.employment_ids
                     if e in proj.employments and proj.employments[e].active), None)
         if married != was_married and emp is not None and emp.married != married:
-            msg += (" · ⚠️ άλλαξε η οικογενειακή κατάσταση — ελέγξτε το "
-                    "επίδομα γάμου στην καρτέλα απασχόλησης")
+            msg += (" · ⚠️ άλλαξε η οικογενειακή κατάσταση — το επίδομα "
+                    "γάμου αλλάζει με «Αλλαγή σύμβασης» στην καρτέλα απασχόλησης")
         return msg
 
     ok, msg = run_command(cmd)

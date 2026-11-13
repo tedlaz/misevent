@@ -64,9 +64,10 @@
           <tr>
             <td>Αποζημίωση μη ληφθείσας Αδείας
               <span class="muted">— υπόλοιπο
-                {{ preview.leave_comp.leave_days }} ημέρες → (×1,2)
+                {{ preview.leave_comp.leave_days|replace('.', ',') }} ημέρες →
                 {{ preview.leave_comp.comp_days|money }} ×
-                {{ preview.leave_comp.daily|money }}€</span></td>
+                {{ preview.leave_comp.daily|money }}€{% if preview.leave_comp.employer_fault %}
+                × 2 (υπαιτιότητα εργοδότη){% endif %}</span></td>
             <td class="num">{{ preview.leave_comp.gross|money }}€</td>
             <td class="num">—</td>
             <td class="num">{{ preview.leave_comp.fmy|money }}€</td>

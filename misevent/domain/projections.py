@@ -367,6 +367,11 @@ class EmploymentState:
     # Κάθε μία θέλει τη δική της Δήλωση Μεταβολής ΕΡΓΑΝΗ (`subject` "E4:<n>")·
     # όσες έγιναν ΠΡΙΝ την αναγγελία πρόσληψης τις καλύπτει το ίδιο το WebE3N.
     contract_changes: list[tuple[ContractTerms, bool]] = field(default_factory=list)
+    # Προσαυξήσεις κατώτατου ΣΤΟΝ ΧΡΟΝΟ: (ισχύς, married|None, extra|None).
+    # Η πρώτη = πρόσληψη (πλήρεις τιμές)· οι επόμενες από «Αλλαγή σύμβασης»,
+    # None = αμετάβλητο. Βλ. `allowances_on`. Τα `married`/`extra_allowances_pct`
+    # κρατούν την ΤΕΛΕΥΤΑΙΑ δηλωμένη τιμή (προεπιλογές φορμών).
+    allowance_history: list[tuple] = field(default_factory=list)
     schedule: dict = field(default_factory=dict)  # εβδομαδιαίο: "MON" -> ωράριο
     schedule_history: list[tuple[date, dict, date | None]] = field(default_factory=list)
     # (ισχύς από, εβδομαδιαίο μοτίβο, ημ. λήξης ή None) — απαιτείται για
@@ -924,6 +929,19 @@ class EmploymentState:
             self.weekly_hours,
         )
 
+    def allowances_on(self, d: date | None) -> tuple[bool, float]:
+        """(επίδομα γάμου, λοιπές %) που ΙΣΧΥΑΝ την `d` — για τον έλεγχο
+        κατώτατου κάθε περιόδου. Πριν από κάθε μεταβολή = της πρόσληψης."""
+        if not self.allowance_history:
+            return self.married, self.extra_allowances_pct
+        _eff, married, extra = self.allowance_history[0]
+        for eff, m, x in self.allowance_history[1:]:
+            if d is not None and eff is not None and eff > d:
+                break
+            married = married if m is None else m
+            extra = extra if x is None else x
+        return married, extra
+
     def contract_on(self, d: date | None) -> ContractTerms:
         """Οι όροι αμοιβής που ΙΣΧΥΑΝ την ημερομηνία `d`: η ΤΕΛΕΥΤΑΙΑ έκδοση
         της σύμβασης με `effective_from <= d`.
@@ -1215,6 +1233,23 @@ class EmploymentState:
             else:
                 out[d] = ("full", lid)
         return out
+
+    def sick_balance(self, on: date) -> tuple[int, int, date | None]:
+        """(πληρωμένες ημέρες που χρησιμοποιήθηκαν, όριο, έναρξη παραθύρου)
+        στο παράθυρο 365 ημερών που ισχύει την `on` — ΙΔΙΟ παράθυρο με το
+        `sick_day_map`. Χωρίς ανοιχτό παράθυρο: 0 από το όριο της `on`."""
+        days = self.sick_day_map()
+        start = None
+        for d in sorted(days):
+            if d > on:
+                break
+            if start is None or (d - start).days >= 365:
+                start = d
+        if start is None or (on - start).days >= 365:
+            return 0, self._sick_limit(on), None
+        used = sum(1 for d, (cls, _) in days.items()
+                   if cls != "over" and 0 <= (d - start).days < 365)
+        return used, self._sick_limit(start), start
 
     def _sick_limit(self, on: date) -> int:
         """Ετήσιο όριο πληρωμένων ημερών ασθενείας — εξαρτάται από την
@@ -1584,6 +1619,8 @@ class Projections:
         # ιστορικό του πώς καταχωρήθηκε, ΔΕΝ δηλώνει υποβολή.
         emp.hire_submitted = False
         emp.contract_history = [_terms_of(event, event.hire_date)]
+        emp.allowance_history = [
+            (event.hire_date, event.married, event.extra_allowances_pct)]
         if emp.person and event.employment_id not in emp.person.employment_ids:
             emp.person.employment_ids.append(event.employment_id)
 
@@ -1622,6 +1659,8 @@ class Projections:
         # Η διόρθωση της φόρμας πρόσληψης αλλάζει την ΑΡΧΙΚΗ έκδοση της
         # σύμβασης — οι μεταγενέστερες μεταβολές μένουν άθικτες.
         initial = _terms_of(event, event.hire_date)
+        emp.allowance_history[:1] = [
+            (event.hire_date, event.married, event.extra_allowances_pct)]
         if emp.contract_history:
             emp.contract_history[0] = initial
         else:
@@ -1656,6 +1695,16 @@ class Projections:
         # None = η μεταβολή δεν άγγιξε το σύστημα εργασίας -> μένει ως έχει
         if event.weekly_system is not None:
             emp.contract_weekly_system = event.weekly_system
+        if event.married is not None:
+            emp.married = event.married
+        if event.extra_allowances_pct is not None:
+            emp.extra_allowances_pct = event.extra_allowances_pct
+        if event.married is not None or event.extra_allowances_pct is not None:
+            first, rest = emp.allowance_history[:1], emp.allowance_history[1:]
+            rest.append((event.effective_from, event.married,
+                         event.extra_allowances_pct))
+            rest.sort(key=lambda t: t[0] or date.min)  # σταθερή: ίδια ημ/νία -> σειρά καταχώρησης
+            emp.allowance_history = first + rest
         emp.contract_history.append(_terms_of(event, event.effective_from))
         emp.contract_history.sort(key=lambda t: t.effective_from or date.min)
         emp.contract_changes.append(

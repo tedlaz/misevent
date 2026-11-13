@@ -554,6 +554,8 @@ def _contract_history(employment_id):
                     "weekly_system": event.weekly_system,
                     "reason": event.reason,
                     "reason_date": event.reason_date,
+                    "married": event.married,
+                    "extra_allowances_pct": event.extra_allowances_pct,
                     "_order": order,
                 }
             )
@@ -561,11 +563,14 @@ def _contract_history(employment_id):
     if initial is None:
         return []
 
-    current_system = initial["weekly_system"]
+    # None = αμετάβλητο: κάθε μεταβολή κληρονομεί την προηγούμενη τιμή
+    current = {k: initial[k] for k in
+               ("weekly_system", "married", "extra_allowances_pct")}
     for change in sorted(changes, key=lambda row: row["_order"]):
-        if change["weekly_system"] is not None:
-            current_system = change["weekly_system"]
-        change["resolved_weekly_system"] = current_system
+        for k in current:
+            if change[k] is not None:
+                current[k] = change[k]
+            change[k] = current[k]
 
     changes.sort(key=lambda row: (row["effective_from"] or date.min, row["_order"]))
     current_order = initial["_order"]
@@ -584,10 +589,7 @@ def _contract_history(employment_id):
         rows.append(
             {
                 **change,
-                "weekly_system": change["resolved_weekly_system"],
                 "service_years": initial["service_years"],
-                "married": initial["married"],
-                "extra_allowances_pct": initial["extra_allowances_pct"],
                 "employment_relationship": initial["employment_relationship"],
                 "fixed_term_from": initial["fixed_term_from"],
                 "fixed_term_to": initial["fixed_term_to"],
@@ -646,6 +648,11 @@ def _contract_note(row, previous, emp) -> str:
         parts.append(
             "σύστημα → " + ("εξαήμερο" if row["weekly_system"] == 6 else "πενθήμερο")
         )
+    if row["married"] != previous["married"]:
+        parts.append("επίδομα γάμου " + ("ναι" if row["married"] else "όχι"))
+    if abs((row["extra_allowances_pct"] or 0) - (previous["extra_allowances_pct"] or 0)) >= 0.005:
+        parts.append("λοιπές προσαυξήσεις {:g}% → {:g}%".format(
+            previous["extra_allowances_pct"] or 0, row["extra_allowances_pct"] or 0))
     if not parts:
         return "Μεταβολή όρων σύμβασης"
     text = " · ".join(parts)
@@ -796,6 +803,8 @@ def _card(employment_id):
         # Αποζημίωση απόλυσης (μόνο σε καταγγελία σύμβασης)
         "is_dismissal": e.termination_reason == DISMISSAL_REASON,
         "severance": svc.severance(employment_id),
+        # Δεδουλευμένα έως σήμερα (ενεργή απασχόληση): τι «χρωστά» η εταιρεία
+        "accruals": q.accruals(e, today()),
         # Ημερήσιο πρόγραμμα (υπερισχύει του εβδομαδιαίου), πρόσφατο πρώτα
         # Κατάσταση υποβολών πρόσληψης ΕΡΓΑΝΗ (ενεργοποιεί ο χρήστης)
         "e3_done": (
@@ -817,8 +826,8 @@ def _card(employment_id):
             e.weekly_hours,
             today(),
             service_years=e.total_service_years(today()),
-            married=e.married,
-            extra_pct=e.extra_allowances_pct,
+            married=e.allowances_on(today())[0],
+            extra_pct=e.allowances_on(today())[1],
         ),
         "labor_subsidy": _labor_subsidy_badge(e, today()),
         "subsidies": _subsidy_badges(e, today()),
@@ -1565,6 +1574,7 @@ def _terminate_preview(employment_id, form):
     raw_date = form.get("termination_date") or window["term_default"]
     reason = form.get("reason") or TERMINATION_REASONS[0][0]
     with_notice = bool(form.get("with_notice"))
+    employer_fault = bool(form.get("employer_fault"))
     try:
         term_date = date.fromisoformat(raw_date)
     except ValueError:
@@ -1572,7 +1582,7 @@ def _terminate_preview(employment_id, form):
                 **window}
     try:
         preview = svc.termination_preview(
-            employment_id, term_date, reason, with_notice
+            employment_id, term_date, reason, with_notice, employer_fault
         )
     except ValueError as exc:
         return {"preview": None, "preview_error": str(exc), **window}
@@ -1748,6 +1758,8 @@ def contract(employment_id):
             daily_wage=(amount if pay_type == "daily" else 0.0),
             weekly_hours=form_float(f, "weekly_hours", 40.0),
             weekly_system=form_int(f, "weekly_system", 5),
+            married=bool(f.get("married")),
+            extra_allowances_pct=form_float(f, "extra_allowances_pct"),
         )
         return ("Άλλαξε η σύμβαση — η Δήλωση Μεταβολής εκκρεμεί στην "
                 "οθόνη ΕΡΓΑΝΗ")
@@ -1975,6 +1987,7 @@ def terminate(employment_id):
             form_date(f, "termination_date"),
             f.get("reason", ""),
             with_notice=bool(f.get("with_notice")),
+            employer_fault=bool(f.get("employer_fault")),
             # PDF/φωτογραφίες της δήλωσης -> ΕΝΑ PDF (ίδια μετατροπή με την αίτηση)
             resignation_pdf=amka_pdf.to_pdf(files) if files else None,
         )

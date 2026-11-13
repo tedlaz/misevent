@@ -204,6 +204,8 @@ class ContractMixin:
         weekly_system=None,
         reason="",
         reason_date=None,
+        married=None,
+        extra_allowances_pct=None,
     ):
         """Αλλαγή σύμβασης (αποδοχές / τύπος αμοιβής / πλήρης-μερική /
         πενθήμερο-εξαήμερο). ΔΕΝ υποβάλλει στο ΕΡΓΑΝΗ: η Δήλωση Μεταβολής
@@ -212,12 +214,16 @@ class ContractMixin:
 
         `weekly_system`: 5/6 ή None = αμετάβλητο.
         `reason`: κωδικός αιτίας (`config.CONTRACT_CHANGE_REASONS`) — κενός για
-        χειροκίνητη μεταβολή· `reason_date` η ημερομηνία που την τεκμηριώνει."""
+        χειροκίνητη μεταβολή· `reason_date` η ημερομηνία που την τεκμηριώνει.
+        `married` / `extra_allowances_pct`: προσαυξήσεις κατώτατου (επίδομα
+        γάμου, λοιπές %) — None = αμετάβλητες. Μετά τον γάμο/διαζύγιο ή ένα
+        νέο πτυχίο αλλάζουν ΕΔΩ, ως όρος σύμβασης (ελέγχονται στο κατώτατο)."""
         emp = self.proj.employments.get(employee_id)
         if emp is None or not emp.active:
             raise ValueError(f"Ανενεργός/άγνωστος εργαζόμενος {employee_id}")
         # Ο έλεγχος κατώτατου με τις προσαυξήσεις της απασχόλησης (τριετίες
         # ωριμασμένες ως την ημερομηνία ισχύος, γάμος, λοιπές)
+        was_married, was_extra = emp.allowances_on(effective_from)
         self.check_minimum(
             pay_type,
             monthly_gross,
@@ -225,9 +231,18 @@ class ContractMixin:
             weekly_hours,
             effective_from,
             service_years=emp.total_service_years(effective_from),
-            married=emp.married,
-            extra_pct=emp.extra_allowances_pct,
+            married=was_married if married is None else bool(married),
+            extra_pct=(was_extra if extra_allowances_pct is None
+                       else float(extra_allowances_pct)),
         )
+        if extra_allowances_pct is not None and float(extra_allowances_pct) < 0:
+            raise ValueError("Οι λοιπές προσαυξήσεις δεν μπορεί να είναι αρνητικές")
+        # Αμετάβλητες (στην ημ/νία ισχύος) προσαυξήσεις -> None στο event
+        if married is not None and bool(married) == was_married:
+            married = None
+        if (extra_allowances_pct is not None
+                and abs(float(extra_allowances_pct) - was_extra) < 1e-9):
+            extra_allowances_pct = None
         weekly_system = constraints.check_weekly_system(weekly_system)
         self.store.append(
             employee_id,
@@ -241,6 +256,9 @@ class ContractMixin:
                 weekly_system,
                 reason,
                 reason_date,
+                married=married if married is None else bool(married),
+                extra_allowances_pct=(None if extra_allowances_pct is None
+                                      else float(extra_allowances_pct)),
             ),
         )
 
@@ -419,7 +437,8 @@ class ContractMixin:
         return emp
 
     def termination_preview(
-        self, employee_id, termination_date, reason="", with_notice=False
+        self, employee_id, termination_date, reason="", with_notice=False,
+        employer_fault=False,
     ):
         """ΤΙ ΘΑ ΥΠΟΛΟΓΙΣΤΕΙ αν καταχωρηθεί η αποχώρηση — ΧΩΡΙΣ κανένα event.
 
@@ -454,7 +473,8 @@ class ContractMixin:
         leave_comp = (
             None
             if self.leave_compensation(employee_id)
-            else self.leave_compensation_preview(employee_id, term=termination_date)
+            else self.leave_compensation_preview(employee_id, term=termination_date,
+                                                 employer_fault=employer_fault)
         )
         severance = (
             self.severance_preview(employee_id, with_notice, term=termination_date)
@@ -520,7 +540,8 @@ class ContractMixin:
         }
 
     def terminate(self, employee_id, termination_date, reason="", with_notice=False,
-                  resignation_pdf: bytes | None = None) -> str:
+                  resignation_pdf: bytes | None = None,
+                  employer_fault: bool = False) -> str:
         """Αποχώρηση/λήξη εργασιακής σχέσης. ΔΕΝ υποβάλλει στο ΕΡΓΑΝΗ: η
         Ψηφιακή Αναγγελία Λήξης μένει ΕΚΚΡΕΜΗΣ (`exit_pending`) και στέλνεται
         ΜΟΝΟ από την οθόνη ΕΡΓΑΝΗ (`submit_exit`). Η δήλωση οικειοθελούς
@@ -552,5 +573,5 @@ class ContractMixin:
         # ΟΛΟΙ οι υπολογισμοί της εκκαθάρισης γίνονται ΕΔΩ, αυτόματα: Δώρο +
         # Επίδομα Αδείας pro-rata, αποζημίωση μη ληφθείσας αδείας και (σε
         # καταγγελία) αποζημίωση απόλυσης — κανένα χειροκίνητο κουμπί.
-        self._settle_exit_accruals(emp, with_notice)
+        self._settle_exit_accruals(emp, with_notice, employer_fault)
         return note

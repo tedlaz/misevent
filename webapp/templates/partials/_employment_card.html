@@ -114,6 +114,45 @@
       </div>
     </div>
 
+    {# ----------------------- Δεδουλευμένα έως σήμερα (queries.accruals) #}
+    {% if accruals %}{% set a = accruals %}
+    <div class="card">
+      <h2 class="bar"><span>Δεδουλευμένα έως σήμερα</span>
+        <span class="norm">— {{ a.on|date_gr }} · {{ a.service_years|replace('.', ',') }} έτη υπηρεσίας</span>
+      </h2>
+      <table class="tbl">
+        <tbody>
+          <tr><td>💶 Μισθοδοσία {{ a.on.year }}</td>
+            <td>υπολογίστηκαν <b>{{ a.payroll_done|length }}</b> μήνες
+              {% if a.payroll_missing %} · <span style="color:var(--prob)">εκκρεμούν:
+                {{ a.payroll_missing|map('string')|join(', ') }}</span>{% endif %}</td>
+            <td></td></tr>
+          <tr><td>🏖️ Κανονική άδεια</td>
+            <td>δικαίωμα <b>{{ a.leave_entitlement }}</b> · αναλογούν έως σήμερα
+              <b>{{ a.leave_accrued }}</b> · ληφθείσες <b>{{ a.leave_taken }}</b> ·
+              υπόλοιπο <b>{{ a.leave_entitlement - a.leave_taken }}</b></td><td></td></tr>
+          <tr><td>🤒 Ασθένεια (πληρωμένες)</td>
+            <td><b>{{ a.sick_used }}</b> από {{ a.sick_limit }} ημέρες ·
+              {% if a.sick_since %}παράθυρο 12 μηνών από {{ a.sick_since|date_gr }}
+              {% else %}καμία ασθένεια τους τελευταίους 12 μήνες{% endif %}</td><td></td></tr>
+          {% for b in a.bonuses %}
+          <tr><td>🎁 {{ b.label }}</td>
+            <td>{% if b.done %}✓ υπολογίστηκε{% else %}αναλογεί έως σήμερα (δεν έχει υπολογιστεί){% endif %}</td>
+            <td class="num">{{ b.gross|money }}€</td></tr>
+          {% endfor %}
+          <tr><td>📤 Αν έληγε σήμερα</td>
+            <td>αποζημίωση μη ληφθείσας άδειας ({{ a.leave_comp_days }} ημ.)</td>
+            <td class="num">{{ a.leave_comp|money }}€</td></tr>
+          <tr><td></td>
+            <td>αποζημίωση απόλυσης — χωρίς / με προειδοποίηση</td>
+            <td class="num">{{ a.severance|money }}€ / {{ a.severance_notice|money }}€</td></tr>
+        </tbody>
+      </table>
+      <p class="muted" style="font-size:12px;margin:6px 0 0">Μικτά ποσά. Ίδιοι
+        υπολογισμοί με την εκκαθάριση αποχώρησης, με υποθετική λήξη σήμερα.</p>
+    </div>
+    {% endif %}
+
     {# ------------------------------ Εκκαθάριση αποχώρησης (αποζημιώσεις) #}
     {% if e.termination_date %}
     <div class="card">
@@ -124,7 +163,8 @@
       {% if leave_comp %}
         <div class="box" style="font-size:13px">
           {{ leave_comp.leave_days }} ημέρες αδείας × 1,2 =
-          {{ leave_comp.comp_days }} ημέρες → μικτά
+          {{ leave_comp.comp_days }} ημέρες{% if leave_comp.employer_fault %}
+          × 2 (υπαιτιότητα εργοδότη){% endif %} → μικτά
           <b>{{ leave_comp.gross|money }}€</b> · ΦΜΥ {{ leave_comp.fmy|money }}€ ·
           καθαρά <b>{{ leave_comp.net|money }}€</b>
           <span class="tag ok">Υπολογισμένη</span>
