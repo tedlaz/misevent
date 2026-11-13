@@ -12,7 +12,8 @@
 {# ΘΕΜΑ ΕΜΦΑΝΙΣΗΣ: εφαρμόζεται ΠΡΙΝ το πρώτο σχέδιο (αλλιώς αναβοσβήνει το
    προεπιλεγμένο). Μνήμη ανά browser — προτίμηση, όχι δεδομένο. #}
 <script>
-try { const t = localStorage.getItem('theme'); if (t) document.documentElement.dataset.theme = t; } catch (e) {}
+try { const t = localStorage.getItem('theme'); if (t) document.documentElement.dataset.theme = t;
+      if (localStorage.getItem('nav') === 'mini') document.documentElement.dataset.nav = 'mini'; } catch (e) {}
 </script>
 <script src="{{ url_for('static', filename='htmx.min.js') }}" defer></script>
 {# Ελληνική μορφή ΗΗ/ΜΜ/ΕΕΕΕ σε ΚΑΘΕ πεδίο ημερομηνίας — ο browser θα
@@ -22,7 +23,7 @@ try { const t = localStorage.getItem('theme'); if (t) document.documentElement.d
 <script src="{{ url_for('static', filename='date-gr.js') }}" defer></script>
 {# Ράγα ωραρίου: οπτικός επεξεργαστής των πεδίων ωραρίου ([data-time-rail]) #}
 <script src="{{ url_for('static', filename='time-rail.js') }}" defer></script>
-{# Θυμάται ποιες ομάδες του μενού είναι ανοιχτές, μεταξύ σελίδων #}
+{# Θυμάται ποιες πτυσσόμενες κάρτες είναι κλειστές, μεταξύ σελίδων #}
 <script src="{{ url_for('static', filename='nav-fold.js') }}" defer></script>
 {# Αναζήτηση με πληκτρολόγηση σε κάθε μεγάλο <select> (ΣΕΠΕ, ΚΑΔ, Καλλικράτης…) #}
 <script src="{{ url_for('static', filename='select-search.js') }}" defer></script>
@@ -43,7 +44,13 @@ try { const t = localStorage.getItem('theme'); if (t) document.documentElement.d
   {# ΚΙΝΗΤΑ: το μενού κρύβεται πίσω από το ☰ του header — checkbox, μηδέν JS #}
   <input type="checkbox" id="navtog" hidden>
   <nav class="side">
-    <div class="brand">misevent</div>
+    {# Το LOGO είναι και το κουμπί ΣΥΜΠΤΥΞΗΣ σε «μόνο εικονίδια» (desktop)·
+       μνήμη ανά browser, όπως το θέμα #}
+    <button type="button" class="brand" aria-label="Σύμπτυξη/ανάπτυξη μενού"
+            title="Σύμπτυξη/ανάπτυξη μενού" onclick="
+        const h = document.documentElement, mini = h.dataset.nav !== 'mini';
+        if (mini) h.dataset.nav = 'mini'; else delete h.dataset.nav;
+        try { localStorage.setItem('nav', mini ? 'mini' : ''); } catch (e) {}">misevent</button>
     {# ΕΝΕΡΓΗ ΕΤΑΙΡΕΙΑ: ο επιλογέας ορίζει τι δείχνουν ΟΛΕΣ οι σελίδες.
        Με μία μόνο εταιρεία μένει απλό κείμενο (τίποτα να διαλέξεις). #}
     {% if my_companies|length > 1 %}
@@ -60,32 +67,13 @@ try { const t = localStorage.getItem('theme'); if (t) document.documentElement.d
     {% else %}
       <span class="co">{{ company_name or '— δεν έχει καταχωρηθεί εταιρεία —' }}</span>
     {% endif %}
-    {# Σελίδες εκτός ομάδων, πάντα ορατές. #}
-    {% for ep, ic, lb in NAV_TOP %}
-    <a class="nl {{ 'on' if request.endpoint == ep else '' }}"
-       href="{{ url_for(ep) }}">
-      <span class="ic">{{ ic }}</span><span>{{ lb }}</span>
+    {% for it in nav %}
+    <a class="nl {{ 'on' if it.on else '' }}"
+       href="{{ url_for(it.endpoint) }}" title="{{ it.label }}">
+      <span class="ic">{% if it.icon.endswith('.svg') -%}
+        <img src="{{ url_for('static', filename=it.icon) }}" alt="">
+      {%- else %}{{ it.icon }}{% endif %}</span><span>{{ it.label }}</span>
     </a>
-    {% endfor %}
-    <div class="navsep"></div>
-    {# ΠΤΥΣΣΟΜΕΝΕΣ ΟΜΑΔΕΣ με native <details> — μηδέν JS για το ίδιο το
-       άνοιγμα/κλείσιμο (ίδιο μοτίβο με τα CSS-only tabs). Ο server ανοίγει
-       την ομάδα της ΤΡΕΧΟΥΣΑΣ σελίδας· το `nav-fold.js` απλώς θυμάται τις
-       υπόλοιπες επιλογές του χρήστη μεταξύ σελίδων. #}
-    {% for g in nav %}
-      <details class="navgrp" data-nav-group="{{ g.key }}"
-               {{ 'open' if g.open }}>
-        <summary class="navgrp-h">
-          <span class="ic">{{ g.icon }}</span><span>{{ g.label }}</span>
-          <span class="chev" aria-hidden="true">›</span>
-        </summary>
-        {% for it in g["items"] %}
-          <a class="nl sub {{ 'on' if it.on else '' }}"
-             href="{{ url_for(it.endpoint) }}">
-            <span class="ic">{{ it.icon }}</span><span>{{ it.label }}</span>
-          </a>
-        {% endfor %}
-      </details>
     {% endfor %}
     <label class="themesel">Θέμα
       <select onchange="
@@ -95,6 +83,7 @@ try { const t = localStorage.getItem('theme'); if (t) document.documentElement.d
         <option value="">Κλασικό</option>
         <option value="hackernoon">HackerNoon</option>
         <option value="hackernoon-dark">HackerNoon σκοτεινό</option>
+        <option value="cvd">Αχρωματοψία</option>
       </select>
     </label>
     <script>

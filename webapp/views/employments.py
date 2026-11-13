@@ -783,7 +783,7 @@ def _card(employment_id):
         "missing_docs": svc.missing_hire_documents(employment_id),
         "days": DAYS,
         "leave_labels": LEAVE_LABELS,
-        "childcare_options": config.CHILDCARE_REDUCTION_OPTIONS,
+        "childcare_options": config.childcare_option_labels(today()),
         "reasons": TERMINATION_REASONS,
         "entitlement": svc.annual_leave_entitlement(employment_id, year),
         "taken": svc.annual_leave_taken(employment_id, year),

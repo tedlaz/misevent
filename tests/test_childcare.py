@@ -40,3 +40,17 @@ def test_reduced_schedule_only_within_period():
             d: "09:00-15:00" for d in ("TUE", "WED", "THU", "FRI")}})
     svc.set_childcare_reduction(eid, date(2026, 4, 1))  # κατάργηση
     assert proj.employments[eid].childcare_hours_on(date(2026, 5, 1)) == 0
+
+
+def test_phases_follow_the_parameter_in_force_at_start(fresh_system):
+    """Οι ώρες/μήνες είναι ΠΑΡΑΜΕΤΡΟΣ («childcare»): μια νέα γραμμή ισχύει για
+    δηλώσεις με έναρξη από την ημερομηνία της — οι παλαιότερες δεν αλλάζουν."""
+    svc, proj, eid = setup()
+    svc.set_childcare_reduction(eid, date(2026, 4, 1), "classic")
+    svc.define_parameters("childcare", date(2026, 5, 1), classic_months=24,
+                          classic_hours=2, alt_first_months=12, alt_first_hours=2,
+                          alt_second_months=6, alt_second_hours=1)
+    emp = proj.employments[eid]
+    assert emp.childcare_reduction == [(date(2026, 4, 1), date(2028, 9, 30), 1)]
+    svc.set_childcare_reduction(eid, date(2026, 5, 1), "classic")
+    assert emp.childcare_reduction == [(date(2026, 5, 1), date(2028, 4, 30), 2)]

@@ -418,8 +418,10 @@ class EmploymentState:
     # (`allowance_period_month`): ΕΝΑ επίδομα ανά απασχόληση και έτος
     allowance_months: dict = field(default_factory=dict)
     sickness_benefits: dict = field(default_factory=dict)  # leave_id -> ποσό ΕΦΚΑ
-    # Μειωμένο ωράριο φροντίδας τέκνου: [(από, έως, ώρες/ημέρα)]
-    childcare_reduction: list = field(default_factory=list)
+    # Μειωμένο ωράριο φροντίδας τέκνου: η ΔΗΛΩΣΗ (έναρξη, επιλογή) ή None. Οι
+    # φάσεις υπολογίζονται κατ' απαίτηση (`childcare_reduction`) από την
+    # παράμετρο «childcare» — μια διόρθωσή της ισχύει αμέσως, χωρίς replay.
+    childcare_decl: tuple | None = None
     # Τοκετός → μείωση εισφοράς μητέρας (ΑΠΔ 103), βλ. svc.mother_subsidy_on
     child_birth_date: date | None = None
     person: PersonState | None = None  # σύνδεσμος με το φυσικό πρόσωπο
@@ -943,6 +945,19 @@ class EmploymentState:
             if t.effective_from is None or t.effective_from <= d
         ]
         return active[-1] if active else self.contract_history[0]
+
+    @property
+    def childcare_reduction(self) -> list:
+        """Φάσεις μειωμένου ωραρίου: [(από, έως, ώρες/ημέρα)]."""
+        if not self.childcare_decl:
+            return []
+        start, option = self.childcare_decl
+        out = []
+        for months, hours in config.childcare_steps(option, start):
+            end = _add_months(start, months)
+            out.append((start, end - timedelta(days=1), hours))
+            start = end
+        return out
 
     def childcare_hours_on(self, d: date) -> int:
         """Ώρες/ημέρα μειωμένου ωραρίου φροντίδας τέκνου που ισχύουν στην `d`."""
@@ -1851,13 +1866,7 @@ class Projections:
     @_apply.register
     def _on_childcare_reduction_set(self, event: ChildcareReductionSet):
         emp = self.employments[event.employee_id]
-        emp.childcare_reduction = []
-        start = event.date_from
-        _, steps = config.CHILDCARE_REDUCTION_OPTIONS.get(event.option, ("", ()))
-        for months, hours in steps:
-            end = _add_months(start, months)
-            emp.childcare_reduction.append((start, end - timedelta(days=1), hours))
-            start = end
+        emp.childcare_decl = (event.date_from, event.option) if event.option else None
 
     @_apply.register
     def _on_child_birth_recorded(self, event: ChildBirthRecorded):

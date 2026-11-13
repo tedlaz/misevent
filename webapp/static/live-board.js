@@ -248,8 +248,8 @@
     el.style.setProperty("--majormin", lvl.grid[1]);
 
     openBars(el, now);
-    dayLabel(w, view.center - mins / 2);      // ημέρα στην αριστερή άκρη
-    clockText(el, w);
+    dayLabel(w, view.center);                 // ημέρα στο ΚΕΝΤΡΟ της προβολής
+    clockText(el);
     // Οι καταστάσεις αφορούν την ΤΡΕΧΟΥΣΑ ώρα και βγαίνουν από την ημέρα
     // αναφοράς (data-ref-*), άρα ισχύουν όπου κι αν κοιτά ο χρήστης —
     // αρκεί μία ενημέρωση ανά λεπτό.
@@ -280,16 +280,17 @@
     });
   }
 
-  /** Ημερομηνία στην ΑΡΙΣΤΕΡΗ ΑΚΡΗ της προβολής — «ποια ημέρα βλέπω». */
-  function dayLabel(w, leftMin) {
+  /** Ημερομηνία και ώρα στο ΚΕΝΤΡΟ της προβολής — «πού κοιτάζω». */
+  function dayLabel(w, atMin) {
     const chip = document.getElementById("lb-daynow");
     if (!chip) return;
-    const d = dateAt(w, leftMin);
+    const d = dateAt(w, atMin);
     chip.textContent = `${DOW[(d.getDay() + 6) % 7]} ${pad(d.getDate())}/`
-      + `${pad(d.getMonth() + 1)}/${d.getFullYear()}`;
+      + `${pad(d.getMonth() + 1)}/${d.getFullYear()} `
+      + `${pad(d.getHours())}:${pad(d.getMinutes())}`;
   }
 
-  function clockText(el, w) {
+  function clockText(el) {
     const clock = document.getElementById("lb-time");
     if (clock) {
       // Η ώρα είναι το ΠΡΑΓΜΑΤΙΚΟ ρολόι — ανεξάρτητη από το πού κοιτά ο
@@ -298,15 +299,8 @@
       clock.textContent = el.dataset.live === "1"
         ? pad(t.getHours()) + ":" + pad(t.getMinutes()) : "—";
     }
-    const at = document.getElementById("lb-at");
-    if (!at) return;
-    if (!at.dataset.home) at.dataset.home = at.textContent.trim();
-    if (!view.free) { at.textContent = at.dataset.home; return; }
-    // Πλήρης ημερομηνία ΗΗ/ΜΜ/ΕΕΕΕ: στην προβολή έτους το «05/08» χωρίς έτος
-    // δεν ξεχωρίζει το 2025 από το 2026.
-    const d = dateAt(w, view.center);
-    at.textContent = `κέντρο: ${pad(d.getDate())}/${pad(d.getMonth() + 1)}/`
-      + `${d.getFullYear()} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+    // Το «πού κοιτάζω» (ημερομηνία & ώρα του κέντρου) το δείχνει η ετικέτα
+    // #lb-daynow του χάρακα — το #lb-at μένει η ημέρα αναφοράς του server.
   }
 
   /** Κατάσταση κάθε γραμμής ΤΩΡΑ + τα σύνολα της κεφαλίδας.

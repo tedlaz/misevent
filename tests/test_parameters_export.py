@@ -188,18 +188,14 @@ def test_parameters_page_is_system_wide(fresh_system):
         if not cond:
             fails.append(desc)
 
-    groups = {g["key"]: [i["endpoint"] for i in g["items"]]
-              for g in nav_for(True, "settings.index")}
-    check("οι «Παράμετροι» είναι στο μενού «Σύστημα»",
-          "settings.index" in groups.get("system", []))
-    check("δεν έμειναν και στις «Ρυθμίσεις» της εταιρείας",
-          "settings.index" not in groups.get("setup", []))
+    check("οι «Παράμετροι» είναι στο μενού (για διαχειριστή)",
+          "settings.index" in [i["endpoint"] for i in nav_for(True, "")])
     check("η σελίδα δεν απαιτεί ΕΝΕΡΓΗ εταιρεία",
           "settings." in webapp.SYSTEM_ENDPOINTS)
     check("μένει ΜΟΝΟ για διαχειριστές",
           "settings." in webapp.ADMIN_ENDPOINTS
           and "settings.index" not in
-          [i["endpoint"] for g in nav_for(False, "") for i in g["items"]])
+          [i["endpoint"] for i in nav_for(False, "")])
 
     app = webapp.create_app()
     client = _bootstrap.ui_client(app)

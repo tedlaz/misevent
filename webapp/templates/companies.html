@@ -4,6 +4,7 @@
 {% block subheading %}{% endblock %}
 
 {% block content %}
+{% include "partials/_companies_tabs.html" %}
 {% macro delete_form(company_id, name) %}
   <button class="run danger" type="button" popovertarget="del-{{ company_id }}">Διαγραφή</button>
   <div class="card confirm-pop" id="del-{{ company_id }}" popover>

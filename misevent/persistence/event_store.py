@@ -26,6 +26,7 @@ from misevent.domain.events import (
     SHARED_EVENT_TYPES,
     DomainEvent,
     LeaveType,
+    upcast,
 )
 from misevent.persistence.database import Database
 
@@ -52,8 +53,11 @@ BACKUP_FORMAT = "misevent-event-backup"
 BACKUP_VERSION = 1
 
 
-def _coerce_with(registry: dict, etype: str, payload: dict):
-    return _coerce(registry[etype], payload)
+def _decode(registry: dict, etype: str, payload: str | dict):
+    """Αποθηκευμένο payload -> event τρέχουσας μορφής. ΟΛΕΣ οι αναγνώσεις από εδώ."""
+    if isinstance(payload, str):
+        payload = json.loads(payload)
+    return _coerce(registry[etype], upcast(etype, payload))
 
 
 def _coerce(cls, payload: dict):
@@ -153,8 +157,7 @@ class EventStore:
         q += " ORDER BY seq"
         out = []
         for agg, etype, payload in self.conn.execute(q, params):
-            cls = self.registry[etype]
-            out.append((agg, _coerce(cls, json.loads(payload))))
+            out.append((agg, _decode(self.registry, etype, payload)))
         return out
 
     def load(
@@ -181,7 +184,6 @@ class EventStore:
         for seq, event_id, agg, etype, occurred_at, payload, tx in self.conn.execute(
             q, (self.sid,)
         ):
-            cls = self.registry[etype]
             out.append(
                 {
                     "seq": seq,
@@ -190,7 +192,7 @@ class EventStore:
                     "event_type": etype,
                     "occurred_at": occurred_at,
                     "tx": tx,  # transaction της εντολής (None = μεμονωμένο)
-                    "event": _coerce(cls, json.loads(payload)),
+                    "event": _decode(self.registry, etype, payload),
                 }
             )
         return out
@@ -222,25 +224,29 @@ class EventStore:
 
     def events_after(
         self, aggregate_id: str, event_types: Iterable[str], seq: int
-    ) -> list[tuple[str, str]]:
-        """(event_type, payload_json) events του aggregate ΜΕΤΑ από το seq."""
+    ) -> list[tuple[str, dict]]:
+        """(event_type, payload) events του aggregate ΜΕΤΑ από το seq (upcasted)."""
         types = list(event_types)
         q = (
             "SELECT event_type, payload FROM events "
             "WHERE store = ? AND aggregate_id = ? "
             f"AND event_type IN ({_marks(types)}) AND seq > ? ORDER BY seq"
         )
-        return list(self.conn.execute(q, [self.sid, aggregate_id, *types, seq]))
+        return [
+            (etype, upcast(etype, json.loads(payload)))
+            for etype, payload in self.conn.execute(q, [self.sid, aggregate_id, *types, seq])
+        ]
 
-    def raw_by_type(self, event_type: str) -> list[tuple[str, str]]:
-        """(occurred_at, payload_json) για κάθε event του τύπου."""
-        return list(
-            self.conn.execute(
+    def raw_by_type(self, event_type: str) -> list[tuple[str, dict]]:
+        """(occurred_at, payload) για κάθε event του τύπου (upcasted)."""
+        return [
+            (occurred_at, upcast(event_type, json.loads(payload)))
+            for occurred_at, payload in self.conn.execute(
                 "SELECT occurred_at, payload FROM events "
                 "WHERE store = ? AND event_type = ? ORDER BY seq",
                 (self.sid, event_type),
             )
-        )
+        ]
 
     # ------------------------------------------------------- backup / restore
     def _raw_events(self) -> list[dict]:
@@ -339,7 +345,7 @@ class EventStore:
                 raise TypeError(f"Μη έγκυρο payload στο event #{seq}")
             try:
                 datetime.fromisoformat(rec["occurred_at"])
-                _coerce(self.registry[event_type], rec["payload"])
+                _decode(self.registry, event_type, rec["payload"])
             except (TypeError, ValueError) as exc:
                 raise ValueError(f"Μη έγκυρο event #{seq}: {exc}") from None
             # `tx` προαιρετικό: backups πριν από τα transactions δεν το έχουν

@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+  <!-- Εικονίδιο ΑΠΔ: εξάγωνο-«κύβος» με χρωματιστές έδρες, στο ύφος του e-ΕΦΚΑ -->
+  <g stroke="#fff" stroke-width=".6" stroke-linejoin="round">
+    <path fill="#E8562A" d="M12 12 2.47 6.5 12 1z"/>
+    <path fill="#F39200" d="M12 12 12 1l9.53 5.5z"/>
+    <path fill="#2DB37A" d="M12 12l9.53-5.5v11z"/>
+    <path fill="#1BA9E1" d="M12 12l9.53 5.5L12 23z"/>
+    <path fill="#1D6FB8" d="M12 12v11l-9.53-5.5z"/>
+    <path fill="#7B3F98" d="M12 12 2.47 17.5v-11z"/>
+  </g>
+</svg>

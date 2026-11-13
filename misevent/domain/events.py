@@ -14,6 +14,34 @@ from enum import Enum
 
 from misevent.rules import config
 
+# ------------------------------------------------------------ Upcasting (§5.1)
+# Αλλάζεις ασύμβατα ένα event (νέο υποχρεωτικό πεδίο, μετονομασία, αλλαγή
+# μονάδας); ΔΕΝ πειράζεις τα αποθηκευμένα: προσθέτεις ΣΤΟ ΤΕΛΟΣ της λίστας
+# του τύπου μια συνάρτηση payload(vN) -> payload(vN+1), και αλλάζεις το
+# dataclass στη νέα μορφή. Η έκδοση = 1 + πλήθος upcasters· γράφεται ως `_v`
+# μέσα στο payload. Οι συναρτήσεις ΔΕΝ μεταλλάσσουν το dict εισόδου.
+#   UPCASTERS["PersonRegistered"] = [lambda p: {**p, "nickname": ""}]  # v1 -> v2
+# Αφαιρεμένα πεδία δεν θέλουν upcaster: το `_coerce` αγνοεί άγνωστα κλειδιά.
+UPCASTERS: dict[str, list] = {}
+
+
+def schema_version(event_type: str) -> int:
+    return len(UPCASTERS.get(event_type, ())) + 1
+
+
+def upcast(event_type: str, payload: dict) -> dict:
+    """Φέρνει ένα αποθηκευμένο payload στην τρέχουσα μορφή του τύπου."""
+    chain = UPCASTERS.get(event_type, ())
+    version = payload.get("_v", 1)
+    if version > len(chain) + 1:
+        # Βάση από ΝΕΟΤΕΡΗ έκδοση του προγράμματος: σιωπηλή ανάγνωση = απώλεια πεδίων.
+        raise ValueError(
+            f"{event_type} v{version}: νεότερο από το πρόγραμμα (v{len(chain) + 1})"
+        )
+    for fn in chain[version - 1:]:
+        payload = fn(payload)
+    return payload
+
 
 class LeaveType(str, Enum):
     ANNUAL = "kanoniki_adeia"  # κανονική άδεια
@@ -32,6 +60,9 @@ class DomainEvent:
 
     def to_record(self, aggregate_id: str) -> dict:
         payload = asdict(self)
+        version = schema_version(type(self).__name__)
+        if version > 1:  # v1 = χωρίς `_v` -> τα υπάρχοντα logs μένουν ως έχουν
+            payload["_v"] = version
         return {
             "event_id": str(uuid.uuid4()),
             "aggregate_id": aggregate_id,
@@ -546,7 +577,7 @@ class ChildcareReductionSet(DomainEvent):
 
     employee_id: str
     date_from: date
-    option: str  # κλειδί του `config.CHILDCARE_REDUCTION_OPTIONS` ή ""
+    option: str  # κωδικός του `config.CHILDCARE_REDUCTION_OPTIONS` ή ""
 
 
 @dataclass(frozen=True)

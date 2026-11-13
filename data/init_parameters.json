@@ -341,6 +341,23 @@
           }
         }
       ]
+    },
+    "childcare": {
+      "source": "events",
+      "entries": [
+        {
+          "valid_from": "2020-01-01",
+          "repealed": false,
+          "values": {
+            "classic_months": 30,
+            "classic_hours": 1,
+            "alt_first_months": 12,
+            "alt_first_hours": 2,
+            "alt_second_months": 6,
+            "alt_second_hours": 1
+          }
+        }
+      ]
     }
   },
   "obligation_types": [

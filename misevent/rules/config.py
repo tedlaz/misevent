@@ -768,6 +768,63 @@ def sick_leave_rules_for(d: date) -> SickLeaveRules:
     return _pick("sick_leave", d, f"Δεν υπάρχουν κανόνες ασθενείας για {gr_date(d)}")
 
 
+@dataclass(frozen=True)
+class ChildcareRules:
+    """Μειωμένο ωράριο φροντίδας τέκνου (αρ. 53 ν. 4808/2021): οι ΔΥΟ
+    επιλογές της εργαζόμενης — κλασική (μία φάση) και εναλλακτική (δύο
+    φάσεις, με συμφωνία εργοδότη). Ισχύει η γραμμή της ΕΝΑΡΞΗΣ της δήλωσης."""
+
+    valid_from: date
+    classic_months: int  # κλασική: διάρκεια (μήνες)
+    classic_hours: int  # κλασική: μείωση ωρών/ημέρα
+    alt_first_months: int  # εναλλακτική, 1η φάση: μήνες
+    alt_first_hours: int  # εναλλακτική, 1η φάση: ώρες/ημέρα
+    alt_second_months: int  # εναλλακτική, 2η φάση: μήνες
+    alt_second_hours: int  # εναλλακτική, 2η φάση: ώρες/ημέρα
+    # ΚΑΤΑΡΓΗΣΗ κανόνα από αυτή την ημερομηνία (βλ. events.py). Το `_pick`
+    # σκάει αντί να υποχωρήσει σιωπηλά στην προηγούμενη γραμμή.
+    repealed: bool = False
+
+
+CHILDCARE_HISTORY = [
+    ChildcareRules(
+        valid_from=date(2020, 1, 1),
+        classic_months=30, classic_hours=1,
+        alt_first_months=12, alt_first_hours=2,
+        alt_second_months=6, alt_second_hours=1,
+    ),
+]
+
+
+def childcare_rules_for(d: date) -> ChildcareRules:
+    return _pick("childcare", d,
+                 f"Δεν υπάρχουν κανόνες μειωμένου ωραρίου φροντίδας τέκνου για {gr_date(d)}")
+
+
+def childcare_steps(option: str, d: date) -> tuple:
+    """Διαδοχικές φάσεις ((μήνες, ώρες μείωσης/ημέρα), …) της επιλογής
+    `option`, με τους κανόνες που ισχύουν στην έναρξη `d`."""
+    r = childcare_rules_for(d)
+    return {
+        "classic": ((r.classic_months, r.classic_hours),),
+        "alternative": ((r.alt_first_months, r.alt_first_hours),
+                        (r.alt_second_months, r.alt_second_hours)),
+    }.get(option, ())
+
+
+def childcare_option_labels(d: date) -> dict[str, str]:
+    """Κωδικός -> ετικέτα επιλογής, με τις τιμές που ισχύουν στην `d`."""
+    def h(n):
+        return f"{n} ώρα" if n == 1 else f"{n} ώρες"
+    r = childcare_rules_for(d)
+    return {
+        "classic": f"{h(r.classic_hours)}/ημέρα για {r.classic_months} μήνες",
+        "alternative": (
+            f"{h(r.alt_first_hours)}/ημέρα για {r.alt_first_months} μήνες και "
+            f"{h(r.alt_second_hours)} για {r.alt_second_months} (με συμφωνία εργοδότη)"),
+    }
+
+
 # --- Προσαυξήσεις κατώτατου μισθού: τριετίες, γάμος, λοιπές (πτυχίο κ.λπ.) ---
 # Ο κατώτατος της ΓΣΣΕ/ΚΥΑ προσαυξάνεται με βάση τα δηλωθέντα στην πρόσληψη:
 #   - τριετίες (προϋπηρεσία): μισθωτοί έως 3 x 10%, ημερομίσθιοι έως 6 x 5%
@@ -1334,6 +1391,21 @@ FAMILIES: dict[str, ParamFamily] = {f.key: f for f in [
             else "Η έναρξη και η λήξη της νύχτας δεν μπορούν να ταυτίζονται"
         ),
     ),
+    ParamFamily(
+        "childcare", "Μειωμένο ωράριο φροντίδας τέκνου", ChildcareRules,
+        CHILDCARE_HISTORY,
+        note="αρ. 53 ν. 4808/2021, μετά τη λοχεία: λογίζεται πλήρης χρόνος "
+             "εργασίας (μισθός/εισφορές δεν αλλάζουν) — μειώνεται μόνο το "
+             "πρόγραμμα. Κάθε δήλωση ακολουθεί τη γραμμή που ίσχυε στην έναρξή της",
+        fields=(
+            _pf("classic_months", "Κλασική: διάρκεια (μήνες)", "int"),
+            _pf("classic_hours", "Κλασική: μείωση (ώρες/ημέρα)", "hour"),
+            _pf("alt_first_months", "Εναλλακτική 1η φάση: μήνες", "int"),
+            _pf("alt_first_hours", "Εναλλακτική 1η φάση: ώρες/ημέρα", "hour"),
+            _pf("alt_second_months", "Εναλλακτική 2η φάση: μήνες", "int"),
+            _pf("alt_second_hours", "Εναλλακτική 2η φάση: ώρες/ημέρα", "hour"),
+        ),
+    ),
 ]}
 
 
@@ -1420,14 +1492,10 @@ validate_families()
 # της νέας ΓΣΣΕ). Κενός κωδικός = χειροκίνητη μεταβολή: η αιτιολογία
 # περιγράφεται από τη ΔΙΑΦΟΡΑ των όρων (webapp/views/employments.py).
 # --- Μειωμένο ωράριο φροντίδας τέκνου (ChildcareReductionSet.option) --------
-# Κωδικός -> (ετικέτα, διαδοχικά διαστήματα (μήνες, ώρες μείωσης/ημέρα)).
-CHILDCARE_REDUCTION_OPTIONS: dict[str, tuple] = {
-    "classic": ("1 ώρα/ημέρα για 30 μήνες", ((30, 1),)),
-    "alternative": (
-        "2 ώρες/ημέρα για 12 μήνες και 1 ώρα για 6 (με συμφωνία εργοδότη)",
-        ((12, 2), (6, 1)),
-    ),
-}
+# ΚΛΕΙΣΤΟ λεξιλόγιο κωδικών (γράφονται σε events — μην τους μετονομάσεις). Οι
+# ώρες/μήνες κάθε επιλογής είναι ΠΑΡΑΜΕΤΡΟΣ: οικογένεια «childcare»
+# (`childcare_steps`, `childcare_option_labels`).
+CHILDCARE_REDUCTION_OPTIONS: tuple[str, ...] = ("classic", "alternative")
 
 CONTRACT_CHANGE_REASONS: dict[str, str] = {
     "gsse": "Προσαρμογή αποδοχών σε ΓΣΣΕ της {date}",

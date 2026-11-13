@@ -150,82 +150,45 @@ TERMINATION_REASONS = [
 ]
 
 # ------------------------------------------------------------- ΠΛΟΗΓΗΣΗ
-# Η αρχική, οι Παρουσίες, η Μισθοδοσία και οι υποβολές (ΕΡΓΑΝΗ/ΑΠΔ/ΦΜΥ) μένουν ΕΞΩ
-# από τις ομάδες: πρέπει να είναι
-# πάντα ένα κλικ μακριά, ό,τι κι αν είναι ανοιχτό.
-NAV_TOP = [
-    ("dashboard.index", "📊", "Επισκόπηση"),
-    ("attendance.index", "⏱️", "Παρουσίες"),
-    ("payroll.index", "🧮", "Μισθοδοσία"),
-    ("ergani.index", "🏛️", "ΕΡΓΑΝΗ"),
-    ("eapd.index", "📄", "ΑΠΔ"),
-    ("fmy.index", "🧾", "ΦΜΥ"),
-    ("help.index", "❓", "Βοήθεια"),
-]
-
-# Ομάδες του sidebar: (κλειδί, ετικέτα, εικονίδιο, [σελίδες]).
-# Κάθε σελίδα: (endpoint, εικονίδιο, ετικέτα, admin_only).
-#
-# ⚠️ Το `κλειδί` είναι ΣΤΑΘΕΡΟ αναγνωριστικό (λατινικά): πάνω σε αυτό
-# θυμάται ο browser ποιες ομάδες είναι ανοιχτές (`nav-fold.js`). Αν το
-# αλλάξεις, οι χρήστες χάνουν τις προτιμήσεις τους — η ελληνική ετικέτα
-# αλλάζει ελεύθερα.
-#
+# ΕΠΙΠΕΔΟ μενού, χωρίς ομάδες: (endpoint, εικονίδιο, ετικέτα, admin_only).
+# ⚠️ ΚΑΘΕ εικονίδιο ΜΟΝΑΔΙΚΟ: στο μενού «μόνο εικονίδια» είναι το μόνο που
+# ξεχωρίζει μια σελίδα (tests/test_nav_icons.py). Emoji ή αρχείο `.svg`
+# του `static/` (π.χ. «icons/apd.svg»).
 # ⚠️ Το `admin_only` ΠΡΕΠΕΙ να συμφωνεί με το `ADMIN_ENDPOINTS` του
 # `webapp/__init__.py`: εκεί ο guard κάνει `abort(403)`, οπότε ένας σύνδεσμος
 # χωρίς τη σημαία θα οδηγούσε απλό χρήστη σε σελίδα σφάλματος.
-NAV_GROUPS = [
-    ("staff", "Προσωπικό", "👥", [
-        ("persons.index", "👥", "Εργαζόμενοι", False),
-        ("employments.calendar_page", "📆", "Ημερολόγιο", False),
-    ]),
-    ("pay", "Αμοιβές", "🧮", [
-        ("payments.index", "💶", "Πληρωμές", False),
-        ("dashboard.stats", "📈", "Στατιστικά", False),
-    ]),
-    ("setup", "Ρυθμίσεις", "⚙️", [
-        ("company.index", "🏢", "Εταιρεία", False),
-        ("rules.index", "🧭", "Χάρτης κανόνων", False),
-    ]),
-    # Σελίδες πάνω από την ενεργή εταιρεία (SYSTEM_ENDPOINTS). Οι
-    # «Παράμετροι» είναι ΚΟΙΝΕΣ για όλες τις εταιρείες (νομοθετικές
-    # παράμετροι, Μητρώο ΚΠΚ) — ανήκουν εδώ, όχι στις Ρυθμίσεις μιας
-    # εταιρείας.
-    ("system", "Σύστημα", "🗂️", [
-        ("companies.index", "🗂️", "Εταιρείες", False),
-        ("apd_import.index", "📥", "Εισαγωγή από ΑΠΔ", False),
-        ("settings.index", "⚙️", "Παράμετροι", True),
-        ("users.index", "🔑", "Χρήστες", True),
-        ("backup.index", "💾", "Backup", True),
-    ]),
+NAV = [
+    ("dashboard.index", "📊", "Επισκόπηση", False),
+    ("attendance.index", "⏱️", "Παρουσίες", False),
+    ("payroll.index", "🧮", "Μισθοδοσία", False),
+    ("ergani.index", "🏛️", "ΕΡΓΑΝΗ", False),
+    ("eapd.index", "icons/apd.svg", "ΑΠΔ", False),
+    ("fmy.index", "icons/fmy.svg", "ΦΜΥ", False),
+    ("persons.index", "🧑‍💼", "Εργαζόμενοι", False),
+    ("employments.calendar_page", "📆", "Ημερολόγιο", False),
+    ("payments.index", "💶", "Πληρωμές", False),
+    ("dashboard.stats", "📈", "Στατιστικά", False),
+    ("company.index", "🏢", "Εταιρεία", False),
+    ("rules.index", "🧭", "Χάρτης κανόνων", False),
+    ("companies.index", "🗂️", "Εταιρείες", False),
+    ("settings.index", "⚙️", "Παράμετροι", True),
+    ("users.index", "🔑", "Χρήστες", True),
+    ("backup.index", "💾", "Backup", True),
+    ("help.index", "❓", "Βοήθεια", False),
 ]
 
 
-def nav_for(is_admin: bool, endpoint: str) -> list[dict]:
-    """Το μενού ΟΠΩΣ θα αποδοθεί: φιλτραρισμένο ανά δικαιώματα, με σημειωμένη
-    την ενεργή σελίδα και ανοιχτή την ομάδα που την περιέχει.
+# Σελίδες ΕΚΤΟΣ μενού που ζουν ως καρτέλα άλλης: blueprint → στοιχείο μενού
+# που φωτίζεται.
+NAV_PARENT = {"apd_import": "companies.index"}
 
-    Υπολογίζεται ΕΔΩ και όχι στο template: το φιλτράρισμα πλειάδων μέσα σε
-    Jinja θα ήταν δυσανάγνωστο, και έτσι η «ποια ομάδα είναι ανοιχτή» είναι
-    ένας κανόνας σε ένα σημείο.
-    """
-    groups = []
-    for key, label, icon, items in NAV_GROUPS:
-        visible = [
-            {"endpoint": e, "icon": i, "label": lb, "on": e == endpoint}
-            for e, i, lb, admin_only in items
-            if not admin_only or is_admin
-        ]
-        if not visible:
-            continue
-        groups.append({
-            "key": key,
-            "label": label,
-            "icon": icon,
-            "items": visible,
-            "open": any(v["on"] for v in visible),
-        })
-    return groups
+
+def nav_for(is_admin: bool, endpoint: str) -> list[dict]:
+    """Το μενού ΟΠΩΣ θα αποδοθεί: φιλτραρισμένο ανά δικαιώματα, με
+    σημειωμένη την ενεργή σελίδα."""
+    active = NAV_PARENT.get(endpoint.split(".")[0], endpoint)
+    return [{"endpoint": e, "icon": i, "label": lb, "on": e == active}
+            for e, i, lb, admin_only in NAV if not admin_only or is_admin]
 
 
 # Ελληνικές ετικέτες των events για το Audit log. Το όνομα κλάσης μένει ως

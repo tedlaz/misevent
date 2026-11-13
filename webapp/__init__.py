@@ -32,7 +32,7 @@ from datetime import timedelta
 from flask import abort, g, redirect, render_template_string, request, session, url_for
 
 from . import clock, filters
-from .labels import EMP_LIFECYCLE, MONTHS_GEN, NAV_TOP, SUBSIDY_LABELS, nav_for
+from .labels import EMP_LIFECYCLE, MONTHS_GEN, SUBSIDY_LABELS, nav_for
 from .system import auth, registry, set_tenant
 from .tenancy import data_dir
 
@@ -229,7 +229,6 @@ def create_app():
         user = getattr(g, "user", None)
         company_id = getattr(g, "company_id", None)
         return {
-            "NAV_TOP": NAV_TOP,
             # Κουμπί ❓ της κεφαλίδας: το άρθρο Βοήθειας της τρέχουσας οθόνης
             "help_url": help_url(request.endpoint or ""),
             "nav": nav_for(bool(user and user.is_admin), request.endpoint or ""),

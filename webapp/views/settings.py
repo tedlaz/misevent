@@ -195,6 +195,17 @@ def _severance_row(entry):
     }
 
 
+def _mark_current(rows):
+    """Σημειώνει (`current`) τη γραμμή που ΙΣΧΥΕΙ την ημερομηνία αναφοράς —
+    καμία, αν η πιο πρόσφατη εφαρμοστέα είναι κατάργηση. Επιστρέφει τη γραμμή."""
+    on = today()
+    best = max((r for r in rows if r["valid_from"] <= on),
+               key=lambda r: r["valid_from"], default=None)
+    for r in rows:
+        r["current"] = r is best and not r.get("repealed")
+    return best if best and not best.get("repealed") else None
+
+
 def _panel_ctx():
     families = []
     for fam, fields in FAMILY_FIELDS.items():
@@ -217,13 +228,18 @@ def _panel_ctx():
             ],
             "source": source,
         })
+        families[-1]["current"] = _mark_current(families[-1]["rows"])
     tax_entries, tax_source = svc.parameter_entries("tax")
     sev_entries, sev_source = svc.parameter_entries("severance")
+    tax_rows = [_tax_row(e) for e in tax_entries]
+    sev_rows = [_severance_row(e) for e in sev_entries]
     return {
         "families": families,
-        "tax_rows": [_tax_row(e) for e in tax_entries],
+        "tax_rows": tax_rows,
+        "tax_current": _mark_current(tax_rows),
         "tax_source": tax_source,
-        "sev_rows": [_severance_row(e) for e in sev_entries],
+        "sev_rows": sev_rows,
+        "sev_current": _mark_current(sev_rows),
         "sev_source": sev_source,
         "confirmed": svc.parameters_confirmed(),
         # Από πού θα γραφτούν οι αρχικές τιμές στο πρώτο τρέξιμο: το αρχείο

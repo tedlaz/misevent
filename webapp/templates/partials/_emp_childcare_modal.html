@@ -20,7 +20,7 @@
           {% set sel = f.get('option', '') %}
           <label>Επιλογή
             <select name="option">
-              {% for code, (lbl, _) in childcare_options.items() %}
+              {% for code, lbl in childcare_options.items() %}
                 <option value="{{ code }}" {{ 'selected' if sel == code }}>{{ lbl }}</option>
               {% endfor %}
               {% if cur %}<option value="" {{ 'selected' if sel == '' and f }}>Κατάργηση</option>{% endif %}

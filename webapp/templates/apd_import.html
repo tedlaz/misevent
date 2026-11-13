@@ -1,10 +1,11 @@
 {% extends "base.html" %}
 {% block title %}Εισαγωγή από ΑΠΔ{% endblock %}
-{% block heading %}Εισαγωγή από ΑΠΔ{% endblock %}
+{% block heading %}Εταιρείες{% endblock %}
 {% block subheading %}εταιρεία και εργαζόμενοι από αρχείο ΑΠΔ — τίποτα δεν
   καταχωρείται πριν τον τελικό έλεγχο{% endblock %}
 
 {% block content %}
+{% include "partials/_companies_tabs.html" %}
 {# Πεδίο ΑΠΟ ΤΟ ΑΡΧΕΙΟ: κλειδωμένο, χωρίς name (δεν υποβάλλεται καν) #}
 {% macro locked(label, value, type="text") %}
   <label>{{ label }}<input class="locked" type="{{ type }}" value="{{ value }}" readonly tabindex="-1"></label>

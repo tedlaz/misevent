@@ -5,7 +5,6 @@ Read-only ερωτήματα προς τα projections. Καμία παρενέ�
 Οι συναρτήσεις επιστρέφουν έτοιμα view models για τα templates.
 """
 
-import json
 from calendar import monthrange
 from datetime import date, datetime, timedelta
 
@@ -347,7 +346,7 @@ def _exit_settled(employment_id: str):
         term_seq,
     ):
         if etype == "GiftCalculated":
-            gift_types.add(json.loads(payload)["gift_type"])
+            gift_types.add(payload["gift_type"])
         else:
             allowance = True
     return gift_types, allowance
@@ -1152,7 +1151,7 @@ def _latest_event_date(event_type: str, pred) -> date | None:
     δημιουργίας» στις εκτυπώσεις: ο επανυπολογισμός αντικαθιστά τον παλιό)."""
     latest = None
     for occurred_at, payload in store.raw_by_type(event_type):
-        if pred(json.loads(payload)) and (latest is None or occurred_at > latest):
+        if pred(payload) and (latest is None or occurred_at > latest):
             latest = occurred_at
     return datetime.fromisoformat(latest).date() if latest else None
 

@@ -5,11 +5,10 @@ from pathlib import Path
 
 
 def test_every_nav_page_has_help():
-    from webapp.labels import NAV_GROUPS, NAV_TOP
+    from webapp.labels import NAV
     from webapp.views.help import help_for
 
-    endpoints = [e for e, _i, _l in NAV_TOP if e != "help.index"]
-    endpoints += [e for _k, _l, _i, items in NAV_GROUPS for e, *_ in items]
+    endpoints = [e for e, *_ in NAV if e != "help.index"]
     missing = [e for e in endpoints if not help_for(e)]
     assert not missing, f"σελίδες χωρίς άρθρο Βοήθειας: {missing}"
     assert help_for("attendance.index") == "attendance"

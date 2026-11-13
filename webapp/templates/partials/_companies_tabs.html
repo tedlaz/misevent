@@ -1,0 +1,8 @@
+{# Καρτέλες της σελίδας «Εταιρείες». ΣΥΝΔΕΣΜΟΙ, όχι CSS-only tabs: ο οδηγός
+   «Εισαγωγή από ΑΠΔ» έχει δικά του βήματα/URLs (apd_import.*). #}
+<div class="tabbar">
+  <a href="{{ url_for('companies.index') }}"
+     class="{{ 'on' if request.blueprint == 'companies' }}">Οι εταιρείες μου</a>
+  <a href="{{ url_for('apd_import.index') }}"
+     class="{{ 'on' if request.blueprint == 'apd_import' }}">Εισαγωγή από ΑΠΔ</a>
+</div>
