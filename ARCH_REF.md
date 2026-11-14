@@ -2188,6 +2188,10 @@ latest-wins) — η μόνη μόνιμη κατάσταση εδώ είναι �
 Επίσης `pre_major_by_card`, `card_tolerance_minutes`, `card_rounding_minutes`
 (κάρτα — §5.11), `auto_payments`, `obligations_horizon_months`, `peak_periods`.
 
+- `time_travel` (default **False**, «🧪 Δοκιμές» — η ενότητα φαίνεται ΜΟΝΟ online):
+  αλλαγή του «σήμερα» στην κεφαλίδα για ΑΥΤΗ την εταιρεία (`webapp/clock.enabled`).
+  Desktop: η αλλαγή ημερομηνίας υπάρχει πάντα, η ρύθμιση αγνοείται.
+
 ➜ Νέα ρύθμιση = μία εγγραφή στο `MISC_DEFAULTS` + ένα πεδίο στο
 `_company_settings.html` ΚΑΙ στο `company.settings_save` (checkbox που λείπει
 από τη φόρμα = False!) + ανάγνωση όπου χρειάζεται. Καμία αλλαγή σε event/schema.

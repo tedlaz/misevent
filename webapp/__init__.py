@@ -126,6 +126,7 @@ def create_app():
     # Μήνες σε γενική («Μισθοδοσία Ιουνίου 2026») — ΜΙΑ πηγή αλήθειας
     app.jinja_env.globals["months_gen"] = MONTHS_GEN
     app.jinja_env.globals["SUBSIDY_LABELS"] = SUBSIDY_LABELS
+    app.jinja_env.globals["saas_mode"] = saas_mode  # online έκδοση (ρυθμίσεις μόνο εκεί)
     # Λίστες «Είδος άδειας» της καρτέλας τρίτων χωρών (3 forms την κάνουν include)
     from misevent.integrations import ergani_parameters
 
@@ -309,7 +310,7 @@ def create_app():
             "today": clock.today(),  # το «σήμερα» του UI (μπορεί να είναι εικονικό)
             "real_today": clock.real_today(),
             "time_travel": clock.is_simulated(),
-            "saas": saas_mode(),
+            "time_travel_enabled": clock.enabled(),
         }
 
     return app

@@ -100,7 +100,7 @@ try { const t = localStorage.getItem('theme'); if (t) document.documentElement.d
       <span class="sub">{% block subheading %}{% endblock %}</span>
       <span class="grow"></span>
       {# Ημερομηνία αναφοράς: το «σήμερα» του UI — για δοκιμές όλου του κύκλου #}
-      {% if not saas %}
+      {% if time_travel_enabled %}
       <form class="clock {{ 'sim' if time_travel else '' }}"
             action="{{ url_for('clock.set_ref') }}" method="post">
         <input type="hidden" name="next" value="{{ request.full_path }}">

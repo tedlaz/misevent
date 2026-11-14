@@ -133,6 +133,10 @@ MISC_DEFAULTS = {
     # μετράνε ως διαθέσιμες για άδεια στο «χωράει το υπόλοιπο ως 31/12;»
     # (queries.leave_fit). Parsing/έλεγχος: calendar_gr.day_ranges.
     "peak_periods": "",
+    # ΤΑΞΙΔΙ ΣΤΟΝ ΧΡΟΝΟ (αλλαγή του «σήμερα» στην κεφαλίδα — εταιρεία ΔΟΚΙΜΩΝ).
+    # Μετράει ΜΟΝΟ στην online έκδοση (`webapp/clock.enabled`)· στη desktop
+    # υπάρχει πάντα.
+    "time_travel": False,
 }
 
 

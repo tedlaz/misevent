@@ -103,6 +103,17 @@
     </label>
   </section>
 
+  {# Μόνο online: στη desktop η αλλαγή ημερομηνίας υπάρχει πάντα (clock.enabled) #}
+  {% if saas_mode() %}
+  <section class="pref-sec">
+    <h3>🧪 Δοκιμές</h3>
+    {% call sw("time_travel", "Αλλαγή ημερομηνίας", "όχι") %}
+      Η κεφαλίδα επιτρέπει να οριστεί άλλο «σήμερα» — για δοκιμή μελλοντικών ή
+      παλαιότερων περιόδων. Μόνο σε εταιρεία δοκιμών.
+    {% endcall %}
+  </section>
+  {% endif %}
+
   <div class="btnrow">
     <button class="run" type="submit">Αποθήκευση ρυθμίσεων</button>
   </div>

@@ -115,6 +115,7 @@ def settings_save():
             auto_payments=f.get("auto_payments") == "1",
             obligations_horizon_months=form_int(f, "obligations_horizon_months", 1),
             peak_periods=f.get("peak_periods", "").strip(),
+            time_travel=f.get("time_travel") == "1",
         )
         return "Αποθηκεύτηκαν οι ρυθμίσεις της εταιρείας"
 
