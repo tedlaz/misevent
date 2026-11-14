@@ -1,0 +1,213 @@
+<!doctype html>
+<html lang="el">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="claude:viewport-fit-sides" content="cover">
+<title>misevent Event Model</title>
+<!-- Τα δεδομένα: model.js, παράγεται από model.json (build.py). Εδώ μόνο η προβολή. -->
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Commissioner:wght@500;700;800&family=Fira+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: ένας οριζόντιος πίνακας Event Modeling ανά slice — χρόνος αριστερά→δεξιά, λωρίδες πάνω→κάτω */
+:root{
+  --bg:#f3f5f8; --surface:#ffffff; --fg:#17202c; --muted:#5b6778; --line:#d5dbe4; --accent:#2c5aa0;
+  --ui:#ffffff; --ui-b:#9aa5b4;
+  --cmd:#d4e4ff; --cmd-b:#3d74d1; --cmd-t:#0f2c5c;
+  --evt:#ffdcb0; --evt-b:#e8740c; --evt-t:#4d2300;
+  --rm:#cdf0d5; --rm-b:#2f9e44; --rm-t:#0c3d18;
+  --auto:#e7e9ee; --auto-b:#6b7686; --auto-t:#26303d;
+  --ext:#e6dcff; --ext-b:#7048e8; --ext-t:#27136e;
+  --loop:#fff3c4; --loop-b:#c99a06;
+  --display:"Commissioner","Fira Sans",system-ui,sans-serif;
+  --body:"Fira Sans",system-ui,sans-serif;
+  --mono:"JetBrains Mono",ui-monospace,Consolas,monospace;
+  color-scheme:light;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#11161d; --surface:#18202a; --fg:#e4e9f0; --muted:#97a3b4; --line:#2c3644; --accent:#7fa8ec;
+  --ui:#1f2833; --ui-b:#5d6a7b; --cmd:#1b3157; --cmd-b:#5b8ee6; --cmd-t:#d6e5ff;
+  --evt:#4a2a0c; --evt-b:#f08c2e; --evt-t:#ffe2c2; --rm:#143a20; --rm-b:#46b75c; --rm-t:#d0f5d8;
+  --auto:#262d38; --auto-b:#8995a6; --auto-t:#dde3ea; --ext:#2d2156; --ext-b:#9775fa; --ext-t:#e7deff;
+  --loop:#3a3110; --loop-b:#e0b52a; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#11161d; --surface:#18202a; --fg:#e4e9f0; --muted:#97a3b4; --line:#2c3644; --accent:#7fa8ec;
+  --ui:#1f2833; --ui-b:#5d6a7b; --cmd:#1b3157; --cmd-b:#5b8ee6; --cmd-t:#d6e5ff;
+  --evt:#4a2a0c; --evt-b:#f08c2e; --evt-t:#ffe2c2; --rm:#143a20; --rm-b:#46b75c; --rm-t:#d0f5d8;
+  --auto:#262d38; --auto-b:#8995a6; --auto-t:#dde3ea; --ext:#2d2156; --ext-b:#9775fa; --ext-t:#e7deff;
+  --loop:#3a3110; --loop-b:#e0b52a; color-scheme:dark}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.5 var(--body);
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:28px 48px}
+.wrap{max-width:1500px;margin:0 auto;display:grid;gap:24px}
+header{display:grid;gap:6px;max-width:75ch}
+.eyebrow{font:600 12px/1 var(--body);letter-spacing:.08em;text-transform:uppercase;color:var(--accent)}
+h1{font:800 clamp(26px,4vw,38px)/1.1 var(--display);margin:0;text-wrap:balance}
+h2{font:700 21px/1.2 var(--display);margin:0 0 12px;text-wrap:balance}
+p{margin:0}
+.lead{color:var(--muted)}
+code{font-family:var(--mono);font-size:.86em}
+
+nav.tabs{display:flex;flex-wrap:wrap;gap:6px}
+nav.tabs a{display:inline-flex;gap:8px;align-items:baseline;padding:8px 12px;border:1px solid var(--line);border-radius:8px;
+  background:var(--surface);color:var(--fg);text-decoration:none;font:600 14px/1.2 var(--body)}
+nav.tabs a span{font:600 12px var(--mono);color:var(--muted)}
+nav.tabs a[aria-current="page"]{border-color:var(--accent);box-shadow:inset 0 -3px 0 var(--accent)}
+nav.tabs a:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+.legend{display:flex;flex-wrap:wrap;gap:8px 16px;font-size:13px;color:var(--muted)}
+.legend span{display:inline-flex;align-items:center;gap:6px}
+.sw{width:16px;height:16px;border-radius:3px;border:1.5px solid}
+
+.boardbox{overflow-x:auto;background:var(--surface);border:1px solid var(--line);border-radius:10px}
+.board{display:grid;min-width:max-content}
+.cell{padding:8px;border-left:1px dashed var(--line);border-top:1px solid var(--line);display:flex;flex-direction:column;gap:6px;min-width:0;width:184px}
+.lane{position:sticky;left:0;z-index:2;background:var(--surface);border-top:1px solid var(--line);padding:10px;
+  font:600 12.5px/1.3 var(--body);color:var(--muted);display:flex;flex-direction:column;justify-content:center;gap:2px;width:128px}
+.lane small{font-weight:400;font-size:11.5px}
+.lane.evt-l{color:var(--evt-b)}
+.head{border:0;border-left:1px dashed var(--line);padding:10px 8px 8px;cursor:pointer;background:none;text-align:left;color:inherit;font:inherit;display:grid;gap:2px;align-content:start;width:184px}
+.head:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
+.head .n{font:700 12px/1 var(--mono);color:var(--accent)}
+.head .t{font:700 15px/1.25 var(--display)}
+.loop{background:color-mix(in srgb,var(--loop) 45%,transparent)}
+.on{background:color-mix(in srgb,var(--accent) 10%,transparent)}
+.loop.on{background:color-mix(in srgb,var(--accent) 12%,color-mix(in srgb,var(--loop) 45%,transparent))}
+
+.st{border:1.5px solid;border-radius:4px;padding:6px 8px;font-size:12.5px;line-height:1.3;overflow-wrap:anywhere}
+.st b{display:block;font:600 12px/1.25 var(--mono)}
+.st i{font-style:normal;opacity:.8;font-size:11.5px}
+.ui{background:var(--ui);border-color:var(--ui-b);border-style:dashed}
+.cmd{background:var(--cmd);border-color:var(--cmd-b);color:var(--cmd-t)}
+.evt{background:var(--evt);border-color:var(--evt-b);color:var(--evt-t)}
+.rm{background:var(--rm);border-color:var(--rm-b);color:var(--rm-t)}
+.auto{background:var(--auto);border-color:var(--auto-b);color:var(--auto-t);border-radius:16px}
+.ext{background:var(--ext);border-color:var(--ext-b);color:var(--ext-t)}
+.sw.loopsw{background:var(--loop);border-color:var(--loop-b)}
+
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:18px 20px;min-width:0;display:grid;gap:10px;align-content:start}
+.panel h3{font:700 18px/1.2 var(--display);margin:0}
+.panel ul{margin:0;padding-left:20px;display:grid;gap:4px}
+.diagrams{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,460px),1fr));gap:20px}
+.dg{overflow-x:auto}
+.dg svg{max-width:100%;height:auto}
+.dg pre{margin:0;font:12px/1.45 var(--mono);color:var(--muted);white-space:pre-wrap}
+.cov{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,300px),1fr));gap:12px}
+.cov div{display:grid;gap:6px}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chips code{background:var(--evt);color:var(--evt-t);border:1px solid var(--evt-b);border-radius:3px;padding:2px 6px}
+.hint{font-size:13px;color:var(--muted)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="eyebrow" id="eyebrow">Event Model</div>
+    <h1 id="title">misevent Event Model</h1>
+    <p class="lead" id="summary"></p>
+  </header>
+
+  <nav class="tabs" id="tabs" aria-label="Slices"></nav>
+
+  <div class="legend" aria-label="Υπόμνημα">
+    <span><i class="sw ui"></i>Οθόνη</span>
+    <span><i class="sw cmd"></i>Εντολή (service)</span>
+    <span><i class="sw evt"></i>Event</span>
+    <span><i class="sw rm"></i>Read model</span>
+    <span><i class="sw auto" style="border-radius:8px"></i>Αυτοματισμός</span>
+    <span><i class="sw ext"></i>Εξωτερικό σύστημα</span>
+    <span><i class="sw loopsw"></i>Κάθε μήνα</span>
+  </div>
+
+  <div class="boardbox"><div class="board" id="board"></div></div>
+
+  <section class="panel" id="detail" aria-live="polite"></section>
+
+  <div class="diagrams" id="diagrams"></div>
+
+  <section class="panel">
+    <h2>Events εκτός slices</h2>
+    <p class="hint">Δεν έχουν μοντελοποιηθεί ακόμη. Το test αποτυγχάνει αν ένα νέο event δεν είναι ούτε σε slice ούτε εδώ.</p>
+    <div class="cov" id="cov"></div>
+  </section>
+</div>
+
+<script src="model.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.min.js"></script>
+<script>
+const M = window.EVENT_MODEL;
+const $ = id => document.getElementById(id);
+const esc = s => String(s).replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const codeify = s => esc(s).replace(/`([^`]+)`/g, "<code>$1</code>");
+const kind = k => k.startsWith("evt") ? "evt" : k;
+const isCode = s => /^[A-Za-z_][A-Za-z0-9_]*$/.test(s);
+const dark = () => document.documentElement.dataset.theme === "dark" ||
+  (document.documentElement.dataset.theme !== "light" && matchMedia("(prefers-color-scheme: dark)").matches);
+
+$("tabs").innerHTML = M.slices.map((s, i) =>
+  `<a href="#s${i + 1}" data-i="${i}"><span>${i + 1}</span>${esc(s.title)}</a>`).join("");
+$("cov").innerHTML = Object.entries(M.unmodeled).map(([g, evs]) =>
+  `<div><b>${esc(g)}</b><div class="chips">${evs.map(e => `<code>${esc(e)}</code>`).join("")}</div></div>`).join("");
+
+let current = -1, seq = 0;
+function show(i) {
+  current = i;
+  const s = M.slices[i];
+  document.querySelectorAll("#tabs a").forEach(a =>
+    +a.dataset.i === i ? a.setAttribute("aria-current", "page") : a.removeAttribute("aria-current"));
+  $("eyebrow").textContent = `Event Model · Slice ${i + 1} από ${M.slices.length}`;
+  $("title").textContent = s.title;
+  $("summary").textContent = s.summary;
+
+  const board = $("board");
+  board.style.gridTemplateColumns = `128px repeat(${s.steps.length}, 184px)`;
+  let html = `<div class="lane">Βήμα</div>`;
+  s.steps.forEach((st, n) => {
+    html += `<button type="button" class="head${st.loop ? " loop" : ""}" data-col="${n}"><span class="n">${String(n + 1).padStart(2, "0")}</span><span class="t">${esc(st.t)}</span></button>`;
+  });
+  for (const [k, name, sub] of M.lanes) {
+    if (!s.steps.some(st => (st[k] || []).length)) continue;  // κενή λωρίδα στο slice -> κρυφή
+    html += `<div class="lane${k.startsWith("evt") ? " evt-l" : ""}">${esc(name)}${sub ? `<small>${esc(sub)}</small>` : ""}</div>`;
+    s.steps.forEach((st, n) => {
+      html += `<div class="cell${st.loop ? " loop" : ""}" data-col="${n}">` + (st[k] || []).map(item => {
+        const [main, note] = Array.isArray(item) ? item : [item, ""];
+        return `<div class="st ${kind(k)}">${isCode(main) ? `<b>${esc(main)}</b>` : esc(main)}${note ? ` <i>${esc(note)}</i>` : ""}</div>`;
+      }).join("") + `</div>`;
+    });
+  }
+  board.innerHTML = html;
+  board.querySelectorAll(".head").forEach(b => b.addEventListener("click", () => select(+b.dataset.col)));
+  select(0);
+  drawDiagrams(s);
+}
+
+function select(n) {
+  const st = M.slices[current].steps[n];
+  $("board").querySelectorAll("[data-col]").forEach(el => el.classList.toggle("on", +el.dataset.col === n));
+  $("detail").innerHTML = `<div class="eyebrow">Βήμα ${n + 1}${st.loop ? " · κάθε μήνα" : ""}</div><h3>${esc(st.t)}</h3><ul>${st.rules.map(r => `<li>${codeify(r)}</li>`).join("")}</ul><p class="hint">Πάτησε άλλο βήμα στον πίνακα για τους κανόνες του.</p>`;
+}
+
+async function drawDiagrams(s) {
+  const box = $("diagrams");
+  box.innerHTML = (s.diagrams || []).map((d, j) =>
+    `<section class="panel"><h2>${esc(d.title)}</h2><div class="dg" id="dg${j}"><pre>${esc(d.code.join("\n"))}</pre></div></section>`).join("");
+  if (!window.mermaid) return;  // χωρίς δίκτυο: μένει ο κώδικας του διαγράμματος
+  mermaid.initialize({ startOnLoad: false, theme: dark() ? "dark" : "neutral", securityLevel: "strict" });
+  const mine = current;
+  for (const [j, d] of (s.diagrams || []).entries()) {
+    try {
+      const { svg } = await mermaid.render(`mm${++seq}`, d.code.join("\n"));
+      if (mine === current) $("dg" + j).innerHTML = svg;
+    } catch (e) { /* μένει ο κώδικας */ }
+  }
+}
+
+function route() {
+  const m = /^#s(\d+)$/.exec(location.hash);
+  const i = m ? Math.min(Math.max(+m[1] - 1, 0), M.slices.length - 1) : 0;
+  show(i);
+}
+addEventListener("hashchange", route);
+route();
+</script>
+</body>
+</html>

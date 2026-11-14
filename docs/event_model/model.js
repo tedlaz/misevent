@@ -1,0 +1,1217 @@
+// ΠΑΡΑΓΕΤΑΙ από model.json (build.py) — μην το επεξεργάζεσαι εδώ.
+window.EVENT_MODEL = {
+ "lanes": [
+  [
+   "ui",
+   "Οθόνη",
+   ""
+  ],
+  [
+   "cmd",
+   "Εντολή",
+   "service"
+  ],
+  [
+   "evtP",
+   "Event",
+   "stream: Πρόσωπο"
+  ],
+  [
+   "evtE",
+   "Event",
+   "stream: Απασχόληση"
+  ],
+  [
+   "evtC",
+   "Event",
+   "stream: Εταιρεία"
+  ],
+  [
+   "rm",
+   "Read model",
+   ""
+  ],
+  [
+   "auto",
+   "Αυτοματισμός",
+   "scheduler"
+  ],
+  [
+   "ext",
+   "Εξωτερικό",
+   ""
+  ]
+ ],
+ "slices": [
+  {
+   "id": "hire-to-certificate",
+   "title": "Από την πρόσληψη στη βεβαίωση αποδοχών",
+   "summary": "Ένας εργαζόμενος από την καταχώρηση ως την ετήσια βεβαίωση αποδοχών. Τα βήματα 4–7 επαναλαμβάνονται κάθε μήνα.",
+   "steps": [
+    {
+     "t": "Πρόσληψη",
+     "ui": [
+      "Εργαζόμενοι → Πρόσληψη"
+     ],
+     "cmd": [
+      "register_person",
+      "start_employment"
+     ],
+     "evtP": [
+      "PersonRegistered"
+     ],
+     "evtE": [
+      [
+       "EmploymentStarted",
+       "draft"
+      ],
+      "WorkScheduleAssigned",
+      "EmploymentScheduleModeSet"
+     ],
+     "rm": [
+      [
+       "Καρτέλα απασχόλησης",
+       "lifecycle = pending"
+      ]
+     ],
+     "rules": [
+      "Έλεγχος κατώτατου με τριετίες, γάμο και λοιπές προσαυξήσεις ήδη στην πρόσληψη.",
+      "Το πρόγραμμα εργασίας ισχύει από την ανάληψη (σε μεταφορά όχι αναδρομικά).",
+      "Ξεκινούν τα ιστορικά σύμβασης και προσαυξήσεων (`contract_history`, `allowance_history`)."
+     ]
+    },
+    {
+     "t": "Ασφαλιστικά",
+     "ui": [
+      "Καρτέλα → Ασφαλιστικά"
+     ],
+     "cmd": [
+      "assign_insurance_profile"
+     ],
+     "evtE": [
+      "InsuranceProfileAssigned"
+     ],
+     "auto": [
+      [
+       "Υποχρεώσεις ΤΕΚΑ",
+       "μόνο αν είναι μέλος"
+      ]
+     ],
+     "rules": [
+      "Ο ΚΠΚ και οι καλύψεις ορίζουν τις εισφορές της μισθοδοσίας.",
+      "Μέλος ΤΕΚΑ με αναγγελμένη πρόσληψη γεννά ΑΠΔ και καταβολή ΤΕΚΑ ανά περίοδο."
+     ]
+    },
+    {
+     "t": "Αναγγελία ΕΡΓΑΝΗ",
+     "ui": [
+      "ΕΡΓΑΝΗ → Αναγγελία"
+     ],
+     "cmd": [
+      "submit_hire_e3",
+      "record_external_hire_submission"
+     ],
+     "evtE": [
+      [
+       "ErganiSubmissionRecorded",
+       "WebE3N"
+      ]
+     ],
+     "evtC": [
+      [
+       "ObligationScheduled",
+       "× κάθε περίοδο"
+      ]
+     ],
+     "rm": [
+      [
+       "Καρτέλα",
+       "lifecycle = active"
+      ],
+      "Χρονολόγιο υποχρεώσεων"
+     ],
+     "auto": [
+      [
+       "_on_hired",
+       "ανοίγει περιόδους"
+      ]
+     ],
+     "ext": [
+      [
+       "ΕΡΓΑΝΗ",
+       "WebE3N"
+      ]
+     ],
+     "rules": [
+      "Χωρίς αναγγελία ο εργαζόμενος δεν μπαίνει σε μισθοδοσία (`hire_submitted`).",
+      "Σε μεταφορά από άλλο πρόγραμμα: `record_external_hire_submission`, χωρίς κλήση στο ΕΡΓΑΝΗ.",
+      "Ο scheduler ανοίγει για κάθε περίοδο: παρουσίες, μισθοδοσία, πληρωμή, ΑΠΔ, ΦΜΥ, Δώρα."
+     ]
+    },
+    {
+     "t": "Έγκριση παρουσιών",
+     "loop": true,
+     "ui": [
+      "Παρουσίες μήνα"
+     ],
+     "cmd": [
+      "approve_attendance"
+     ],
+     "evtC": [
+      "AttendanceSheetApproved",
+      [
+       "ObligationFulfilled",
+       "ATTENDANCE_APPROVAL"
+      ]
+     ],
+     "rm": [
+      "Συγκεντρωτικό παρουσιών"
+     ],
+     "auto": [
+      [
+       "Εκπλήρωση",
+       "ATTENDANCE_APPROVAL"
+      ]
+     ],
+     "rules": [
+      "Οι ημέρες της μισθοδοσίας βγαίνουν από το εγκεκριμένο συγκεντρωτικό, όχι απευθείας από τις παρουσίες.",
+      "Χειροκίνητες διορθώσεις γίνονται πριν την έγκριση."
+     ]
+    },
+    {
+     "t": "Μισθοδοσία",
+     "loop": true,
+     "ui": [
+      "Μισθοδοσία"
+     ],
+     "cmd": [
+      "run_monthly_payroll",
+      "reopen_payroll_period"
+     ],
+     "evtE": [
+      "MonthlyPayrollCalculated"
+     ],
+     "evtC": [
+      [
+       "ObligationFulfilled",
+       "MONTHLY_PAYROLL"
+      ],
+      [
+       "ObligationScheduled",
+       "μήνας Μ+1"
+      ],
+      [
+       "PayrollPeriodReopened",
+       "μόνο για διόρθωση"
+      ]
+     ],
+     "rm": [
+      "payroll_ledger",
+      [
+       "Δεδουλευμένα",
+       "accruals"
+      ]
+     ],
+     "auto": [
+      [
+       "Εκπλήρωση + άνοιγμα Μ+1",
+       "Νοέμβριος: Επίδομα Αδείας"
+      ]
+     ],
+     "rules": [
+      "Η περίοδος πρέπει να είναι ανοιχτή και οι προηγούμενοι μήνες υπολογισμένοι.",
+      "Απαιτεί εγκεκριμένο συγκεντρωτικό παρουσιών.",
+      "Καμία παράβαση κατώτατου, με τις προσαυξήσεις που ίσχυαν στην περίοδο (`allowances_on`).",
+      "Ήδη υπολογισμένη περίοδος: πρώτα `reopen_payroll_period`."
+     ]
+    },
+    {
+     "t": "Πληρωμή μισθών",
+     "loop": true,
+     "ui": [
+      [
+       "Χρονολόγιο",
+       "ή αυτόματα"
+      ]
+     ],
+     "cmd": [
+      "pay_salaries"
+     ],
+     "evtE": [
+      [
+       "PaymentMade",
+       "salary"
+      ]
+     ],
+     "evtC": [
+      [
+       "ObligationFulfilled",
+       "SALARY_PAYMENT"
+      ]
+     ],
+     "auto": [
+      [
+       "Εκπλήρωση",
+       "SALARY_PAYMENT"
+      ]
+     ],
+     "rules": [
+      "Με τη ρύθμιση `auto_payments` η πληρωμή γίνεται μόλις ξεκλειδώσει και δεν εμφανίζεται στο χρονολόγιο."
+     ]
+    },
+    {
+     "t": "Δήλωση ΦΜΥ",
+     "loop": true,
+     "ui": [
+      "Αρχεία ΦΜΥ"
+     ],
+     "cmd": [
+      "generate_fmy_file",
+      "submit_fmy",
+      "pay_fmy"
+     ],
+     "evtC": [
+      "FMYFileGenerated",
+      "FMYSubmitted",
+      [
+       "ObligationFulfilled",
+       "FMY_SUBMISSION"
+      ]
+     ],
+     "auto": [
+      [
+       "Εκπλήρωση",
+       "FMY_SUBMISSION"
+      ]
+     ],
+     "ext": [
+      [
+       "ΑΑΔΕ",
+       "myAADE"
+      ]
+     ],
+     "rules": [
+      "Το αρχείο JL10 δεν γράφεται στον δίσκο· παράγεται από τα events όποτε ζητηθεί.",
+      "Περιλαμβάνει τακτικές αποδοχές και τα Δώρα/Επίδομα του μήνα."
+     ]
+    },
+    {
+     "t": "Βεβαίωση αποδοχών",
+     "ui": [
+      "Πρόσωπο → Βεβαιώσεις"
+     ],
+     "rm": [
+      "tax_certificate",
+      [
+       "year_pending",
+       "οριστική ή ΠΡΟΣΩΡΙΝΗ"
+      ]
+     ],
+     "rules": [
+      "Μόνο ανάγνωση: καμία εντολή, κανένα event.",
+      "Αθροίζει όλες τις απασχολήσεις του προσώπου στο έτος.",
+      "Αν το `year_pending` βρει εκκρεμότητες, το PDF γράφει «ΠΡΟΣΩΡΙΝΗ» και τις απαριθμεί: μήνας χωρίς μισθοδοσία, Δώρο/Επίδομα που δεν υπολογίστηκε, απλήρωτο ποσό, ΦΜΥ που δεν δηλώθηκε."
+     ]
+    }
+   ],
+   "diagrams": [
+    {
+     "title": "Κύκλος ζωής απασχόλησης",
+     "code": [
+      "stateDiagram-v2",
+      "  direction LR",
+      "  [*] --> pending: EmploymentStarted",
+      "  pending --> active: ErganiSubmissionRecorded (WebE3N)",
+      "  pending --> [*]: EmploymentDeleted",
+      "  active --> active: ContractChanged",
+      "  active --> terminated: EmployeeTerminated",
+      "  terminated --> [*]"
+     ]
+    },
+    {
+     "title": "Ο μηνιαίος κύκλος υποχρεώσεων",
+     "code": [
+      "sequenceDiagram",
+      "  autonumber",
+      "  participant U as Χρήστης",
+      "  participant S as Services",
+      "  participant E as Event store",
+      "  participant A as Scheduler",
+      "  A->>E: ObligationScheduled (περίοδος Μ)",
+      "  U->>S: approve_attendance",
+      "  S->>E: AttendanceSheetApproved",
+      "  E-->>A: fulfil ATTENDANCE_APPROVAL",
+      "  U->>S: run_monthly_payroll",
+      "  S->>E: MonthlyPayrollCalculated",
+      "  E-->>A: fulfil MONTHLY_PAYROLL",
+      "  A->>E: ObligationScheduled (περίοδος Μ+1)",
+      "  U->>S: pay_salaries",
+      "  S->>E: PaymentMade (salary)",
+      "  U->>S: submit_fmy",
+      "  S->>E: FMYSubmitted",
+      "  E-->>A: fulfil FMY_SUBMISSION"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "contract-change",
+   "title": "Αλλαγή σύμβασης",
+   "summary": "Αλλαγή αποδοχών, ωραρίου ή προσαυξήσεων με ημερομηνία ισχύος, η Δήλωση Μεταβολής στο ΕΡΓΑΝΗ, και η αυτόματη προσαρμογή όταν αλλάζει ο κατώτατος μισθός.",
+   "steps": [
+    {
+     "t": "Αλλαγή σύμβασης",
+     "ui": [
+      "Καρτέλα → Αλλαγή σύμβασης"
+     ],
+     "cmd": [
+      "change_contract"
+     ],
+     "evtE": [
+      [
+       "ContractChanged",
+       "με ημ. ισχύος"
+      ]
+     ],
+     "rm": [
+      "contract_on",
+      "allowances_on",
+      [
+       "Ιστορικό συμβάσεων",
+       "_contract_history"
+      ]
+     ],
+     "rules": [
+      "Έλεγχος κατώτατου στην ημερομηνία ισχύος: τριετίες ως τότε, γάμος και λοιπές προσαυξήσεις όπως θα ισχύουν τότε.",
+      "Στο event, `None` σημαίνει «αμετάβλητο» (σύστημα εργασίας, επίδομα γάμου, λοιπές %).",
+      "Οι προσαυξήσεις ισχύουν από την ημερομηνία της μεταβολής (`allowance_history`).",
+      "Κάθε μεταβολή αφήνει μία εκκρεμή Δήλωση Μεταβολής."
+     ]
+    },
+    {
+     "t": "Δήλωση Μεταβολής",
+     "ui": [
+      "ΕΡΓΑΝΗ → Μεταβολές"
+     ],
+     "cmd": [
+      "submit_metavoli"
+     ],
+     "evtE": [
+      [
+       "ErganiSubmissionRecorded",
+       "E4_METAVOLI"
+      ]
+     ],
+     "rm": [
+      "pending_metavoli"
+     ],
+     "ext": [
+      [
+       "ΕΡΓΑΝΗ",
+       "Δήλωση Μεταβολής"
+      ]
+     ],
+     "rules": [
+      "Μία δήλωση ανά μεταβολή, με τους δικούς της όρους (subject `E4:n`).",
+      "Μεταβολές πριν την αναγγελία πρόσληψης τις καλύπτει το ίδιο το WebE3N."
+     ]
+    },
+    {
+     "t": "Νέα ΓΣΣΕ",
+     "ui": [
+      "Σύστημα → Παράμετροι"
+     ],
+     "cmd": [
+      "define_parameters"
+     ],
+     "evtC": [
+      [
+       "ParametersDefined",
+       "minimum_wage"
+      ],
+      [
+       "ObligationScheduled",
+       "WAGE_ADJUSTMENT"
+      ]
+     ],
+     "auto": [
+      [
+       "_ensure_wage_adjustment",
+       "αν η περίοδος έχει ανοίξει"
+      ]
+     ],
+     "rules": [
+      "Νέος κατώτατος με ημερομηνία ισχύος· αν η περίοδος είναι ήδη ανοιχτή, η υποχρέωση προσαρμογής γεννιέται αμέσως.",
+      "Οι αρχικές τιμές έρχονται από το `data/init_parameters.json`."
+     ]
+    },
+    {
+     "t": "Προσαρμογή στον κατώτατο",
+     "ui": [
+      "Χρονολόγιο → Προσαρμογή"
+     ],
+     "cmd": [
+      "apply_minimum_adjustments"
+     ],
+     "evtE": [
+      [
+       "ContractChanged",
+       "αιτία: ΓΣΣΕ"
+      ]
+     ],
+     "evtC": [
+      "WageAdjustmentApplied",
+      [
+       "ObligationFulfilled",
+       "WAGE_ADJUSTMENT"
+      ]
+     ],
+     "auto": [
+      [
+       "Εκπλήρωση",
+       "WAGE_ADJUSTMENT"
+      ]
+     ],
+     "rules": [
+      "Όποιος αμείβεται κάτω από το προσωπικό του όριο ανεβαίνει σε αυτό, με κανονική μεταβολή σύμβασης και Δήλωση Μεταβολής.",
+      "Με «διατήρηση διαφοράς» περνά η αύξηση του ορίου σε όλους.",
+      "Τα Δώρα και το Επίδομα Αδείας της ίδιας περιόδου περιμένουν την προσαρμογή."
+     ]
+    },
+    {
+     "t": "Διόρθωση πρόσληψης",
+     "ui": [
+      "Καρτέλα → Διόρθωση πρόσληψης"
+     ],
+     "cmd": [
+      "correct_hire_details"
+     ],
+     "evtE": [
+      "EmploymentHireDetailsCorrected"
+     ],
+     "rm": [
+      [
+       "contract_history",
+       "αρχική έκδοση"
+      ]
+     ],
+     "rules": [
+      "Διορθώνει λάθος της φόρμας πρόσληψης· αντικαθιστά μόνο την αρχική έκδοση της σύμβασης.",
+      "Οι μεταγενέστερες μεταβολές μένουν όπως είναι."
+     ]
+    }
+   ],
+   "diagrams": [
+    {
+     "title": "Εκδόσεις σύμβασης στον χρόνο",
+     "code": [
+      "flowchart LR",
+      "  H([EmploymentStarted<br>αρχική έκδοση]) --> C1([ContractChanged<br>ισχύς 1/7: γάμος 10%])",
+      "  C1 --> C2([ContractChanged<br>ισχύς 1/8: λοιπές 10%])",
+      "  Q[[allowances_on 30/6]] -.-> H",
+      "  R[[allowances_on 15/7]] -.-> C1",
+      "  S[[allowances_on 1/8]] -.-> C2"
+     ]
+    },
+    {
+     "title": "Αλυσίδα νέας ΓΣΣΕ",
+     "code": [
+      "sequenceDiagram",
+      "  participant U as Χρήστης",
+      "  participant S as Services",
+      "  participant E as Event store",
+      "  participant A as Scheduler",
+      "  U->>S: define_parameters (minimum_wage)",
+      "  S->>E: ParametersDefined",
+      "  E-->>A: περίοδος ανοιχτή;",
+      "  A->>E: ObligationScheduled WAGE_ADJUSTMENT",
+      "  U->>S: apply_minimum_adjustments",
+      "  S->>E: ContractChanged × όσοι είναι κάτω από το όριο",
+      "  S->>E: WageAdjustmentApplied",
+      "  E-->>A: fulfil WAGE_ADJUSTMENT",
+      "  Note over A: ξεκλειδώνουν Δώρα / Επίδομα της περιόδου"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "person-change",
+   "title": "Μεταβολή στοιχείων προσώπου",
+   "summary": "Οικογενειακή κατάσταση, τέκνα, διεύθυνση και επικοινωνία αλλάζουν στο πρόσωπο με ημερομηνία ισχύος· γέννηση τέκνου και μειωμένο ωράριο αφορούν την απασχόληση.",
+   "steps": [
+    {
+     "t": "Μεταβολή",
+     "ui": [
+      "Εργαζόμενοι → 🔄 Μεταβολή"
+     ],
+     "cmd": [
+      "change_person_details"
+     ],
+     "evtP": [
+      [
+       "PersonDetailsChanged",
+       "με ημ. ισχύος"
+      ]
+     ],
+     "rm": [
+      "children_on",
+      "Καρτέλα προσώπου"
+     ],
+     "rules": [
+      "Τα τέκνα επηρεάζουν τον ΦΜΥ μόνο από την ημερομηνία ισχύος (`children_on`).",
+      "Αλλαγή τέκνων απαιτεί ανοιχτή μισθολογική περίοδο.",
+      "Η αλλαγή οικογενειακής κατάστασης δεν αλλάζει το επίδομα γάμου· αυτό γίνεται με «Αλλαγή σύμβασης» (slice 2)."
+     ]
+    },
+    {
+     "t": "Διόρθωση",
+     "ui": [
+      "Εργαζόμενοι → ✏️ Διόρθωση"
+     ],
+     "cmd": [
+      "correct_person"
+     ],
+     "evtP": [
+      "PersonDetailsCorrected"
+     ],
+     "rm": [
+      "Καρτέλα προσώπου"
+     ],
+     "rules": [
+      "Για λάθη καταχώρησης· ισχύει από πάντα, όχι από ημερομηνία."
+     ]
+    },
+    {
+     "t": "Γέννηση τέκνου",
+     "ui": [
+      "Καρτέλα απασχόλησης"
+     ],
+     "cmd": [
+      "record_child_birth"
+     ],
+     "evtE": [
+      "ChildBirthRecorded"
+     ],
+     "rm": [
+      "mother_subsidy_on"
+     ],
+     "rules": [
+      "Ενεργοποιεί την επιδότηση εισφορών μητέρας (ΑΠΔ 103) για το διάστημα που ορίζει ο νόμος."
+     ]
+    },
+    {
+     "t": "Μειωμένο ωράριο τέκνου",
+     "ui": [
+      "Καρτέλα → Φροντίδα τέκνου"
+     ],
+     "cmd": [
+      "set_childcare_reduction"
+     ],
+     "evtE": [
+      "ChildcareReductionSet"
+     ],
+     "rm": [
+      "childcare_reduction"
+     ],
+     "ext": [
+      [
+       "ΕΡΓΑΝΗ",
+       "νέο πρόγραμμα"
+      ]
+     ],
+     "rules": [
+      "Η σύμβαση δεν αλλάζει· επιτρέπεται απλώς μικρότερο πρόγραμμα, που δηλώνεται στο ΕΡΓΑΝΗ όπως κάθε αλλαγή προγράμματος.",
+      "Νέα δήλωση αντικαθιστά την προηγούμενη· κενή επιλογή την καταργεί."
+     ]
+    }
+   ],
+   "diagrams": [
+    {
+     "title": "Δύο διαδρομές αλλαγής μετά την πρόσληψη",
+     "code": [
+      "flowchart LR",
+      "  P[Στοιχεία ΠΡΟΣΩΠΟΥ<br>τέκνα, οικογ. κατάσταση,<br>διεύθυνση, επικοινωνία] --> PC([PersonDetailsChanged])",
+      "  PC --> F[[ΦΜΥ από την ημ. ισχύος]]",
+      "  K[Όροι ΣΥΜΒΑΣΗΣ<br>επίδομα γάμου, λοιπές %] --> CC([ContractChanged])",
+      "  CC --> M[[Έλεγχος κατώτατου από την ημ. ισχύος]]",
+      "  PC -. προειδοποίηση .-> K"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "leave-sickness",
+   "title": "Άδειες και ασθένεια",
+   "summary": "Καταχώρηση, μετάθεση και ακύρωση αδειών, η μηνιαία δήλωση αδειών στο ΕΡΓΑΝΗ, και πώς η ασθένεια περνά στη μισθοδοσία.",
+   "steps": [
+    {
+     "t": "Καταχώρηση άδειας",
+     "ui": [
+      "Άδειες",
+      [
+       "MCP",
+       "record_leave"
+      ]
+     ],
+     "cmd": [
+      "record_leave",
+      "plan_annual_leave"
+     ],
+     "evtE": [
+      "LeaveRecorded"
+     ],
+     "evtC": [
+      [
+       "ObligationScheduled",
+       "LEAVE_DECLARATION"
+      ],
+      [
+       "ObligationScheduled",
+       "LEAVE_ALLOWANCE"
+      ]
+     ],
+     "rm": [
+      "annual_leave_entitlement",
+      "annual_leave_accrued",
+      "annual_leave_taken"
+     ],
+     "auto": [
+      [
+       "_sync_allowances",
+       "πρώτη κανονική άδεια"
+      ],
+      [
+       "Δήλωση αδειών",
+       "για κάθε μήνα"
+      ]
+     ],
+     "rules": [
+      "Η άδεια πρέπει να είναι σε ανοιχτή περίοδο, μέσα στην απασχόληση, χωρίς επικάλυψη.",
+      "Οι ημέρες μετρούν σε εργάσιμες Δευτέρα–Παρασκευή, και για εξαήμερο.",
+      "Η πρώτη κανονική άδεια του έτους γεννά το Επίδομα Αδείας στον μήνα της (slice 5)."
+     ]
+    },
+    {
+     "t": "Μετάθεση ή ακύρωση",
+     "ui": [
+      "Άδειες → Μετάθεση / Ακύρωση"
+     ],
+     "cmd": [
+      "reschedule_leave",
+      "cancel_leave"
+     ],
+     "evtE": [
+      "LeaveRescheduled",
+      "LeaveCancelled"
+     ],
+     "rm": [
+      "leave_declared_to_ergani"
+     ],
+     "auto": [
+      [
+       "_sync_allowances",
+       "μετακινεί το Επίδομα"
+      ]
+     ],
+     "rules": [
+      "Άδεια που έχει δηλωθεί στο ΕΡΓΑΝΗ κλειδώνει.",
+      "Αν μετακινηθεί η πρώτη άδεια, η ανοιχτή υποχρέωση Επιδόματος που μένει χωρίς δικαιούχο κλείνει."
+     ]
+    },
+    {
+     "t": "Δήλωση αδειών ΕΡΓΑΝΗ",
+     "ui": [
+      "ΕΡΓΑΝΗ → Δήλωση αδειών"
+     ],
+     "cmd": [
+      "submit_leave_declaration"
+     ],
+     "evtC": [
+      "LeaveDeclarationSubmitted",
+      [
+       "ErganiSubmissionRecorded",
+       "WTOLeave"
+      ],
+      [
+       "ObligationFulfilled",
+       "LEAVE_DECLARATION"
+      ]
+     ],
+     "rm": [
+      "leave_declaration_proposal"
+     ],
+     "auto": [
+      [
+       "Εκπλήρωση",
+       "LEAVE_DECLARATION"
+      ]
+     ],
+     "ext": [
+      [
+       "ΕΡΓΑΝΗ",
+       "WTOLeave"
+      ]
+     ],
+     "rules": [
+      "Απολογιστική: μετά την έγκριση παρουσιών του μήνα, έως το τέλος του επόμενου μήνα.",
+      "Χωρίς αδήλωτες άδειες απλώς κλείνει την υποχρέωση."
+     ]
+    },
+    {
+     "t": "Ασθένεια στο συγκεντρωτικό",
+     "loop": true,
+     "ui": [
+      "Παρουσίες μήνα"
+     ],
+     "cmd": [
+      "approve_attendance"
+     ],
+     "evtC": [
+      [
+       "AttendanceSheetApproved",
+       "sick_half / sick_full"
+      ]
+     ],
+     "rm": [
+      [
+       "sick_balance",
+       "χρήση / όριο / από"
+      ],
+      "sick_deduction"
+     ],
+     "rules": [
+      "Οι ημέρες ασθένειας μετρούν σε κυλιόμενο παράθυρο 365 ημερών.",
+      "Το συγκεντρωτικό χωρίζει τις ημέρες σε μισές (τριήμερο) και πλήρεις· στις πλήρεις αφαιρείται το επίδομα ΕΦΚΑ."
+     ]
+    },
+    {
+     "t": "Επίδομα ασθενείας ΕΦΚΑ",
+     "ui": [
+      "Καρτέλα → Άδειες ασθενείας"
+     ],
+     "cmd": [
+      "record_sickness_benefit"
+     ],
+     "evtE": [
+      "SicknessBenefitRecorded"
+     ],
+     "rm": [
+      "sick_deduction"
+     ],
+     "ext": [
+      [
+       "e-ΕΦΚΑ",
+       "έγκριση επιδόματος"
+      ]
+     ],
+     "rules": [
+      "Το ποσό γίνεται γνωστό εκ των υστέρων, γι' αυτό καταχωρείται χειροκίνητα.",
+      "Αφαιρείται από όσα οφείλει ο εργοδότης για τις ημέρες που πληρώνονται κανονικά, όχι από το τριήμερο."
+     ]
+    }
+   ],
+   "diagrams": [
+    {
+     "title": "Τι γεννά μία κανονική άδεια",
+     "code": [
+      "flowchart LR",
+      "  L([LeaveRecorded]) --> A((Scheduler))",
+      "  A --> D([ObligationScheduled<br>LEAVE_DECLARATION<br>ανά μήνα της άδειας])",
+      "  A --> E([ObligationScheduled<br>LEAVE_ALLOWANCE<br>αν είναι η πρώτη του έτους])",
+      "  D --> S[submit_leave_declaration] --> DS([LeaveDeclarationSubmitted])",
+      "  E --> R[run_leave_allowance] --> LA([LeaveAllowanceCalculated])"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "gifts-allowance",
+   "title": "Δώρα και Επίδομα Αδείας",
+   "summary": "Δώρο Πάσχα, Δώρο Χριστουγέννων και Επίδομα Αδείας: πότε γεννιούνται, τι περιμένουν για να ξεκλειδώσουν, και πώς πληρώνονται.",
+   "steps": [
+    {
+     "t": "Προγραμματισμός Δώρων",
+     "ui": [
+      "Χρονολόγιο"
+     ],
+     "evtC": [
+      [
+       "ObligationScheduled",
+       "EASTER_GIFT / CHRISTMAS_GIFT"
+      ]
+     ],
+     "auto": [
+      [
+       "_ensure_gifts",
+       "με το άνοιγμα κάθε έτους"
+      ]
+     ],
+     "rules": [
+      "Δεν προγραμματίζονται αν η προθεσμία τους είναι πριν την πρώτη πρόσληψη.",
+      "Προθεσμία Πάσχα: Μεγάλη Τετάρτη. Χριστουγέννων: 21/12."
+     ]
+    },
+    {
+     "t": "Δώρο Πάσχα",
+     "ui": [
+      "Χρονολόγιο → Δώρο Πάσχα"
+     ],
+     "cmd": [
+      "run_easter_gifts"
+     ],
+     "evtE": [
+      "GiftCalculated"
+     ],
+     "evtC": [
+      [
+       "ObligationFulfilled",
+       "EASTER_GIFT"
+      ],
+      [
+       "ObligationScheduled",
+       "EASTER_GIFT_PAYMENT"
+      ]
+     ],
+     "auto": [
+      [
+       "_ensure_payouts",
+       "γεννά την καταβολή"
+      ]
+     ],
+     "rules": [
+      "Ξεκλειδώνει με τη μισθοδοσία Μαρτίου και την προσαρμογή κατώτατου του Απριλίου.",
+      "Υπολογίζεται στον μισθό που ίσχυε 15 ημέρες πριν την καταβολή (`contract_on`)."
+     ]
+    },
+    {
+     "t": "Δώρο Χριστουγέννων",
+     "ui": [
+      "Χρονολόγιο → Δώρο Χριστουγέννων"
+     ],
+     "cmd": [
+      "run_christmas_gifts"
+     ],
+     "evtE": [
+      "GiftCalculated"
+     ],
+     "evtC": [
+      [
+       "ObligationFulfilled",
+       "CHRISTMAS_GIFT"
+      ],
+      [
+       "ObligationScheduled",
+       "CHRISTMAS_GIFT_PAYMENT"
+      ]
+     ],
+     "auto": [
+      [
+       "_ensure_payouts",
+       "γεννά την καταβολή"
+      ]
+     ],
+     "rules": [
+      "Ξεκλειδώνει με τη μισθοδοσία Νοεμβρίου και την προσαρμογή κατώτατου του Δεκεμβρίου."
+     ]
+    },
+    {
+     "t": "Επίδομα Αδείας",
+     "ui": [
+      "Χρονολόγιο → Επίδομα Αδείας"
+     ],
+     "cmd": [
+      "run_leave_allowance"
+     ],
+     "evtE": [
+      "LeaveAllowanceCalculated"
+     ],
+     "evtC": [
+      [
+       "ObligationFulfilled",
+       "LEAVE_ALLOWANCE"
+      ],
+      [
+       "ObligationScheduled",
+       "LEAVE_ALLOWANCE_PAYMENT"
+      ]
+     ],
+     "rm": [
+      "allowance_beneficiaries"
+     ],
+     "auto": [
+      [
+       "Γέννηση",
+       "πρώτη άδεια ή Δεκέμβριος"
+      ]
+     ],
+     "rules": [
+      "Δύο ημερομίσθια ανά μήνα απασχόλησης, με ανώτατο μισό μισθό.",
+      "Γεννιέται στον μήνα της πρώτης κανονικής άδειας· όποιος δεν πήρε άδεια το έχει υποχρεωτικά τον Δεκέμβριο, μόλις κλείσει ο Νοέμβριος.",
+      "Μπορεί να αναβληθεί ως το τέλος του έτους, αλλά όσο μένει ανοιχτό μπλοκάρει την ΑΠΔ της επόμενης περιόδου."
+     ]
+    },
+    {
+     "t": "Καταβολή",
+     "ui": [
+      [
+       "Χρονολόγιο",
+       "ή αυτόματα"
+      ]
+     ],
+     "cmd": [
+      "pay_gifts",
+      "pay_leave_allowance"
+     ],
+     "evtE": [
+      [
+       "PaymentMade",
+       "gift / allowance"
+      ]
+     ],
+     "evtC": [
+      [
+       "ObligationFulfilled",
+       "…_PAYMENT"
+      ]
+     ],
+     "rm": [
+      "year_pending"
+     ],
+     "auto": [
+      [
+       "Εκπλήρωση",
+       "…_PAYMENT"
+      ]
+     ],
+     "rules": [
+      "Τα Δώρα και το Επίδομα δεν έχουν δική τους υποβολή: μπαίνουν στην ΑΠΔ της επόμενης περιόδου και στον ΦΜΥ του μήνα καταβολής.",
+      "Απλήρωτο ή μη υπολογισμένο ποσό κάνει τη βεβαίωση αποδοχών προσωρινή."
+     ]
+    }
+   ],
+   "diagrams": [
+    {
+     "title": "Τι ξεκλειδώνει τι",
+     "code": [
+      "flowchart LR",
+      "  P3[MONTHLY_PAYROLL Μάρτιος] --> EG[EASTER_GIFT]",
+      "  W4[WAGE_ADJUSTMENT Απρίλιος] --> EG",
+      "  EG --> EGP[EASTER_GIFT_PAYMENT]",
+      "  P11[MONTHLY_PAYROLL Νοέμβριος] --> CG[CHRISTMAS_GIFT]",
+      "  W12[WAGE_ADJUSTMENT Δεκέμβριος] --> CG",
+      "  CG --> CGP[CHRISTMAS_GIFT_PAYMENT]",
+      "  L([πρώτη κανονική άδεια]) --> LA[LEAVE_ALLOWANCE]",
+      "  P11 -. όποιος δεν πήρε άδεια .-> LA",
+      "  LA --> LAP[LEAVE_ALLOWANCE_PAYMENT]",
+      "  LA --> APD[APD_SUBMISSION επόμενου μήνα]"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "exit",
+   "title": "Αποχώρηση και εκκαθάριση",
+   "summary": "Η αποχώρηση γράφει ένα event και αμέσως όλους τους υπολογισμούς εκκαθάρισης για αυτόν τον εργαζόμενο· η Αναγγελία Λήξης στέλνεται χωριστά.",
+   "steps": [
+    {
+     "t": "Προεπισκόπηση",
+     "ui": [
+      "Καρτέλα → Αποχώρηση"
+     ],
+     "rm": [
+      "termination_preview",
+      "leave_compensation_preview",
+      "severance_preview"
+     ],
+     "rules": [
+      "Μόνο ανάγνωση: δείχνει μισθοδοσία μήνα, Δώρο και Επίδομα pro-rata, αποζημίωση αδείας και απόλυσης πριν την επιβεβαίωση.",
+      "Με υπαιτιότητα εργοδότη η αποζημίωση αδείας διπλασιάζεται (+100%)."
+     ]
+    },
+    {
+     "t": "Αποχώρηση",
+     "ui": [
+      "Αποχώρηση → Επιβεβαίωση"
+     ],
+     "cmd": [
+      "terminate"
+     ],
+     "evtE": [
+      "EmployeeTerminated",
+      [
+       "MonthlyPayrollCalculated",
+       "exit_settlement"
+      ],
+      [
+       "GiftCalculated",
+       "exit_settlement"
+      ],
+      [
+       "LeaveAllowanceCalculated",
+       "exit_settlement"
+      ],
+      "LeaveCompensationCalculated",
+      [
+       "SeveranceCalculated",
+       "μόνο καταγγελία"
+      ]
+     ],
+     "rm": [
+      [
+       "Καρτέλα",
+       "lifecycle = terminated"
+      ]
+     ],
+     "rules": [
+      "Όλοι οι υπολογισμοί εκκαθάρισης γίνονται μέσα στην ίδια εντολή, χωρίς χειροκίνητα κουμπιά.",
+      "Τα events με `exit_settlement` αφορούν μόνο αυτόν: δεν κλείνουν τις εταιρικές υποχρεώσεις μισθοδοσίας, Δώρων ή Επιδόματος των υπόλοιπων.",
+      "Αν η μισθοδοσία του μήνα δεν γίνεται (π.χ. εκκρεμεί προηγούμενος μήνας), η αποχώρηση δεν ματαιώνεται· ο μήνας υπολογίζεται στον τακτικό κύκλο.",
+      "Αποζημίωση απόλυσης μόνο σε καταγγελία και με υπηρεσία τουλάχιστον ενός έτους."
+     ]
+    },
+    {
+     "t": "Αναγγελία Λήξης",
+     "ui": [
+      "ΕΡΓΑΝΗ → Αναγγελία Λήξης"
+     ],
+     "cmd": [
+      "submit_exit",
+      "record_external_exit_submission"
+     ],
+     "evtE": [
+      [
+       "ErganiSubmissionRecorded",
+       "E5_LIXI"
+      ]
+     ],
+     "rm": [
+      "exit_pending"
+     ],
+     "ext": [
+      [
+       "ΕΡΓΑΝΗ",
+       "WebE5N / WebE7N"
+      ]
+     ],
+     "rules": [
+      "Οικειοθελής: WebE5N, με τη δήλωση του εργαζομένου σε PDF.",
+      "Λήξη ορισμένου χρόνου: WebE7N.",
+      "Καταγγελία: δεν διατίθεται μέσω API· υποβάλλεται στο portal εντός 4 εργάσιμων και σημειώνεται εδώ."
+     ]
+    },
+    {
+     "t": "Πληρωμή εκκαθάρισης",
+     "ui": [
+      [
+       "Χρονολόγιο",
+       "με τους μισθούς"
+      ]
+     ],
+     "cmd": [
+      "pay_salaries",
+      "pay_exit_compensations"
+     ],
+     "evtE": [
+      [
+       "PaymentMade",
+       "salary / leave / severance"
+      ]
+     ],
+     "rules": [
+      "Οι αποζημιώσεις δεν έχουν δική τους υποχρέωση: εξοφλούνται μαζί με τους μισθούς.",
+      "Όσες υπολογίστηκαν αφού πληρώθηκαν οι μισθοί του μήνα εξοφλούνται με την επόμενη πληρωμή."
+     ]
+    },
+    {
+     "t": "Διαγραφή πρόσληψης",
+     "ui": [
+      "Καρτέλα → Διαγραφή"
+     ],
+     "cmd": [
+      "delete_employment"
+     ],
+     "evtE": [
+      "EmploymentDeleted"
+     ],
+     "rules": [
+      "Μόνο για απασχόληση που δεν έχει αναγγελθεί (pending)· αλλιώς ακολουθείται η αποχώρηση."
+     ]
+    }
+   ],
+   "diagrams": [
+    {
+     "title": "Τι γράφει η εντολή terminate",
+     "code": [
+      "sequenceDiagram",
+      "  participant U as Χρήστης",
+      "  participant S as terminate",
+      "  participant E as Event store",
+      "  U->>S: Επιβεβαίωση αποχώρησης",
+      "  S->>E: EmployeeTerminated",
+      "  S->>E: MonthlyPayrollCalculated (exit_settlement)",
+      "  S->>E: GiftCalculated (exit_settlement)",
+      "  S->>E: LeaveAllowanceCalculated (exit_settlement)",
+      "  opt υπόλοιπο αδείας",
+      "    S->>E: LeaveCompensationCalculated",
+      "  end",
+      "  opt καταγγελία και ≥ 1 έτος",
+      "    S->>E: SeveranceCalculated",
+      "  end",
+      "  Note over E: η Αναγγελία Λήξης μένει εκκρεμής (exit_pending)"
+     ]
+    }
+   ]
+  }
+ ],
+ "unmodeled": {
+  "Πρόγραμμα εργασίας και ΕΡΓΑΝΗ": [
+   "ScheduleDeclaredToErgani",
+   "ScheduleDaysSubmitted",
+   "ScheduleSystemDeclared",
+   "RetroScheduleSubmitted",
+   "DailyScheduleAssigned",
+   "RetroAbsenceReasonSet"
+  ],
+  "Κάρτα εργασίας και παρουσίες": [
+   "CardPunchRecorded",
+   "CardPunchCancelled",
+   "CardPeriodChecked",
+   "CardMonthChecked",
+   "MonthPayBasisChosen",
+   "AttendanceRecorded"
+  ],
+  "ΑΠΔ και εισφορές": [
+   "APDFileGenerated",
+   "APDSubmitted"
+  ],
+  "Χρήστες και κατάλογος εταιρειών (σύστημα)": [
+   "UserRegistered",
+   "UserPasswordSet",
+   "UserAdminSet",
+   "UserAccessSet",
+   "UserDeactivated",
+   "UserReactivated",
+   "InvitationIssued",
+   "InvitationAccepted",
+   "InvitationRevoked",
+   "PasswordResetRequested",
+   "PasswordResetIssued",
+   "PasswordResetUsed",
+   "CompanyProvisioned",
+   "CompanyRenamed",
+   "CompanyArchived",
+   "CompanyUnarchived"
+  ],
+  "Εταιρεία, παράμετροι και ρυθμίσεις": [
+   "CompanyRegistered",
+   "CompanyBranchDefined",
+   "CompanySpecialtyDefined",
+   "KPKDefined",
+   "KPKRatesDefined",
+   "ObligationTypeConfigured",
+   "ObligationExtended",
+   "MiscSettingsChanged",
+   "SubmissionWithdrawn"
+  ]
+ }
+};
