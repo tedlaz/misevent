@@ -49,4 +49,4 @@ git pull && docker compose up -d --build     # τα δεδομένα μένου�
 ## Αργότερα: δημόσιο domain
 `.env`: `DOMAIN=misthodosia.example.gr`, `CADDY_TLS=you@example.gr`, port forward
 80/443 στο VM, και ενεργοποίηση του HSTS στο `Caddyfile`. Πριν ανοίξεις σε
-πελάτες: SMTP στο `.env` (επιβεβαίωση email στην εγγραφή) και off-site backups.
+πελάτες: SMTP στο `.env` (σύνδεσμοι ενεργοποίησης με email) και off-site backups.

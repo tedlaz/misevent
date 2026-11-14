@@ -11,7 +11,6 @@ import time
 
 from flask import (
     Blueprint,
-    abort,
     redirect,
     render_template,
     request,
@@ -19,11 +18,8 @@ from flask import (
     url_for,
 )
 
-from misevent.app.auth import new_token
-
 from .. import mailer
 from ..system import auth, auth_svc, lock, registry
-from ..tenancy import saas_mode
 
 bp = Blueprint("auth", __name__)
 
@@ -41,8 +37,6 @@ PUBLIC_ENDPOINTS = {
     "auth.reset_post",
     "auth.setup",  # ΜΟΝΟ χωρίς χρήστες — ελέγχει μόνο του το `needs_setup`
     "auth.setup_post",
-    "auth.signup",  # ΜΟΝΟ online (MISEVENT_SAAS) — αλλιώς 404
-    "auth.signup_post",
     "static",
 }
 
@@ -108,46 +102,11 @@ def setup_post():
     return redirect(url_for("welcome.index"))
 
 
-# ------------------------------------------------- εγγραφή πελάτη (online)
-# Νέος ΟΡΓΑΝΙΣΜΟΣ με αυτόν τον χρήστη διαχειριστή του· μετά ο οδηγός
-# «Ξεκινώντας» για την πρώτη εταιρεία. Στη desktop έκδοση δεν υπάρχει.
-@bp.get("/signup")
-def signup():
-    if not saas_mode():
-        abort(404)
-    return render_template("signup.html", verify=mailer.configured())
-
-
-@bp.post("/signup")
-def signup_post():
-    if not saas_mode():
-        abort(404)
-    email = request.form.get("email", "")
-    verify = mailer.configured()
-    try:
-        with lock:
-            if verify:
-                # ΕΠΙΒΕΒΑΙΩΣΗ email: λογαριασμός με τυχαίο (άγνωστο) κωδικό· ο
-                # χρήστης ορίζει τον δικό του από τον σύνδεσμο που του στάλθηκε —
-                # ο ίδιος μηχανισμός με την επαναφορά, κανένα νέο event.
-                user_id = auth_svc.signup_organization(email, new_token(), None)
-                _, token = auth_svc.issue_password_reset(user_id)
-            else:
-                user_id = auth_svc.signup_organization(
-                    email, request.form.get("password", ""), request.form.get("repeat", ""))
-    except ValueError as exc:
-        return render_template("signup.html", email=email, verify=verify,
-                               error=str(exc)), 400
-    if verify:
-        send_reset_link(auth.users[user_id].email, token, new_account=True)
-        return render_template("signup.html", sent=auth.users[user_id].email)
-    login_user(auth.users[user_id])
-    return redirect(url_for("welcome.index"))
-
-
 # ------------------------------------------------------------------ σύνδεση
+# ΚΑΜΙΑ ελεύθερη εγγραφή: νέους πελάτες δημιουργεί ο διαχειριστής του
+# συστήματος από τη σελίδα «Οργανισμοί» (`views/orgs.py`).
 def _login_page(**context):
-    return render_template("login.html", saas=saas_mode(), **context)
+    return render_template("login.html", **context)
 
 
 @bp.get("/login")

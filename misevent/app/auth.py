@@ -420,15 +420,18 @@ class AuthService:
             raise ValueError("Η αρχική ρύθμιση έχει ήδη γίνει — συνδεθείτε")
         return self.register_user(email, password, is_admin=True, password_repeat=repeat)
 
-    def signup_organization(self, email: str, password: str, repeat: str) -> str:
-        """Εγγραφή ΝΕΟΥ πελάτη (online έκδοση): νέος οργανισμός, με αυτόν τον
-        χρήστη διαχειριστή του. Οι εταιρείες του φτιάχνονται μετά (οδηγός
-        «Ξεκινώντας»). Ο οργανισμός δεν έχει δικό του event — υπάρχει μέσω
-        του `org_id` των χρηστών/εταιρειών του."""
+    def create_organization(self, email: str) -> tuple[str, str]:
+        """ΝΕΟΣ πελάτης (online): οργανισμός με αυτόν τον χρήστη διαχειριστή του.
+        Τον δημιουργεί ο διαχειριστής του συστήματος — ΚΑΜΙΑ ελεύθερη εγγραφή.
+        Ο κωδικός είναι τυχαίος (άγνωστος σε όλους): ο πελάτης ορίζει τον δικό
+        του από τον σύνδεσμο ενεργοποίησης. Επιστρέφει (user_id, ΩΜΟ token).
+        Ο οργανισμός δεν έχει δικό του event — υπάρχει μέσω του `org_id`."""
         if not self.proj.users:
             raise ValueError("Πρώτα η αρχική ρύθμιση του συστήματος")
-        return self.register_user(email, password, is_admin=True, password_repeat=repeat,
-                                  org_id=str(uuid.uuid4()))
+        user_id = self.register_user(email, new_token(), is_admin=True,
+                                     org_id=str(uuid.uuid4()))
+        _, token = self.issue_password_reset(user_id, days=INVITE_VALID_DAYS)
+        return user_id, token
 
     def authenticate(self, email: str, password: str) -> User:
         """Επιστρέφει τον χρήστη ή πετά ValueError. Το μήνυμα είναι σκόπιμα
@@ -595,7 +598,8 @@ class AuthService:
             )
         return "Το αίτημα καταγράφηκε. Ο διαχειριστής θα σας στείλει σύνδεσμο επαναφοράς."
 
-    def issue_password_reset(self, user_id: str, by: str = "") -> tuple[str, str]:
+    def issue_password_reset(self, user_id: str, by: str = "",
+                             days: int = RESET_VALID_DAYS) -> tuple[str, str]:
         """Ο admin εκδίδει token επαναφοράς. Επιστρέφει (reset_id, ΩΜΟ token)."""
         user = self._user(user_id, by)
         token = new_token()
@@ -607,7 +611,7 @@ class AuthService:
                 reset_id=reset_id,
                 user_id=user_id,
                 token_hash=token_digest(token),
-                expires_at=_expiry(RESET_VALID_DAYS),
+                expires_at=_expiry(days),
                 by=by,
                 request_id=pending.get("request_id", ""),
             ),

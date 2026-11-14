@@ -5,6 +5,25 @@
 
 {% block content %}
 <div class="card">
+  <h2>Νέος πελάτης <span class="norm">— το email του διαχειριστή του· ορίζει μόνος
+    του κωδικό από τον σύνδεσμο ενεργοποίησης (ισχύει 7 ημέρες)</span></h2>
+  <form class="frm" method="post" action="{{ url_for('orgs.create') }}">
+    <div class="btnrow">
+      <input name="email" type="email" value="{{ email or '' }}" required
+             placeholder="email διαχειριστή του πελάτη">
+      <button class="run" type="submit">Νέος πελάτης</button>
+    </div>
+  </form>
+  {% if created %}
+    <div class="audit-result ok">Δημιουργήθηκε ο πελάτης <b>{{ created }}</b>.
+      {% if sent %}Ο σύνδεσμος ενεργοποίησης στάλθηκε με email.{% else %}Στείλ' του
+      τον σύνδεσμο ενεργοποίησης — <b>φαίνεται μόνο τώρα</b>:{% endif %}
+      <div class="mono" style="user-select:all;word-break:break-all">{{ link }}</div>
+    </div>
+  {% endif %}
+</div>
+
+<div class="card">
   {% if error %}<div class="audit-result err">{{ error }}</div>{% endif %}
   {% if rows %}
   <table class="tbl">
@@ -39,7 +58,7 @@
     </tbody>
   </table>
   {% else %}
-  <div class="muted">Κανένας πελάτης ακόμη — εγγράφονται από τη σελίδα «Νέος λογαριασμός».</div>
+  <div class="muted">Κανένας πελάτης ακόμη.</div>
   {% endif %}
 </div>
 {% endblock %}

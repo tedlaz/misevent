@@ -17,9 +17,7 @@
     <input name="password" type="password" required></label>
   <div class="btnrow">
     <button class="run" type="submit">Σύνδεση</button>
-    <a class="ghost" href="{{ url_for('auth.forgot') }}">Ξέχασα τον κωδικό</a>
-    {% if saas %}<a class="ghost" href="{{ url_for('auth.signup') }}">Νέος λογαριασμός</a>{% endif %}
-  </div>
+    <a class="ghost" href="{{ url_for('auth.forgot') }}">Ξέχασα τον κωδικό</a>  </div>
 </form>
 
 {% endblock %}

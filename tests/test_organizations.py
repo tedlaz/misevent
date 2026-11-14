@@ -4,6 +4,8 @@
 
 
 def test_organizations(fresh_system, monkeypatch):
+    import re
+
     import _bootstrap
 
     from webapp import create_app
@@ -13,16 +15,20 @@ def test_organizations(fresh_system, monkeypatch):
     platform = _bootstrap.ui_client(app)  # ο διαχειριστής της εγκατάστασης (org "")
     platform_co = auth.active_companies("")[0].company_id
 
-    # Desktop: καμία εγγραφή
-    assert app.test_client().get("/signup").status_code == 404
-
     monkeypatch.setenv("MISEVENT_SAAS", "1")
+    # ΚΑΜΙΑ ελεύθερη εγγραφή
+    assert app.test_client().get("/signup").status_code in (302, 404)
 
     def signup(email):
+        """Ο διαχειριστής του συστήματος φτιάχνει τον πελάτη· ο πελάτης
+        ενεργοποιεί τον λογαριασμό από τον σύνδεσμο και συνδέεται."""
+        page = platform.post("/organizations/new", data={"email": email})
+        assert page.status_code == 200, page.get_data(as_text=True)
+        reset = re.search(r"(/reset/[\w-]+)", page.get_data(as_text=True)).group(1)
         c = app.test_client()
-        r = c.post("/signup", data={"email": email, "password": "pw-123456",
-                                    "repeat": "pw-123456"})
-        assert r.status_code == 302, r.get_data(as_text=True)
+        c.post(reset, data={"password": "pw-123456", "repeat": "pw-123456"})
+        r = c.post("/login", data={"email": email, "password": "pw-123456"})
+        assert r.status_code == 302 and "/welcome" in r.headers["Location"]
         c.post("/welcome/company", data={"name": f"Εταιρεία {email}"})
         return c, auth.by_email(email)
 

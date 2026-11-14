@@ -23,11 +23,16 @@ def test_saas_ops(fresh_system, monkeypatch):
     def link(kind):
         return re.search(rf"(/{kind}/[\w-]+)", outbox[-1][1]).group(1)
 
-    # Εγγραφή ΜΕ επιβεβαίωση: χωρίς κωδικό στη φόρμα — ο σύνδεσμος στο email
-    c = app.test_client()
-    r = c.post("/signup", data={"email": "a@example.com"})
+    # Νέος πελάτης από τον διαχειριστή του συστήματος: σύνδεσμος ενεργοποίησης
+    # στο email· πριν την ενεργοποίηση ΚΑΝΕΙΣ δεν ξέρει τον κωδικό
+    assert app.test_client().post("/organizations/new",
+                                  data={"email": "x@example.com"}).status_code == 302  # login
+    r = platform.post("/organizations/new", data={"email": "a@example.com"})
     assert r.status_code == 200 and outbox[-1][0] == "a@example.com"
+    assert platform.post("/organizations/new",
+                         data={"email": "a@example.com"}).status_code == 400  # διπλό
     ua = auth.by_email("a@example.com")
+    c = app.test_client()
     assert c.post("/login", data={"email": "a@example.com", "password": "x"}).status_code == 401
     c.post(link("reset"), data={"password": "pw-A-1", "repeat": "pw-A-1"})
     assert c.post("/login", data={"email": "a@example.com",

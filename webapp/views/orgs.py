@@ -11,6 +11,7 @@ from flask import Blueprint, abort, g, redirect, render_template, request, url_f
 
 from ..helpers import run_command
 from ..system import auth, lock, registry
+from .auth import send_reset_link
 
 bp = Blueprint("orgs", __name__, url_prefix="/organizations")
 
@@ -31,11 +32,33 @@ def _rows() -> list[dict]:
     return sorted(rows, key=lambda r: r["created_at"], reverse=True)
 
 
-@bp.get("/")
-def index():
+def _page(status: int = 200, **ctx):
     with lock:
         rows = _rows()
-    return render_template("orgs.html", rows=rows, error=request.args.get("error"))
+    return render_template("orgs.html", rows=rows, **ctx), status
+
+
+@bp.get("/")
+def index():
+    return _page(error=request.args.get("error"))
+
+
+@bp.post("/new")
+def create():
+    """Νέος πελάτης: οργανισμός + ο διαχειριστής του, με σύνδεσμο ενεργοποίησης
+    (ορισμός κωδικού). Ο σύνδεσμος φαίνεται ΜΙΑ φορά εδώ — και στέλνεται με
+    email αν υπάρχει SMTP. Απάντηση σελίδα, ΟΧΙ redirect: το token δεν πρέπει
+    να μείνει σε URL/ιστορικό."""
+    email = (request.form.get("email") or "").strip()
+    try:
+        with lock:
+            user_id, token = registry.auth_svc.create_organization(email)
+    except ValueError as exc:
+        return _page(400, error=str(exc), email=email)
+    email = auth.users[user_id].email
+    sent = send_reset_link(email, token, new_account=True)
+    return _page(created=email, sent=sent,
+                 link=url_for("auth.reset", token=token, _external=True))
 
 
 @bp.post("/<org_id>/limits")
