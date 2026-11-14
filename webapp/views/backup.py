@@ -96,7 +96,8 @@ COMPANY_EVENTS_NAME = "events.json"
 
 
 def _company(company_id: str):
-    if company_id not in registry.auth.companies:
+    # ΜΟΝΟ εταιρείες που βλέπει ο χρήστης (= του οργανισμού του)
+    if company_id not in {c.company_id for c in registry.auth.companies_for(g.user)}:
         abort(404)
     return registry.tenant(company_id)
 
@@ -198,8 +199,8 @@ def index():
         error=request.args.get("error") or "",
         restored=registry.display_name(request.args.get("restored", "")),
         companies=[(c.company_id, registry.display_name(c.company_id))
-                   for c in registry.auth.active_companies()],
-        safety_files=_safety_files(),
+                   for c in registry.auth.companies_for(g.user)],
+        safety_files=_safety_files() if g.user.is_platform_admin else [],
     )
 
 

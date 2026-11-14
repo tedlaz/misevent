@@ -34,18 +34,39 @@ from flask import abort, g, redirect, render_template_string, request, session, 
 from . import clock, filters
 from .labels import EMP_LIFECYCLE, MONTHS_GEN, SUBSIDY_LABELS, nav_for
 from .system import auth, registry, set_tenant
-from .tenancy import data_dir
+from .tenancy import data_dir, saas_mode
+
+SAFE_METHODS = ("GET", "HEAD", "OPTIONS")
+
+
+def cross_site() -> bool:
+    """CSRF: αίτημα που ΑΛΛΑΖΕΙ κάτι και ήρθε από άλλο site. Χωρίς tokens στις
+    φόρμες — ο browser το δηλώνει μόνος του (`Sec-Fetch-Site`, όλοι οι σύγχρονοι)
+    και, για παλιότερους, το `Origin`. Χωρίς κανένα από τα δύο (test client,
+    curl) δεν είναι browser, άρα δεν υπάρχει CSRF."""
+    if request.method in SAFE_METHODS:
+        return False
+    site = request.headers.get("Sec-Fetch-Site")
+    if site:
+        return site not in ("same-origin", "none")
+    origin = request.headers.get("Origin")
+    return bool(origin) and origin.split("://", 1)[-1] != request.host
 
 # Σελίδες που δεν απαιτούν ΕΝΕΡΓΗ ΕΤΑΙΡΕΙΑ (είναι πάνω από αυτές).
 # Οι «Παράμετροι» ανήκουν εδώ: οι νομοθετικές παράμετροι και το Μητρώο ΚΠΚ
 # γράφονται στο ΚΟΙΝΟ store (SHARED_EVENT_TYPES) και ισχύουν για ΟΛΕΣ τις
 # εταιρείες — η ενεργή εταιρεία δεν αλλάζει τίποτε σε αυτή τη σελίδα.
-SYSTEM_ENDPOINTS = ("auth.", "companies.", "apd_import.", "welcome.", "users.",
+SYSTEM_ENDPOINTS = ("auth.", "companies.", "apd_import.", "welcome.", "users.", "orgs.",
                     "settings.", "backup.", "help.")
 
 # Σελίδες ΜΟΝΟ για διαχειριστές. Οι «Παράμετροι» είναι ΚΟΙΝΕΣ για όλες τις
 # εταιρείες (νέα ΓΣΣΕ/φορολογική κλίμακα) — δεν τις αλλάζει απλός χρήστης.
-ADMIN_ENDPOINTS = ("users.", "settings.", "backup.")
+ADMIN_ENDPOINTS = ("users.", "settings.", "backup.", "orgs.")
+# ...και από αυτές, ΜΟΝΟ για τον διαχειριστή ΤΟΥ ΣΥΣΤΗΜΑΤΟΣ (`is_platform_admin`):
+# οι ΚΟΙΝΕΣ παράμετροι και ό,τι αγγίζει ΟΛΟΥΣ τους οργανισμούς (backup συστήματος).
+# Ο admin ενός πελάτη (online) κρατά χρήστες + backup των ΔΙΚΩΝ του εταιρειών.
+PLATFORM_ENDPOINTS = ("settings.", "orgs.", "backup.download", "backup.restore",
+                      "backup.safety_")
 
 
 def _secret_key() -> bytes:
@@ -66,6 +87,37 @@ def create_app():
     app.secret_key = _secret_key()
     app.permanent_session_lifetime = timedelta(days=14)
     app.config.update(SESSION_COOKIE_HTTPONLY=True, SESSION_COOKIE_SAMESITE="Lax")
+    if saas_mode():
+        # Πίσω από τον reverse proxy (Caddy, HTTPS): σωστό scheme/host/IP
+        # από τα X-Forwarded-* και cookies ΜΟΝΟ πάνω από HTTPS.
+        from werkzeug.middleware.proxy_fix import ProxyFix
+
+        app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
+        app.config.update(SESSION_COOKIE_SECURE=True)
+
+        # Μία γραμμή ανά αίτημα στο stdout (`docker compose logs app`):
+        # μέθοδος, διαδρομή, status, χρόνος, χρήστης — ΠΟΤΕ περιεχόμενο φορμών.
+        import logging
+        import time
+
+        log = logging.getLogger("misevent.access")
+
+        @app.before_request
+        def _t0():
+            g.t0 = time.perf_counter()
+
+        @app.after_request
+        def _access_log(resp):
+            ms = (time.perf_counter() - g.get("t0", time.perf_counter())) * 1000
+            user = getattr(g, "user", None)
+            log.info("%s %s %s %.0fms ip=%s user=%s", request.method, request.path,
+                     resp.status_code, ms, request.remote_addr,
+                     user.user_id if user else "-")
+            return resp
+
+    @app.get("/health")
+    def health():
+        return "ok"
 
     filters.register(app)
     # ΣΤΑΘΕΡΑ (όχι ανά αίτημα) — ως jinja global ώστε να το βλέπουν ΚΑΙ τα
@@ -105,6 +157,7 @@ def create_app():
         live,
         month,
         obligations,
+        orgs,
         payments,
         payroll,
         persons,
@@ -148,6 +201,7 @@ def create_app():
         apd_import,
         welcome,
         users,
+        orgs,
         rules_map,
         help,
     ):
@@ -161,7 +215,9 @@ def create_app():
         δικαιώματα διαχειριστή → ΕΝΕΡΓΗ εταιρεία (`g.tenant`).
         """
         endpoint = request.endpoint or ""
-        if endpoint in auth_view.PUBLIC_ENDPOINTS:
+        if cross_site():
+            abort(403)
+        if endpoint == "health" or endpoint in auth_view.PUBLIC_ENDPOINTS:
             return None
 
         user = auth_view.current_user()
@@ -179,6 +235,8 @@ def create_app():
             return redirect(url_for("auth.password"))
 
         if endpoint.startswith(ADMIN_ENDPOINTS) and not user.is_admin:
+            abort(403)
+        if endpoint.startswith(PLATFORM_ENDPOINTS) and not user.is_platform_admin:
             abort(403)
 
         if endpoint.startswith(SYSTEM_ENDPOINTS):
@@ -231,7 +289,8 @@ def create_app():
         return {
             # Κουμπί ❓ της κεφαλίδας: το άρθρο Βοήθειας της τρέχουσας οθόνης
             "help_url": help_url(request.endpoint or ""),
-            "nav": nav_for(bool(user and user.is_admin), request.endpoint or ""),
+            "nav": nav_for(bool(user and user.is_admin), request.endpoint or "",
+                          is_platform=bool(user and user.is_platform_admin)),
             "current_user": user,
             # Η ετικέτα κάθε εταιρείας είναι το ΟΝΟΜΑ ΜΕΝΟΥ (`display_name`)·
             # η επίσημη ονομασία των εκτυπώσεων ζει στα στοιχεία εργοδότη.
@@ -250,6 +309,7 @@ def create_app():
             "today": clock.today(),  # το «σήμερα» του UI (μπορεί να είναι εικονικό)
             "real_today": clock.real_today(),
             "time_travel": clock.is_simulated(),
+            "saas": saas_mode(),
         }
 
     return app

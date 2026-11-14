@@ -21,7 +21,7 @@ bp = Blueprint("welcome", __name__, url_prefix="/welcome")
 def index():
     user = current_user()
     return render_template("welcome.html", may_create=may_create(user),
-                           is_admin=user.is_admin, error=request.args.get("error"))
+                           is_admin=user.is_platform_admin, error=request.args.get("error"))
 
 
 @bp.post("/company")

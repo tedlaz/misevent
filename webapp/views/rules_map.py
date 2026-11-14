@@ -539,7 +539,7 @@ def index():
         "rules_map.html", y=y, m=m, graph=_chain_graph(),
         status=period_status(y, m), vmap=validation_map(),
         flows=calc_flows(today()), ref=today(), catalog=param_catalog(today()),
-        is_admin=bool(getattr(g, "user", None) and g.user.is_admin),
+        is_admin=bool(getattr(g, "user", None) and g.user.is_platform_admin),
     )
 
 
@@ -550,5 +550,5 @@ def flow():
     return render_template(
         "partials/_rules_flow.html", y=y, m=m, graph=_chain_graph(),
         status=period_status(y, m),
-        is_admin=bool(getattr(g, "user", None) and g.user.is_admin),
+        is_admin=bool(getattr(g, "user", None) and g.user.is_platform_admin),
     )

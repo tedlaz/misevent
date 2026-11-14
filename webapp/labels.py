@@ -173,6 +173,7 @@ NAV = [
     ("companies.index", "🗂️", "Εταιρείες", False),
     ("settings.index", "⚙️", "Παράμετροι", True),
     ("users.index", "🔑", "Χρήστες", True),
+    ("orgs.index", "🏬", "Οργανισμοί", True),  # μόνο online (nav_for)
     ("backup.index", "💾", "Backup", True),
     ("help.index", "❓", "Βοήθεια", False),
 ]
@@ -183,12 +184,20 @@ NAV = [
 NAV_PARENT = {"apd_import": "companies.index"}
 
 
-def nav_for(is_admin: bool, endpoint: str) -> list[dict]:
+def nav_for(is_admin: bool, endpoint: str, is_platform: bool | None = None) -> list[dict]:
     """Το μενού ΟΠΩΣ θα αποδοθεί: φιλτραρισμένο ανά δικαιώματα, με
-    σημειωμένη την ενεργή σελίδα."""
+    σημειωμένη την ενεργή σελίδα. Οι σελίδες του `PLATFORM_ENDPOINTS` (π.χ.
+    «Παράμετροι») μόνο στον διαχειριστή του συστήματος (προεπιλογή: = admin)."""
+    from . import PLATFORM_ENDPOINTS
+    from .tenancy import saas_mode
+
+    is_platform = is_admin if is_platform is None else is_platform
     active = NAV_PARENT.get(endpoint.split(".")[0], endpoint)
     return [{"endpoint": e, "icon": i, "label": lb, "on": e == active}
-            for e, i, lb, admin_only in NAV if not admin_only or is_admin]
+            for e, i, lb, admin_only in NAV
+            if (not admin_only or is_admin)
+            and (is_platform or not e.startswith(PLATFORM_ENDPOINTS))
+            and (e != "orgs.index" or saas_mode())]  # desktop: ένας οργανισμός
 
 
 # Ελληνικές ετικέτες των events για το Audit log. Το όνομα κλάσης μένει ως

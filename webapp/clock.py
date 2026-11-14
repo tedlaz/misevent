@@ -14,6 +14,8 @@ from datetime import UTC, date, datetime
 
 from flask import request
 
+from .tenancy import saas_mode
+
 COOKIE = "ref_date"
 
 
@@ -31,7 +33,10 @@ def parse_date(raw: str | None) -> date | None:
 
 
 def today() -> date:
-    """Το «σήμερα» του UI: ?ref= (per-request) > cookie > πραγματικό σήμερα."""
+    """Το «σήμερα» του UI: ?ref= (per-request) > cookie > πραγματικό σήμερα.
+    Online (SaaS) ΠΑΝΤΑ το πραγματικό — το ταξίδι στον χρόνο είναι εργαλείο δοκιμών."""
+    if saas_mode():
+        return real_today()
     return (
         parse_date(request.values.get("ref"))
         or parse_date(request.cookies.get(COOKIE))

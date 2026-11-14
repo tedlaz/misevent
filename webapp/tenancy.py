@@ -58,6 +58,11 @@ SECRETS_KEY_NAME = "secrets.key"
 DEFAULT_COMPANY_NAME = "Εταιρεία 1"
 
 
+def saas_mode() -> bool:
+    """Κοινό online instance (Docker) αντί για desktop εγκατάσταση — ΕΝΑΣ διακόπτης."""
+    return os.environ.get("MISEVENT_SAAS") == "1"
+
+
 def data_dir() -> Path:
     return Path(os.environ.get("MISEVENT_DATA_DIR") or "instance")
 
@@ -172,11 +177,13 @@ class Registry:
         «Αρχική ρύθμιση» (κανένας προεπιλεγμένος λογαριασμός)."""
         return not self.auth.users
 
-    def is_fresh(self) -> bool:
+    def is_fresh(self, user=None) -> bool:
         """Καμία εταιρεία με δεδομένα — τότε ανοίγει ο οδηγός «Ξεκινώντας»
-        (νέα εταιρεία / restore / εισαγωγή από ΑΠΔ)."""
-        return all(self.tenant(c.company_id).event_count == 0
-                   for c in self.auth.active_companies())
+        (νέα εταιρεία / restore / εισαγωγή από ΑΠΔ). Με `user`: μόνο όσες
+        βλέπει (ο νέος πελάτης online δεν έχει ακόμη καμία)."""
+        companies = (self.auth.companies_for(user) if user
+                     else self.auth.active_companies())
+        return all(self.tenant(c.company_id).event_count == 0 for c in companies)
 
     def empty_company(self, user=None) -> str | None:
         """Ένας ΚΕΝΟΣ χώρος εταιρείας (χωρίς events), προσβάσιμος από τον
@@ -198,8 +205,46 @@ class Registry:
         tenant = self._tenants.get(company_id)
         if tenant is None:
             tenant = Tenant(company_id, self.db, self.shared, self.documents, self.secrets)
+            org_id = self.auth.companies[company_id].org_id
+            tenant.svc.before_hire = lambda: self._check_employee_limit(org_id)
             self._tenants[company_id] = tenant
         return tenant
+
+    # ------------------------------------------------------- οργανισμοί
+    def usage(self, org_id: str) -> dict:
+        """Τι χρησιμοποιεί ένας οργανισμός — απέναντι στα όρια του πλάνου του."""
+        companies = self.auth.active_companies(org_id)
+        employees = sum(
+            sum(1 for e in self.tenant(c.company_id).proj.employments.values() if e.active)
+            for c in companies)
+        return {"companies": len(companies), "employees": employees,
+                **self.auth.limits.get(org_id, {"max_companies": 0, "max_employees": 0})}
+
+    def _check_employee_limit(self, org_id: str):
+        cap = self.auth.limits.get(org_id, {}).get("max_employees", 0)
+        if cap and self.usage(org_id)["employees"] >= cap:
+            raise ValueError(f"Το πλάνο σας επιτρέπει έως {cap} ενεργούς εργαζόμενους — "
+                             "επικοινωνήστε μαζί μας για αναβάθμιση")
+
+    def purge_organization(self, org_id: str):
+        """ΟΡΙΣΤΙΚΗ διαγραφή ΠΕΛΑΤΗ (GDPR): όλες οι εταιρείες του (και οι
+        αποσυρμένες), οι χρήστες του με τις προσκλήσεις/επαναφορές τους και τα
+        όρια του πλάνου. ΔΕΝ αναιρείται. Ο οργανισμός της εγκατάστασης ("") δεν
+        διαγράφεται. ⚠️ Όπως στο `purge_company`: τα .zip backup συστήματος που
+        έχουν ήδη κατέβει τον περιέχουν ακόμη."""
+        if not org_id or org_id not in self.auth.orgs():
+            raise ValueError("Ο οργανισμός δεν βρέθηκε")
+        for ref in [c for c in self.auth.companies.values() if c.org_id == org_id]:
+            self._purge_company_data(ref.company_id)
+        users = {u.user_id for u in self.auth.users_in(org_id)}
+        aggregates = (users
+                      | {i.invite_id for i in self.auth.invitations.values()
+                         if i.created_by in users}
+                      | {r.reset_id for r in self.auth.resets.values() if r.user_id in users}
+                      | {org_id})
+        for aggregate_id in aggregates:
+            self.auth_store.purge(aggregate_id)
+        self.auth.rebuild(self.auth_store)
 
     def set_ergani(self, company_id: str, environment: str, username: str,
                    password: str = ""):
@@ -217,16 +262,18 @@ class Registry:
             self.auth_svc.grant_company(created_by, company_id, by=created_by)
         return company_id
 
-    def purge_company(self, company_id: str):
+    def purge_company(self, company_id: str, by: str = ""):
         """ΟΡΙΣΤΙΚΗ διαγραφή εταιρείας ΑΠΟ ΠΑΝΤΟΥ: events, έγγραφα, κωδικοί
         ΕΡΓΑΝΗ, safety backups και η εγγραφή της στο μητρώο. ΔΕΝ αναιρείται.
         ⚠️ Backups ΟΛΟΥ του συστήματος (.zip) που έχουν ήδη κατέβει την
         περιέχουν ακόμη — αυτά δεν είναι στη διάθεσή μας."""
-        ref = self.auth.companies.get(company_id)
-        if ref is None:
-            raise ValueError("Η εταιρεία δεν βρέθηκε")
-        if not ref.archived and len(self.auth.active_companies()) == 1:
+        ref = self.auth_svc.company_ref(company_id, by)  # ΜΟΝΟ του οργανισμού του `by`
+        if not ref.archived and len(self.auth.active_companies(ref.org_id)) == 1:
             raise ValueError("Πρέπει να παραμείνει τουλάχιστον μία εταιρεία")
+        self._purge_company_data(company_id)
+        self.auth.rebuild(self.auth_store)
+
+    def _purge_company_data(self, company_id: str):
         tenant = self._tenants.pop(company_id, None)
         if tenant:  # να μην ακούει πια τις κοινές παραμέτρους
             for handler in (tenant.proj.handle, tenant.sched.handle):
@@ -238,7 +285,6 @@ class Registry:
         # ΤΕΛΕΥΤΑΙΟ: αν κάτι πιο πάνω αποτύχει, η εταιρεία φαίνεται ακόμη
         # στη λίστα και η διαγραφή ξαναδοκιμάζεται.
         self.auth_store.purge(company_id)
-        self.auth.rebuild(self.auth_store)
         shutil.rmtree(self.root / "backups" / company_id, ignore_errors=True)
 
     def claim_company(self, name: str, user) -> str:

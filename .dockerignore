@@ -1,0 +1,12 @@
+.git
+.venv
+**/__pycache__
+instance
+tmp
+build
+dist
+installer-output
+desktop
+tests
+*.db
+!misevent/integrations/ergani_parameters.db

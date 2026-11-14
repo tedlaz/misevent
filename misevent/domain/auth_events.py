@@ -29,6 +29,10 @@ class UserRegistered(DomainEvent):
     created_at: str  # ISO datetime
     is_admin: bool = False
     invited_by: str = ""  # user_id όποιου έστειλε την πρόσκληση
+    # ΟΡΓΑΝΙΣΜΟΣ (πελάτης online έκδοσης). "" = ο οργανισμός της εγκατάστασης:
+    # όλοι στη desktop έκδοση, ο ΠΑΡΟΧΟΣ στην online — τα παλιά events χωρίς
+    # το πεδίο διαβάζονται έτσι, χωρίς upcaster.
+    org_id: str = ""
 
 
 @dataclass(frozen=True)
@@ -141,6 +145,7 @@ class CompanyProvisioned(DomainEvent):
     name: str
     created_at: str
     created_by: str = ""
+    org_id: str = ""  # ο οργανισμός στον οποίο ανήκει (βλ. UserRegistered)
 
 
 @dataclass(frozen=True)
@@ -165,6 +170,18 @@ class CompanyUnarchived(DomainEvent):
     by: str = ""
 
 
+# ------------------------------------------------------------- Οργανισμοί
+@dataclass(frozen=True)
+class OrganizationLimitsSet(DomainEvent):
+    """Όρια ΠΛΑΝΟΥ ενός οργανισμού (online) — τα ορίζει ο διαχειριστής του
+    συστήματος κατόπιν συμφωνίας/πληρωμής. 0 = χωρίς όριο. Aggregate = org_id."""
+
+    org_id: str
+    max_companies: int = 0
+    max_employees: int = 0  # ενεργές απασχολήσεις, σε ΟΛΕΣ τις εταιρείες του
+    by: str = ""
+
+
 AUTH_EVENT_TYPES = {
     cls.__name__: cls
     for cls in [
@@ -184,6 +201,7 @@ AUTH_EVENT_TYPES = {
         CompanyRenamed,
         CompanyArchived,
         CompanyUnarchived,
+        OrganizationLimitsSet,
     ]
 }
 

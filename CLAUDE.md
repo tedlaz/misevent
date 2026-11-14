@@ -10,6 +10,9 @@ uv run ruff check . && uv run pytest
 
 233 tests, ~16s. Για ένα αρχείο: `uv run pytest tests/test_x.py`.
 Web UI: `uv run -m webapp` → http://localhost:8000
+Online (SaaS): `docker compose up -d --build` (ρυθμίσεις στο `.env`, οδηγός `docs/deploy.md`) — `MISEVENT_SAAS=1`, waitress
+(`webapp/serve.py`) πίσω από Caddy/HTTPS, δεδομένα στο volume `/data`, ΜΙΑ replica.
+Χωρίς `MISEVENT_SAAS` = desktop συμπεριφορά (ταξίδι στον χρόνο κ.λπ.).
 MCP server (stdio· γράφει μόνο πρόγραμμα ημέρας & άδειες): `uv run --extra mcp -m mcp_server` — το
 φορτώνει αυτόματα το Claude Code από το `.mcp.json`.
 

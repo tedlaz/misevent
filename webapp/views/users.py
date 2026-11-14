@@ -12,9 +12,10 @@
 
 from flask import Blueprint, abort, render_template, request, url_for
 
+from .. import mailer
 from ..helpers import flash_to, run_command
 from ..system import auth, auth_svc, lock, registry
-from .auth import current_user
+from .auth import current_user, send_reset_link
 
 bp = Blueprint("users", __name__, url_prefix="/users")
 
@@ -26,10 +27,11 @@ def _require_admin():
     return user
 
 
-def _rows():
-    companies = auth.active_companies()
+def _rows(org_id: str):
+    """ΜΟΝΟ ο οργανισμός του διαχειριστή — χρήστες, εταιρείες, προσκλήσεις."""
+    companies = auth.active_companies(org_id)
     rows = []
-    for u in sorted(auth.users.values(), key=lambda x: x.email):
+    for u in auth.users_in(org_id):
         rows.append(
             {
                 "user": u,
@@ -45,9 +47,12 @@ def _rows():
 
 
 def _panel(link: str | None = None, link_label: str = ""):
-    rows, companies = _rows()
+    org_id = current_user().org_id
+    rows, companies = _rows(org_id)
+    mine = {u.user_id for u in auth.users_in(org_id)}
     invitations = sorted(
-        auth.invitations.values(), key=lambda i: i.expires_at, reverse=True
+        (i for i in auth.invitations.values() if i.created_by in mine),
+        key=lambda i: i.expires_at, reverse=True,
     )
     return render_template(
         "partials/_users_panel.html",
@@ -69,17 +74,21 @@ def index():
 @bp.post("/invite")
 def invite():
     admin = _require_admin()
+    email = (request.form.get("email") or "").strip()
     try:
         with lock:
             _, token = auth_svc.issue_invitation(
-                admin.user_id, note=request.form.get("note", "")
+                admin.user_id, note=request.form.get("note", "") or email
             )
     except ValueError as exc:
         return flash_to(_panel(), str(exc), err=True)
     link = url_for("auth.invite", token=token, _external=True)
+    sent = email and mailer.send(
+        email, "Πρόσκληση στη Μισθοδοσία",
+        f"Ο/Η {admin.email} σας προσκαλεί. Δημιουργήστε τον λογαριασμό σας εδώ:\n\n{link}")
     return flash_to(
         _panel(link=link, link_label="Σύνδεσμος πρόσκλησης — στείλ' τον στον χρήστη"),
-        "Η πρόσκληση δημιουργήθηκε",
+        f"Η πρόσκληση στάλθηκε στο {email}" if sent else "Η πρόσκληση δημιουργήθηκε",
     )
 
 
@@ -134,7 +143,9 @@ def reset(user_id):
     except ValueError as exc:
         return flash_to(_panel(), str(exc), err=True)
     link = url_for("auth.reset", token=token, _external=True)
+    email = auth.users[user_id].email
+    sent = send_reset_link(email, token)
     return flash_to(
         _panel(link=link, link_label="Σύνδεσμος επαναφοράς — στείλ' τον στον χρήστη"),
-        "Ο σύνδεσμος επαναφοράς δημιουργήθηκε",
+        f"Ο σύνδεσμος στάλθηκε στο {email}" if sent else "Ο σύνδεσμος επαναφοράς δημιουργήθηκε",
     )

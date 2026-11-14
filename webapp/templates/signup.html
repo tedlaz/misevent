@@ -1,0 +1,32 @@
+{% extends "auth_base.html" %}
+{% block title %}Εγγραφή{% endblock %}
+{% block heading %}Εγγραφή{% endblock %}
+{% block subheading %}νέος λογαριασμός{% endblock %}
+
+{% block content %}
+{# Online έκδοση: νέος ΟΡΓΑΝΙΣΜΟΣ (γραφείο/επιχείρηση) με αυτόν τον χρήστη
+   διαχειριστή του. Με SMTP (`verify`): ο κωδικός ορίζεται από σύνδεσμο που
+   στέλνεται στο email — έτσι επιβεβαιώνεται ότι το email είναι δικό του. #}
+{% if sent %}
+  <p class="muted">Στείλαμε σύνδεσμο στο <b>{{ sent }}</b>. Ανοίξτε τον για να ορίσετε
+    κωδικό και να ενεργοποιήσετε τον λογαριασμό.</p>
+  <div class="btnrow"><a class="ghost" href="{{ url_for('auth.login') }}">Σύνδεση</a></div>
+{% else %}
+<div class="muted">Δημιουργήστε τον λογαριασμό του γραφείου ή της επιχείρησής σας.
+  Θα είστε ο διαχειριστής του — προσκαλείτε μετά τους συνεργάτες σας.</div>
+<form class="frm" method="post" action="{{ url_for('auth.signup_post') }}">
+  <label>Email
+    <input name="email" type="email" value="{{ email or '' }}" required autofocus></label>
+  {% if not verify %}
+  <label>Κωδικός
+    <input name="password" type="password" required></label>
+  <label>Επανάληψη κωδικού
+    <input name="repeat" type="password" required></label>
+  {% endif %}
+  <div class="btnrow">
+    <button class="run" type="submit">Δημιουργία λογαριασμού</button>
+    <a class="ghost" href="{{ url_for('auth.login') }}">Έχω ήδη λογαριασμό</a>
+  </div>
+</form>
+{% endif %}
+{% endblock %}

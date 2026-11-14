@@ -110,6 +110,7 @@
     και κωδικό· τα δικαιώματα δίνονται μετά</span></h2>
   <form class="frm" hx-post="{{ url_for('users.invite') }}" hx-target="#users-panel">
     <div class="btnrow">
+      <input name="email" type="email" placeholder="email — αποστολή αν έχει ρυθμιστεί SMTP (προαιρετικό)">
       <input name="note" placeholder="σημείωση — σε ποιον δόθηκε (προαιρετικό)">
       <button class="run" type="submit">Νέα πρόσκληση</button>
     </div>

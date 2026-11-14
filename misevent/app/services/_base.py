@@ -142,6 +142,9 @@ class ServiceBase:
         # Έγγραφα (blobs) — ΞΕΧΩΡΙΣΤΗ βάση, εκτός event log (βλ.
         # persistence/documents.py). Προεπιλογή: στη μνήμη (tests/scripts).
         self.documents = documents or DocumentStore().scope(getattr(store, "name", ""))
+        # Έλεγχος ΠΡΙΝ από κάθε νέα απασχόληση, πάνω από τον πυρήνα (π.χ. όριο
+        # εργαζομένων του πλάνου — το στήνει το `webapp/tenancy.py`). None = κανένας.
+        self.before_hire = None
 
     # ------------------------------------------------------------ ΕΡΓΑΝΗ
     def _ergani_nothing_to_send(self, doc_type: str):

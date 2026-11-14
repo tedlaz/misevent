@@ -10,7 +10,9 @@ MAX_AGE = 60 * 60 * 24 * 30  # 30 ημέρες
 
 
 def _back() -> str:
-    return request.form.get("next") or request.referrer or "/"
+    from .auth import safe_next
+
+    return safe_next(request.form.get("next"), "/")
 
 
 @bp.post("/set")

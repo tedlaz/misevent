@@ -11,7 +11,7 @@ from flask import Blueprint, abort, redirect, render_template, request, session,
 
 from ..helpers import run_command
 from ..system import auth, lock, registry, set_tenant
-from .auth import current_user
+from .auth import current_user, safe_next
 
 bp = Blueprint("companies", __name__, url_prefix="/companies")
 
@@ -42,7 +42,8 @@ def _page(user, status: int = 200, error: str | None = None):
     αυτόνομη σελίδα που εξηγεί ότι εκκρεμούν δικαιώματα."""
     rows = _rows(user)
     template = "companies.html" if rows else "companies_none.html"
-    archived = [c for c in auth.companies.values() if c.archived] if user.is_admin else []
+    archived = ([c for c in auth.companies.values() if c.archived and c.org_id == user.org_id]
+                if user.is_admin else [])
     return (
         render_template(
             template, rows=rows, may_create=may_create(user), user=user, error=error,
@@ -68,7 +69,7 @@ def select(company_id):
     if company_id not in {c.company_id for c in accessible(user)}:
         abort(403)
     session["company_id"] = company_id
-    return redirect(request.form.get("next") or url_for("dashboard.index"))
+    return redirect(safe_next(request.form.get("next"), url_for("dashboard.index")))
 
 
 @bp.post("/new")
@@ -117,9 +118,10 @@ def rename(company_id):
     """Μετονομασία του ΟΝΟΜΑΤΟΣ ΜΕΝΟΥ (όχι της επίσημης ονομασίας — αυτή
     ζει στα στοιχεία εργοδότη)."""
     user = current_user()
-    if not user or not (user.is_admin or user.can_access(company_id)):
+    if not user or company_id not in {c.company_id for c in accessible(user)}:
         abort(403)
-    run_command(registry.auth_svc.rename_company, company_id, request.form.get("name", ""))
+    run_command(registry.auth_svc.rename_company, company_id, request.form.get("name", ""),
+                by=user.user_id)
     return redirect(url_for("companies.index"))
 
 
@@ -130,7 +132,8 @@ def delete(company_id):
     user = current_user()
     if not (user and user.is_admin):
         abort(403)
-    if company_id not in auth.companies:
+    ref = auth.companies.get(company_id)
+    if ref is None or ref.org_id != user.org_id:
         abort(404)
     # Δεκτό και το όνομα μενού και η επίσημη ονομασία.
     names = {registry.display_name(company_id), registry.official_name(company_id)} - {""}
@@ -138,7 +141,7 @@ def delete(company_id):
         return _page(user, status=400, error="Λάθος επιβεβαίωση — τίποτα δεν διαγράφηκε")
     try:
         with lock:
-            registry.purge_company(company_id)
+            registry.purge_company(company_id, by=user.user_id)
     except ValueError as exc:
         return _page(user, status=400, error=str(exc))
     if session.get("company_id") == company_id:

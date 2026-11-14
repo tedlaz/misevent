@@ -1,0 +1,33 @@
+# Ρυθμίσεις στο .env (βλ. .env.example), μετά:  docker compose up -d --build
+# Τοπικό VM (Proxmox): DOMAIN=<IP του VM>, CADDY_TLS=internal — βλ. docs/deploy.md
+#
+# ⚠️ ΜΙΑ replica του `app` (SQLite + projections στη μνήμη) — μην κλιμακώσεις.
+# Τα δεδομένα μένουν στο volume `misevent-data` σε rebuild/αναβάθμιση.
+services:
+  app:
+    build: .
+    restart: unless-stopped
+    env_file:  # SMTP κ.λπ. — βλ. .env.example (χωρίς .env: καμία αποστολή email)
+      - path: .env
+        required: false
+    volumes:
+      - misevent-data:/data
+
+  caddy:  # HTTPS (αυτόματα πιστοποιητικά Let's Encrypt) μπροστά από το app
+    image: caddy:2
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      DOMAIN: ${DOMAIN:-localhost}
+      CADDY_TLS: ${CADDY_TLS:-internal}  # LAN· email = Let's Encrypt
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+    depends_on:
+      - app
+
+volumes:
+  misevent-data:
+  caddy-data:

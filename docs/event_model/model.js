@@ -1200,7 +1200,8 @@ window.EVENT_MODEL = {
    "CompanyProvisioned",
    "CompanyRenamed",
    "CompanyArchived",
-   "CompanyUnarchived"
+   "CompanyUnarchived",
+   "OrganizationLimitsSet"
   ],
   "Εταιρεία, παράμετροι και ρυθμίσεις": [
    "CompanyRegistered",

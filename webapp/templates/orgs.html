@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% block title %}Οργανισμοί{% endblock %}
+{% block heading %}Οργανισμοί{% endblock %}
+{% block subheading %}πελάτες, χρήση και όρια πλάνου (0 = χωρίς όριο){% endblock %}
+
+{% block content %}
+<div class="card">
+  {% if error %}<div class="audit-result err">{{ error }}</div>{% endif %}
+  {% if rows %}
+  <table class="tbl">
+    <thead><tr><th>Διαχειριστές</th><th>Από</th><th class="rt">Χρήστες</th>
+      <th class="rt">Εταιρείες</th><th class="rt">Εργαζόμενοι</th><th>Όρια</th><th></th></tr></thead>
+    <tbody>
+    {% for r in rows %}
+      <tr>
+        <td>{{ r.admins|join(', ') or '—' }}</td>
+        <td>{{ r.created_at }}</td>
+        <td class="rt">{{ r.users }}</td>
+        <td class="rt">{{ r.companies }}{% if r.max_companies %} / {{ r.max_companies }}{% endif %}</td>
+        <td class="rt">{{ r.employees }}{% if r.max_employees %} / {{ r.max_employees }}{% endif %}</td>
+        <td>
+          <form method="post" action="{{ url_for('orgs.limits', org_id=r.org_id) }}" class="btnrow">
+            <label>Εταιρείες <input name="max_companies" type="number" min="0"
+                   value="{{ r.max_companies }}" style="width:5em"></label>
+            <label>Εργαζόμενοι <input name="max_employees" type="number" min="0"
+                   value="{{ r.max_employees }}" style="width:6em"></label>
+            <button class="ghost sm" type="submit">Αποθήκευση</button>
+          </form>
+        </td>
+        <td class="rt">
+          <form method="post" action="{{ url_for('orgs.delete', org_id=r.org_id) }}"
+                onsubmit="const v = prompt('ΟΡΙΣΤΙΚΗ διαγραφή του πελάτη με ΟΛΕΣ τις εταιρείες και τους χρήστες του. Πληκτρολογήστε το email ενός διαχειριστή του:'); if (!v) return false; this.confirm.value = v;">
+            <input type="hidden" name="confirm">
+            <button class="ghost sm danger" type="submit">Διαγραφή</button>
+          </form>
+        </td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <div class="muted">Κανένας πελάτης ακόμη — εγγράφονται από τη σελίδα «Νέος λογαριασμός».</div>
+  {% endif %}
+</div>
+{% endblock %}

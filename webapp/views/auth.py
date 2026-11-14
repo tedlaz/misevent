@@ -7,8 +7,11 @@
 δουλεύει και χωρίς JavaScript.
 """
 
+import time
+
 from flask import (
     Blueprint,
+    abort,
     redirect,
     render_template,
     request,
@@ -16,7 +19,11 @@ from flask import (
     url_for,
 )
 
+from misevent.app.auth import new_token
+
+from .. import mailer
 from ..system import auth, auth_svc, lock, registry
+from ..tenancy import saas_mode
 
 bp = Blueprint("auth", __name__)
 
@@ -34,6 +41,8 @@ PUBLIC_ENDPOINTS = {
     "auth.reset_post",
     "auth.setup",  # ΜΟΝΟ χωρίς χρήστες — ελέγχει μόνο του το `needs_setup`
     "auth.setup_post",
+    "auth.signup",  # ΜΟΝΟ online (MISEVENT_SAAS) — αλλιώς 404
+    "auth.signup_post",
     "static",
 }
 
@@ -49,6 +58,14 @@ def current_user():
     return user
 
 
+def safe_next(url: str | None, default: str) -> str:
+    """`next=` ΜΟΝΟ προς σελίδα ΤΗΣ εφαρμογής — αλλιώς ένας σύνδεσμος
+    `/login?next=https://κακόβουλο` θα έστελνε τον χρήστη αλλού μετά τη σύνδεση."""
+    if url and url.startswith("/") and not url.startswith(("//", "/\\")):
+        return url
+    return default
+
+
 def login_user(user):
     session.clear()
     session["user_id"] = user.user_id
@@ -62,7 +79,7 @@ def _home(user):
     if not (user.is_admin or user.can_create_companies):
         return url_for("dashboard.index")
     with lock:
-        fresh = registry.is_fresh()
+        fresh = registry.is_fresh(user)
     return url_for("welcome.index") if fresh else url_for("dashboard.index")
 
 
@@ -91,9 +108,46 @@ def setup_post():
     return redirect(url_for("welcome.index"))
 
 
+# ------------------------------------------------- εγγραφή πελάτη (online)
+# Νέος ΟΡΓΑΝΙΣΜΟΣ με αυτόν τον χρήστη διαχειριστή του· μετά ο οδηγός
+# «Ξεκινώντας» για την πρώτη εταιρεία. Στη desktop έκδοση δεν υπάρχει.
+@bp.get("/signup")
+def signup():
+    if not saas_mode():
+        abort(404)
+    return render_template("signup.html", verify=mailer.configured())
+
+
+@bp.post("/signup")
+def signup_post():
+    if not saas_mode():
+        abort(404)
+    email = request.form.get("email", "")
+    verify = mailer.configured()
+    try:
+        with lock:
+            if verify:
+                # ΕΠΙΒΕΒΑΙΩΣΗ email: λογαριασμός με τυχαίο (άγνωστο) κωδικό· ο
+                # χρήστης ορίζει τον δικό του από τον σύνδεσμο που του στάλθηκε —
+                # ο ίδιος μηχανισμός με την επαναφορά, κανένα νέο event.
+                user_id = auth_svc.signup_organization(email, new_token(), None)
+                _, token = auth_svc.issue_password_reset(user_id)
+            else:
+                user_id = auth_svc.signup_organization(
+                    email, request.form.get("password", ""), request.form.get("repeat", ""))
+    except ValueError as exc:
+        return render_template("signup.html", email=email, verify=verify,
+                               error=str(exc)), 400
+    if verify:
+        send_reset_link(auth.users[user_id].email, token, new_account=True)
+        return render_template("signup.html", sent=auth.users[user_id].email)
+    login_user(auth.users[user_id])
+    return redirect(url_for("welcome.index"))
+
+
 # ------------------------------------------------------------------ σύνδεση
 def _login_page(**context):
-    return render_template("login.html", **context)
+    return render_template("login.html", saas=saas_mode(), **context)
 
 
 @bp.get("/login")
@@ -109,17 +163,32 @@ def login():
     )
 
 
+# Κλείδωμα σύνδεσης: MAX_FAILS αποτυχίες ανά (email, IP) μέσα σε LOCK_SECONDS.
+# ponytail: στη μνήμη της ΜΙΑΣ διεργασίας (μία replica, βλ. docker-compose)·
+# σε πολλές διεργασίες θέλει κοινή αποθήκη.
+MAX_FAILS, LOCK_SECONDS = 5, 15 * 60
+_fails: dict[tuple[str, str], list[float]] = {}
+
+
 @bp.post("/login")
 def login_post():
     email = request.form.get("email", "")
+    key = (email.strip().lower(), request.remote_addr or "")
+    now = time.monotonic()
+    recent = [t for t in _fails.get(key, []) if now - t < LOCK_SECONDS]
+    if len(recent) >= MAX_FAILS:
+        return _login_page(email=email, error="Πολλές αποτυχημένες προσπάθειες — "
+                           "δοκιμάστε ξανά σε 15 λεπτά."), 429
     try:
         user = auth_svc.authenticate(email, request.form.get("password", ""))
     except ValueError as exc:
+        _fails[key] = [*recent, now]
         return _login_page(email=email, error=str(exc)), 401
+    _fails.pop(key, None)
     login_user(user)
     if user.must_change_password:
         return redirect(url_for("auth.password"))
-    return redirect(request.form.get("next") or _home(user))
+    return redirect(safe_next(request.form.get("next"), _home(user)))
 
 
 @bp.post("/logout")
@@ -168,9 +237,28 @@ def forgot():
 
 @bp.post("/forgot")
 def forgot_post():
+    email = request.form.get("email", "")
+    if mailer.configured():
+        # Self-service: ο σύνδεσμος πάει ΚΑΤΕΥΘΕΙΑΝ στο email — καμία
+        # αναμονή διαχειριστή. Ίδια απάντηση είτε υπάρχει ο λογαριασμός είτε όχι.
+        user = auth.by_email(email)
+        if user and user.active:
+            with lock:
+                _, token = auth_svc.issue_password_reset(user.user_id)
+            send_reset_link(user.email, token)
+        return render_template("forgot.html", done="Αν υπάρχει λογαριασμός με αυτό το "
+                               "email, στάλθηκε σύνδεσμος για νέο κωδικό.")
     with lock:
-        msg = auth_svc.request_password_reset(request.form.get("email", ""))
+        msg = auth_svc.request_password_reset(email)
     return render_template("forgot.html", done=msg)
+
+
+def send_reset_link(email: str, token: str, new_account: bool = False) -> bool:
+    link = url_for("auth.reset", token=token, _external=True)
+    what = "ενεργοποίηση του λογαριασμού σας" if new_account else "ορισμό νέου κωδικού"
+    return mailer.send(email, "Μισθοδοσία — " + what,
+                       f"Για {what} ανοίξτε τον σύνδεσμο:\n\n{link}\n\n"
+                       "Αν δεν το ζητήσατε εσείς, αγνοήστε αυτό το μήνυμα.")
 
 
 # --------------------------------------------------------------- πρόσκληση

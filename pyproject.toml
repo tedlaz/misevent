@@ -15,6 +15,10 @@ dependencies = [
 mcp = [
     "mcp>=2.3.0",
 ]
+# Online (SaaS) έκδοση — `webapp/serve.py`, το χρησιμοποιεί το Dockerfile.
+server = [
+    "waitress>=3",
+]
 
 [dependency-groups]
 dev = [

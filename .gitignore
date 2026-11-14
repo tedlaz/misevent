@@ -24,3 +24,6 @@ data/jl10.txt
 
 # Desktop build (build-windows.ps1)
 installer-output/
+
+# Μυστικά online έκδοσης (docker compose)
+.env

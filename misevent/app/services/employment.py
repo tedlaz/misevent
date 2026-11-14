@@ -205,6 +205,8 @@ class EmploymentMixin:
             extra_pct=extra_allowances_pct,
         )
 
+        if self.before_hire:  # όριο πλάνου του οργανισμού (online) — ValueError
+            self.before_hire()
         employment_id = "E" + uuid.uuid4().hex[:8]
         self.store.append(
             employment_id,

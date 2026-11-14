@@ -36,6 +36,7 @@ from misevent.domain.auth_events import (
     InvitationAccepted,
     InvitationIssued,
     InvitationRevoked,
+    OrganizationLimitsSet,
     PasswordResetIssued,
     PasswordResetRequested,
     PasswordResetUsed,
@@ -127,8 +128,17 @@ class User:
     companies: list[str] = field(default_factory=list)
     can_create_companies: bool = False
     invited_by: str = ""
+    org_id: str = ""
+
+    @property
+    def is_platform_admin(self) -> bool:
+        """Διαχειριστής ΤΟΥ ΣΥΣΤΗΜΑΤΟΣ (κοινές παράμετροι, backup όλων): ο admin
+        του οργανισμού της εγκατάστασης. Ο admin ενός πελάτη (org_id != "")
+        διαχειρίζεται ΜΟΝΟ τον οργανισμό του."""
+        return self.is_admin and not self.org_id
 
     def can_access(self, company_id: str) -> bool:
+        """⚠️ ΔΕΝ ελέγχει οργανισμό — χρησιμοποίησε `AuthProjections.companies_for`."""
         if not self.active:
             return False
         return self.is_admin or self.all_companies or company_id in self.companies
@@ -179,6 +189,7 @@ class CompanyRef:
     created_at: str
     created_by: str = ""
     archived: bool = False
+    org_id: str = ""
 
 
 class AuthProjections:
@@ -189,16 +200,26 @@ class AuthProjections:
         self.companies: dict[str, CompanyRef] = {}
         # Εκκρεμή αιτήματα επαναφοράς (τα βλέπει ο admin): email -> τελευταίο
         self.reset_requests: dict[str, dict] = {}
+        # Όρια πλάνου ανά οργανισμό: org_id -> {"max_companies", "max_employees"}
+        self.limits: dict[str, dict] = {}
+
+    def orgs(self) -> list[str]:
+        """Οι οργανισμοί που υπάρχουν (έχουν χρήστη) — πρώτος της εγκατάστασης."""
+        return sorted({u.org_id for u in self.users.values()}, key=lambda o: (o != "", o))
 
     # -------------------------------------------------------------- projector
     def handle(self, aggregate_id: str, e):
-        if isinstance(e, UserRegistered):
+        if isinstance(e, OrganizationLimitsSet):
+            self.limits[e.org_id] = {"max_companies": e.max_companies,
+                                     "max_employees": e.max_employees}
+        elif isinstance(e, UserRegistered):
             self.users[e.user_id] = User(
                 user_id=e.user_id,
                 email=e.email,
                 created_at=e.created_at,
                 is_admin=e.is_admin,
                 invited_by=e.invited_by,
+                org_id=e.org_id,
             )
         elif isinstance(e, UserPasswordSet) and e.user_id in self.users:
             u = self.users[e.user_id]
@@ -249,6 +270,7 @@ class AuthProjections:
                 name=e.name,
                 created_at=e.created_at,
                 created_by=e.created_by,
+                org_id=e.org_id,
             )
         elif isinstance(e, CompanyRenamed) and e.company_id in self.companies:
             self.companies[e.company_id].name = e.name
@@ -270,18 +292,26 @@ class AuthProjections:
                 return u
         return None
 
-    def active_companies(self) -> list[CompanyRef]:
+    def active_companies(self, org_id: str | None = None) -> list[CompanyRef]:
+        """Οι μη αποσυρμένες εταιρείες — ΟΛΩΝ (None) ή ενός οργανισμού."""
         return sorted(
-            (c for c in self.companies.values() if not c.archived),
+            (c for c in self.companies.values()
+             if not c.archived and (org_id is None or c.org_id == org_id)),
             key=lambda c: c.name.lower(),
         )
 
     def companies_for(self, user: User) -> list[CompanyRef]:
-        """Οι εταιρείες που επιτρέπεται να δει ο χρήστης."""
-        return [c for c in self.active_companies() if user.can_access(c.company_id)]
+        """Οι εταιρείες που επιτρέπεται να δει ο χρήστης — ΠΑΝΤΑ μέσα στον
+        οργανισμό του (ούτε ο admin ενός πελάτη βλέπει εταιρεία άλλου)."""
+        return [c for c in self.active_companies(user.org_id) if user.can_access(c.company_id)]
 
-    def admins(self) -> list[User]:
-        return [u for u in self.users.values() if u.is_admin and u.active]
+    def users_in(self, org_id: str) -> list[User]:
+        return sorted((u for u in self.users.values() if u.org_id == org_id),
+                      key=lambda u: u.email)
+
+    def admins(self, org_id: str = "") -> list[User]:
+        return [u for u in self.users.values()
+                if u.is_admin and u.active and u.org_id == org_id]
 
     def find_invitation(self, token: str) -> Invitation | None:
         digest = token_digest(token)
@@ -307,11 +337,25 @@ class AuthService:
         self.proj = projections
 
     # -- helpers ----------------------------------------------------------
-    def _user(self, user_id: str) -> User:
+    def _user(self, user_id: str, by: str = "") -> User:
+        """Ο χρήστης-στόχος. Με `by` (ποιος ενεργεί): ΜΟΝΟ μέσα στον ΙΔΙΟ
+        οργανισμό — ο admin ενός πελάτη δεν αγγίζει χρήστες άλλου, ούτε
+        μαντεύοντας user_id. Ίδιο μήνυμα με το «δεν υπάρχει», σκόπιμα."""
         u = self.proj.users.get(user_id)
-        if not u:
+        actor = self.proj.users.get(by) if by else None
+        if not u or (actor and actor.org_id != u.org_id):
             raise ValueError("Ο χρήστης δεν βρέθηκε")
         return u
+
+    def _org_of(self, user_id: str) -> str:
+        u = self.proj.users.get(user_id) if user_id else None
+        return u.org_id if u else ""
+
+    def company_ref(self, company_id: str, by: str = "") -> CompanyRef:
+        ref = self.proj.companies.get(company_id)
+        if ref is None or (by and ref.org_id != self._org_of(by)):
+            raise ValueError("Η εταιρεία δεν βρέθηκε")
+        return ref
 
     @staticmethod
     def _check_email(email: str) -> str:
@@ -339,6 +383,7 @@ class AuthService:
         must_change: bool = False,
         invited_by: str = "",
         password_repeat: str | None = None,
+        org_id: str = "",
     ) -> str:
         email = self._check_email(email)
         self._check_password(password, password_repeat)
@@ -353,6 +398,7 @@ class AuthService:
                 created_at=_now(),
                 is_admin=is_admin,
                 invited_by=invited_by,
+                org_id=org_id,
             ),
         )
         self.store.append(
@@ -373,6 +419,16 @@ class AuthService:
         if self.proj.users:
             raise ValueError("Η αρχική ρύθμιση έχει ήδη γίνει — συνδεθείτε")
         return self.register_user(email, password, is_admin=True, password_repeat=repeat)
+
+    def signup_organization(self, email: str, password: str, repeat: str) -> str:
+        """Εγγραφή ΝΕΟΥ πελάτη (online έκδοση): νέος οργανισμός, με αυτόν τον
+        χρήστη διαχειριστή του. Οι εταιρείες του φτιάχνονται μετά (οδηγός
+        «Ξεκινώντας»). Ο οργανισμός δεν έχει δικό του event — υπάρχει μέσω
+        του `org_id` των χρηστών/εταιρειών του."""
+        if not self.proj.users:
+            raise ValueError("Πρώτα η αρχική ρύθμιση του συστήματος")
+        return self.register_user(email, password, is_admin=True, password_repeat=repeat,
+                                  org_id=str(uuid.uuid4()))
 
     def authenticate(self, email: str, password: str) -> User:
         """Επιστρέφει τον χρήστη ή πετά ValueError. Το μήνυμα είναι σκόπιμα
@@ -415,8 +471,8 @@ class AuthService:
         return "Ο κωδικός άλλαξε"
 
     def set_admin(self, user_id: str, is_admin: bool, by: str = "") -> str:
-        user = self._user(user_id)
-        if not is_admin and user.is_admin and len(self.proj.admins()) <= 1:
+        user = self._user(user_id, by)
+        if not is_admin and user.is_admin and len(self.proj.admins(user.org_id)) <= 1:
             raise ValueError("Πρέπει να παραμείνει τουλάχιστον ένας διαχειριστής")
         if user.is_admin == is_admin:
             return "Καμία αλλαγή"
@@ -436,9 +492,10 @@ class AuthService:
         can_create_companies: bool = False,
         by: str = "",
     ) -> str:
-        user = self._user(user_id)
+        user = self._user(user_id, by)
         chosen = list(dict.fromkeys(companies or []))
-        if set(chosen) - set(self.proj.companies):
+        own = {c for c, ref in self.proj.companies.items() if ref.org_id == user.org_id}
+        if set(chosen) - own:
             raise ValueError("Επιλέχθηκε εταιρεία που δεν υπάρχει")
         self.store.append(
             user_id,
@@ -453,8 +510,8 @@ class AuthService:
         return f"Ενημερώθηκαν τα δικαιώματα του {user.email}"
 
     def set_active(self, user_id: str, active: bool, by: str = "") -> str:
-        user = self._user(user_id)
-        if not active and user.is_admin and len(self.proj.admins()) <= 1:
+        user = self._user(user_id, by)
+        if not active and user.is_admin and len(self.proj.admins(user.org_id)) <= 1:
             raise ValueError("Πρέπει να παραμείνει τουλάχιστον ένας διαχειριστής")
         if user.active == active:
             return "Καμία αλλαγή"
@@ -485,7 +542,7 @@ class AuthService:
 
     def revoke_invitation(self, invite_id: str, by: str = "") -> str:
         inv = self.proj.invitations.get(invite_id)
-        if not inv:
+        if not inv or (by and self._org_of(inv.created_by) != self._org_of(by)):
             raise ValueError("Η πρόσκληση δεν βρέθηκε")
         if inv.accepted_by:
             raise ValueError("Η πρόσκληση έχει ήδη χρησιμοποιηθεί")
@@ -515,6 +572,7 @@ class AuthService:
             password,
             invited_by=inv.created_by,
             password_repeat=password_repeat,
+            org_id=self._org_of(inv.created_by),  # μπαίνει στον οργανισμό του αποστολέα
         )
         self.store.append(
             inv.invite_id,
@@ -530,7 +588,7 @@ class AuthService:
         user = self.proj.by_email(email)
         if user:
             self.store.append(
-                "SYSTEM",
+                user.user_id,  # aggregate = ο χρήστης: σβήνεται μαζί του (GDPR)
                 PasswordResetRequested(
                     request_id=str(uuid.uuid4()), email=user.email, at=_now()
                 ),
@@ -539,7 +597,7 @@ class AuthService:
 
     def issue_password_reset(self, user_id: str, by: str = "") -> tuple[str, str]:
         """Ο admin εκδίδει token επαναφοράς. Επιστρέφει (reset_id, ΩΜΟ token)."""
-        user = self._user(user_id)
+        user = self._user(user_id, by)
         token = new_token()
         reset_id = str(uuid.uuid4())
         pending = self.proj.reset_requests.get(user.email) or {}
@@ -585,13 +643,16 @@ class AuthService:
 
     # -- μητρώο εταιρειών --------------------------------------------------
     def provision_company(self, name: str, created_by: str = "", company_id: str = "") -> str:
+        """Ανήκει στον οργανισμό του δημιουργού (χωρίς δημιουργό: της εγκατάστασης)."""
         name = (name or "").strip()
         if not name:
             raise ValueError("Απαιτείται ονομασία εταιρείας")
-        if any(
-            c.name.lower() == name.lower() and not c.archived
-            for c in self.proj.companies.values()
-        ):
+        org_id = self._org_of(created_by)
+        cap = self.proj.limits.get(org_id, {}).get("max_companies", 0)
+        if cap and len(self.proj.active_companies(org_id)) >= cap:
+            raise ValueError(f"Το πλάνο σας επιτρέπει έως {cap} εταιρείες — "
+                             "επικοινωνήστε μαζί μας για αναβάθμιση")
+        if any(c.name.lower() == name.lower() for c in self.proj.active_companies(org_id)):
             raise ValueError(f"Υπάρχει ήδη εταιρεία με την ονομασία «{name}»")
         company_id = company_id or str(uuid.uuid4())
         self.store.append(
@@ -601,6 +662,7 @@ class AuthService:
                 name=name,
                 created_at=_now(),
                 created_by=created_by,
+                org_id=org_id,
             ),
         )
         return company_id
@@ -622,9 +684,23 @@ class AuthService:
         )
         return "Δόθηκε πρόσβαση στην εταιρεία"
 
-    def rename_company(self, company_id: str, name: str) -> str:
-        if company_id not in self.proj.companies:
-            raise ValueError("Η εταιρεία δεν βρέθηκε")
+    def set_limits(self, org_id: str, max_companies: int, max_employees: int,
+                   by: str = "") -> str:
+        """Όρια πλάνου (μόνο διαχειριστής του συστήματος — τα ελέγχει ο guard)."""
+        if not org_id or org_id not in self.proj.orgs():
+            raise ValueError("Ο οργανισμός δεν βρέθηκε")
+        try:
+            max_companies, max_employees = int(max_companies or 0), int(max_employees or 0)
+        except (TypeError, ValueError):
+            raise ValueError("Τα όρια είναι ακέραιοι αριθμοί (0 = χωρίς όριο)") from None
+        if max_companies < 0 or max_employees < 0:
+            raise ValueError("Τα όρια δεν μπορεί να είναι αρνητικά")
+        self.store.append(org_id, OrganizationLimitsSet(
+            org_id=org_id, max_companies=max_companies, max_employees=max_employees, by=by))
+        return "Τα όρια ενημερώθηκαν"
+
+    def rename_company(self, company_id: str, name: str, by: str = "") -> str:
+        self.company_ref(company_id, by)
         name = (name or "").strip()
         if not name:
             raise ValueError("Απαιτείται ονομασία εταιρείας")
@@ -633,19 +709,20 @@ class AuthService:
 
     def archive_company(self, company_id: str, by: str = "") -> str:
         """«Διαγραφή» = απόσυρση: τα δεδομένα μένουν και επαναφέρονται."""
-        ref = self.proj.companies.get(company_id)
-        if ref is None or ref.archived:
+        ref = self.company_ref(company_id, by)
+        if ref.archived:
             raise ValueError("Η εταιρεία δεν βρέθηκε")
-        if len(self.proj.active_companies()) == 1:
+        if len(self.proj.active_companies(ref.org_id)) == 1:
             raise ValueError("Πρέπει να παραμείνει τουλάχιστον μία εταιρεία")
         self.store.append(company_id, CompanyArchived(company_id=company_id, by=by))
         return "Η εταιρεία αποσύρθηκε από τη λίστα"
 
     def unarchive_company(self, company_id: str, by: str = "") -> str:
-        ref = self.proj.companies.get(company_id)
-        if ref is None or not ref.archived:
+        ref = self.company_ref(company_id, by)
+        if not ref.archived:
             raise ValueError("Η εταιρεία δεν είναι αποσυρμένη")
-        if any(c.name.lower() == ref.name.lower() for c in self.proj.active_companies()):
+        if any(c.name.lower() == ref.name.lower()
+               for c in self.proj.active_companies(ref.org_id)):
             raise ValueError(f"Υπάρχει ήδη ενεργή εταιρεία με την ονομασία «{ref.name}» "
                              "— μετονόμασέ την πρώτα")
         self.store.append(company_id, CompanyUnarchived(company_id=company_id, by=by))
