@@ -5,6 +5,13 @@
 # ⚠️ ΚΑΝΕΝΑ HSTS εδώ: με τοπικό πιστοποιητικό θα κλείδωνε τον browser έξω.
 #    Πρόσθεσέ το όταν περάσεις σε δημόσιο domain:
 #    header Strict-Transport-Security "max-age=31536000"
+{
+	# Πρόσβαση με IP: ο browser ΔΕΝ στέλνει SNI και μέσα στο Docker ο Caddy
+	# βλέπει την εσωτερική IP του container (172.x) — χωρίς αυτό δεν βρίσκει
+	# πιστοποιητικό και κόβει το TLS («internal error»). Με domain: αβλαβές.
+	default_sni {$DOMAIN}
+}
+
 {$DOMAIN} {
 	tls {$CADDY_TLS}
 	reverse_proxy app:8000
