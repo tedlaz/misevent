@@ -63,3 +63,16 @@ def test_gifts_daily(fn):
 def test_guard_rejects_mismatch():
     with pytest.raises(ValueError, match="Ασυμφωνία"):
         pe.PayrollResult(1000.0, 130.0, 220.0, 870.0, 50.0, 821.0)
+
+
+def test_money_rounds_half_up_once():
+    from misevent.domain.money import cents, mul, r2
+
+    # σκέτο round(): 2.67 (δυαδική τιμή) — εδώ HALF_UP επί της δεκαδικής
+    assert r2(2.675) == 2.68
+    assert r2(1.005) == 1.01
+    assert r2(-2.675) == -2.68  # μακριά από το μηδέν
+    assert r2(0.1 + 0.2) == 0.3
+    assert cents(1320.27) == 132027
+    assert mul(150000, 0.1387) == 20805
+    assert mul(5, 0.5) == 3

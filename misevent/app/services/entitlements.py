@@ -356,16 +356,16 @@ class EntitlementsMixin:
         else:
             comp_days = round(leave_days * 6 / 5, 2)
             daily = emp.monthly_gross / 25.0
-        gross = round(comp_days * daily * (2 if employer_fault else 1), 2)
+        gross = pe.r2(comp_days * daily * (2 if employer_fault else 1))
         fmy = pe.monthly_fmy(gross, emp.children_on(term), term, emp.birth_date)
         return {
             "leave_days": leave_days,
             "comp_days": comp_days,
             "employer_fault": bool(employer_fault),
-            "daily": round(daily, 2),
+            "daily": pe.r2(daily),
             "gross": gross,
             "fmy": fmy,
-            "net": round(gross - fmy, 2),
+            "net": pe.r2(gross - fmy),
         }
 
     # -------------------------------------------- Αποζημίωση απόλυσης
@@ -397,9 +397,9 @@ class EntitlementsMixin:
         monthly = (
             emp.monthly_gross
             if emp.pay_type != "daily"
-            else round(emp.daily_wage * 25.0, 2)
+            else pe.r2(emp.daily_wage * 25.0)
         )
-        gross = round(months * monthly * config.severance_gift_factor(term), 2)
+        gross = pe.r2(months * monthly * config.severance_gift_factor(term))
         fmy = config.severance_tax(gross, on=term)
         return {
             "service_years": round(years, 2),
@@ -408,7 +408,7 @@ class EntitlementsMixin:
             "monthly_salary": monthly,
             "gross": gross,
             "fmy": fmy,
-            "net": round(gross - fmy, 2),
+            "net": pe.r2(gross - fmy),
         }
 
     def run_severance(self, employment_id, with_notice=False):

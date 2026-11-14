@@ -13,6 +13,7 @@ def test_weekly_system():
     from datetime import date
 
     import _bootstrap  # noqa: F401  # ρίζα project στο sys.path + cwd
+    from _bootstrap import PERSON_ID
 
     from misevent.app.services import PayrollService
     from misevent.domain.projections import Projections
@@ -55,7 +56,7 @@ def test_weekly_system():
             afm=("111222336" if i == 1 else "222333440"),
             amka=("05059012343" if i == 1 else "03039012343"),
             ama="123456789",
-        )
+        **PERSON_ID)
         eid = svc.start_employment(
             pid, date(2026, 1, 1), pay_type="monthly", monthly_gross=1500.0,
             weekly_hours=40.0, weekly_pattern=FULL_WEEK, **kw,

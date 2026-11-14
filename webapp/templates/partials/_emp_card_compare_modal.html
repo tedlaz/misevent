@@ -23,7 +23,7 @@
       <p class="muted" style="font-size:12.5px;margin:0 0 8px">
         Λαμβάνονται υπόψη η ευέλικτη προσέλευση της σύμβασης
         (<b>{{ e.flexible_arrival_minutes or 0 }}΄</b>) και η στρογγυλοποίηση της ημερήσιας
-        απασχόλησης (<b>{{ c.step }}΄</b>, Παράμετροι → «Στρογγυλοποίηση κάρτας»).</p>
+        απασχόλησης (<b>{{ c.step }}΄</b>, Εταιρεία → «Ρυθμίσεις»).</p>
       {% if c.diff_days %}
       <div class="cmp-wrap">
         <table class="tbl cmp-tbl">
@@ -127,7 +127,7 @@
             <label class="cmp-opt"><input type="radio" name="basis" value="{{ k }}" {{ 'checked' if c.basis == k }}>
               <b>{{ lbl }}</b>
               <small class="muted">{% if k == 'auto' %}τώρα: {{ 'κάρτα' if c.auto_card else 'πρόγραμμα' }}
-                ({{ 'απολογιστικό' if c.system == 'retro' else '«Διάφορα → προαναγγελτικό»' }})
+                ({{ 'απολογιστικό' if c.system == 'retro' else '«Εταιρεία → Ρυθμίσεις → προαναγγελτικό»' }})
                 {% elif k == 'schedule' %}οι ημέρες απόκλισης πληρώνονται όπως το πρόγραμμα
                 {% else %}οι ημέρες απόκλισης πληρώνονται με τις πραγματικές ώρες{% endif %}</small>
             </label>

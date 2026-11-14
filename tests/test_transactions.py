@@ -57,15 +57,15 @@ def test_audit_groups_one_command_into_one_row(fresh_system):
     assert "γραμμές" in c.get("/audit/", headers={"HX-Request": "true"}).text
 
 
-def test_audit_is_company_tab_5(fresh_system):
-    """Το Audit log ζει ως καρτέλα ⑤ της Εταιρείας· τα παλιά URL πάνε εκεί."""
+def test_audit_is_company_tab_6(fresh_system):
+    """Το Audit log ζει ως καρτέλα ⑥ της Εταιρείας· τα παλιά URL πάνε εκεί."""
     from _bootstrap import ui_client
 
     from webapp import create_app
 
     c = ui_client(create_app())
     page = c.get("/company/?tab=audit").text
-    assert "⑤ Audit log" in page and 'id="tab-audit" checked' in page
+    assert "⑥ Audit log" in page and 'id="tab-audit" checked' in page
     assert 'hx-get="/audit/?tab=audit"' in page
     r = c.get("/audit/?type=X")
     assert r.status_code == 302 and "/company/?" in r.headers["Location"]

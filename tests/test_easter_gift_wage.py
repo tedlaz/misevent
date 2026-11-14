@@ -16,6 +16,7 @@ Tests **Δώρου Πάσχα**: καταβολή τη **Μεγάλη Τετάρ
 from datetime import date, timedelta
 
 import _bootstrap  # noqa: F401  # ρίζα project στο sys.path + cwd
+from _bootstrap import PERSON_ID
 
 from misevent.app.services import PayrollService
 from misevent.domain import payroll_engine as pe
@@ -48,7 +49,7 @@ def make_svc():
         afm="111222336",
         amka="05059012343",
         ama="123456789",
-    )
+    **PERSON_ID)
     return svc, proj, pid
 
 

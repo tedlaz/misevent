@@ -4,6 +4,7 @@ from datetime import date
 
 import _bootstrap  # noqa: F401
 import pytest
+from _bootstrap import PERSON_ID
 
 from misevent.app.services import PayrollService
 from misevent.domain.projections import Projections, profile_coverages
@@ -42,7 +43,7 @@ def hire(svc, i, auxiliary, pron_choice="no"):
         last_name=f"ΔΟΚΙΜΗ{i}", first_name="ΝΙΚΟΣ", father_name="Γ",
         mother_name="Μ", birth_date=born, afm=afm, amka=amka,
         ama=f"12345678{i}",
-    )
+    **PERSON_ID)
     eid = svc.start_employment(
         pid, date(2026, 1, 1), pay_type="monthly", monthly_gross=1500,
         weekly_hours=40, weekly_pattern=WEEK,

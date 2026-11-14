@@ -846,7 +846,7 @@ def _slip_page(pdf: ReportPDF, r: dict, year: int, month: int,
                    f"{eur(a['efka_employee'])} − ΦΜΥ {eur(a['fmy'])}",
               a["net"])
 
-    # -- ΕΡΓΟΔΟΤΗΣ (πληροφοριακά) — εμφανίζεται κατ' επιλογή («Διάφορα») ---
+    # -- ΕΡΓΟΔΟΤΗΣ (πληροφοριακά) — εμφανίζεται κατ' επιλογή (Ρυθμίσεις εταιρείας) ---
     if proj.misc_settings.get("show_employer_cost", True):
         pdf.section("Στοιχεία κόστους εργοδότη", NAVY_SOFT, "bank",
                     note="πληροφοριακά — δεν αφορούν τον εργαζόμενο")
@@ -1172,7 +1172,7 @@ def _gift_slip_page(pdf: ReportPDF, r: dict, kind: str, year: int,
                    f"{eur(a['efka_employee'])} − ΦΜΥ {eur(a['fmy'])}",
               a["net"])
 
-    # -- ΕΡΓΟΔΟΤΗΣ (πληροφοριακά) — εμφανίζεται κατ' επιλογή («Διάφορα») ---
+    # -- ΕΡΓΟΔΟΤΗΣ (πληροφοριακά) — εμφανίζεται κατ' επιλογή (Ρυθμίσεις εταιρείας) ---
     if proj.misc_settings.get("show_employer_cost", True):
         pdf.section("Στοιχεία κόστους εργοδότη", NAVY_SOFT, "bank",
                     note="πληροφοριακά — δεν αφορούν τον εργαζόμενο")

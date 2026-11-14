@@ -22,6 +22,7 @@ from misevent.domain.events import (
     ParametersDefined,
     SubmissionWithdrawn,
 )
+from misevent.domain.money import r2
 
 from ._base import _decode_import, _parse_import_date
 
@@ -185,12 +186,12 @@ class ParametersMixin:
         υποχρέωση προσαρμογής (WAGE_ADJUSTMENT)."""
         self.define_parameters(
             "minimum_wage", valid_from,
-            monthly=round(float(monthly), 2), daily=round(float(daily), 2),
+            monthly=r2(float(monthly)), daily=r2(float(daily)),
         )
 
     def set_misc_settings(self, **fields):
-        """Λειτουργικές προτιμήσεις («Διάφορα» στη σελίδα Παράμετροι) —
-        αποθηκεύονται ως event (latest-wins). Δεκτά κλειδιά: όσα ορίζει το
+        """Ρυθμίσεις ΤΗΣ ΕΝΕΡΓΗΣ ΕΤΑΙΡΕΙΑΣ («Εταιρεία → ⑤ Ρυθμίσεις») —
+        αποθηκεύονται ως event στο store της εταιρείας (latest-wins). Δεκτά κλειδιά: όσα ορίζει το
         `projections.MISC_DEFAULTS`, με τον τύπο του default (bool/int)."""
         from misevent.domain.projections import MISC_DEFAULTS
 
@@ -200,6 +201,10 @@ class ParametersMixin:
             raise ValueError("Δεν δόθηκε καμία έγκυρη προτίμηση")
         if not 0 <= clean.get("obligations_horizon_months", 0) <= 24:
             raise ValueError("Ο ορίζοντας εκκρεμοτήτων πρέπει να είναι 0–24 μήνες")
+        for k, label in (("card_rounding_minutes", "Η στρογγυλοποίηση κάρτας"),
+                         ("card_tolerance_minutes", "Η ανοχή κάρτας")):
+            if not 0 <= clean.get(k, 0) <= 120:
+                raise ValueError(f"{label} πρέπει να είναι 0–120 λεπτά")
         if "peak_periods" in clean:
             from misevent.rules.calendar_gr import day_ranges
 
@@ -477,8 +482,8 @@ class ParametersMixin:
             (ίδια τιμή = κανένα event)·
           • `kpks` — ΜΟΝΟ όταν το Μητρώο ΚΠΚ είναι ΑΔΕΙΟ: μια αρχικοποίηση
             δεν πατά πάνω σε μητρώο που ήδη συντηρεί ο χρήστης.
-        Το `misc` ΔΕΝ γράφεται: οι λειτουργικές προτιμήσεις έχουν ήδη
-        προεπιλογές (`MISC_DEFAULTS`) και δεν χρειάζονται event για να ισχύσουν.
+        Οι ρυθμίσεις ΤΗΣ ΕΤΑΙΡΕΙΑΣ δεν είναι σε αυτό το αρχείο: έχουν
+        προεπιλογές (`MISC_DEFAULTS`) ανά εταιρεία και δεν χρειάζονται event.
 
         ⚠️ Η ΣΕΙΡΑ είναι αυτή του μητρώου `config.FAMILIES` — μην την αλλάξεις
         αυθαίρετα: καθορίζει τη σειρά των events στο log. Η σειρά ΜΕΣΑ στο
@@ -524,8 +529,9 @@ class ParametersMixin:
     # ΕΝΑ αρχείο για ό,τι ζει στη σελίδα «Παράμετροι»: οι οικογένειες του
     # μητρώου (ΓΣΣΕ, ΕΦΚΑ, ΤΕΚΑ, ΦΜΥ, ασθένεια, προσαυξήσεις, αποζημίωση,
     # όρια ωρών) με ΟΛΟ το ιστορικό ισχύος τους, οι προθεσμίες/παρατάσεις των
-    # τύπων υποχρεώσεων, οι λειτουργικές προτιμήσεις («Διάφορα») και το
-    # Μητρώο ΚΠΚ. Ίδιο μοτίβο με το αρχείο της εταιρείας (specialties.py):
+    # τύπων υποχρεώσεων και το Μητρώο ΚΠΚ. Οι ρυθμίσεις ΤΗΣ ΕΤΑΙΡΕΙΑΣ (κάρτα,
+    # πληρωμές, άδειες…) ΔΕΝ είναι εδώ: ταξιδεύουν με το αρχείο της εταιρείας.
+    # Ίδιο μοτίβο με το αρχείο της εταιρείας (specialties.py):
     # η ΕΞΑΓΩΓΗ διαβάζει μόνο projections, η ΕΙΣΑΓΩΓΗ περνά από τα ΙΔΙΑ
     # commands — γράφονται κανονικά events, ισχύουν όλοι οι έλεγχοι.
     #
@@ -699,7 +705,6 @@ class ParametersMixin:
             "exported_at": date.today().isoformat(),
             "families": families,
             "obligation_types": obligation_types,
-            "misc": self.misc_settings(),
             "kpks": self.kpk_export_rows(),
         }
 
@@ -716,8 +721,9 @@ class ParametersMixin:
         γραμμές επιστρέφονται ως σφάλματα, δεν χάνονται σιωπηλά.
 
         ΣΕΙΡΑ: ΚΠΚ -> οικογένειες (χρονολογικά, ώστε οι καταργήσεις να
-        βρίσκουν τον κανόνα που καταργούν) -> τύποι υποχρεώσεων ->
-        προτιμήσεις."""
+        βρίσκουν τον κανόνα που καταργούν) -> τύποι υποχρεώσεων. Ένα παλιό
+        τμήμα «misc» (ρυθμίσεις εταιρείας) αγνοείται: ανήκει στο αρχείο της
+        εταιρείας."""
         text = _decode_import(data)
         try:
             doc = json.loads(text)
@@ -729,7 +735,7 @@ class ParametersMixin:
         if schema and schema != self.PARAMETERS_EXPORT_SCHEMA:
             raise ValueError(f"Άγνωστος τύπος αρχείου «{schema}»")
 
-        counts = {"parameters": 0, "obligation_types": 0, "kpks": 0, "misc": 0}
+        counts = {"parameters": 0, "obligation_types": 0, "kpks": 0}
         errors: list[str] = []
 
         for k in doc.get("kpks") or ():
@@ -763,14 +769,6 @@ class ParametersMixin:
                     counts["obligation_types"] += 1
             except (ValueError, TypeError, AttributeError) as exc:
                 errors.append(f"τύπος υποχρέωσης {code}: {exc}")
-
-        misc = doc.get("misc")
-        if isinstance(misc, dict) and misc:
-            try:
-                self.set_misc_settings(**misc)
-                counts["misc"] = 1
-            except (ValueError, TypeError) as exc:
-                errors.append(f"προτιμήσεις (Διάφορα): {exc}")
 
         return {"counts": counts, "errors": errors}
 

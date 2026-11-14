@@ -168,7 +168,7 @@ class SheetsMixin:
             year_shifts.update(emp.scheduled_shifts_in_month(year, m))
             # Στρογγυλοποίηση (`card_rounding_minutes`, 0 = καμία) ΜΟΝΟ
             # εδώ: οι ώρες είναι ΠΡΟΤΑΣΗ, εγκρίνονται στο φύλλο.
-            step = config.work_hour_rules_for(date(year, m, 1)).card_rounding_minutes
+            step = self.card_policy()[1]
             major = set(self.card_pay_days(emp, year, m))
             # ημέρες με κάρτα — και ΜΟΝΟ ορφανό χτύπημα (συμπληρώνεται από
             # το πρόγραμμα στο `actual_shifts`)
@@ -221,9 +221,7 @@ class SheetsMixin:
         return sorted(
             d for d in set(emp.attendance_shifts) | set(emp.card_punches)
             if d.year == year and d.month == month
-            and emp.pay_source(d, config.work_hour_rules_for(d).card_tolerance_minutes,
-                               config.work_hour_rules_for(d).card_rounding_minutes)
-            == "card"
+            and emp.pay_source(d, *self.card_policy()) == "card"
         )
 
     def _major_by_card(self, d: date, emp=None) -> bool:
@@ -231,7 +229,7 @@ class SheetsMixin:
         του μήνα του `emp` (`MonthPayBasisChosen`, σύγκριση στο ΗΜΕΡΟΛΟΓΙΟ —
         χωρίς `emp` = ο κανόνας του συστήματος)· αλλιώς
         απολογιστικό: πάντα (δηλώνεται εκ των υστέρων)· προαναγγελτικό: κατά
-        την προτίμηση «Διάφορα → pre_major_by_card»."""
+        την προτίμηση «Εταιρεία → Ρυθμίσεις → pre_major_by_card»."""
         basis = emp.pay_basis.get((d.year, d.month), ("auto", True))[0] if emp else "auto"
         if basis != "auto":
             return basis == "card"
@@ -360,7 +358,7 @@ class SheetsMixin:
                 "Εκκρεμούν υποβολές ΕΡΓΑΝΗ πρόσληψης πριν την έγκριση "
                 f"παρουσιών: {names}"
             )
-        # «Διάφορα → card_required»: η κάρτα ελέγχεται στο ΗΜΕΡΟΛΟΓΙΟ πριν
+        # «Εταιρεία → Ρυθμίσεις → card_required»: η κάρτα ελέγχεται στο ΗΜΕΡΟΛΟΓΙΟ πριν
         card = [d["name"] for eid, d in draft.items()
                 if self.card_month_pending(self.proj.employments[eid], year, month)]
         if card:
@@ -378,7 +376,7 @@ class SheetsMixin:
             efka = int(over.get("efka_days", d["efka_days"]))
             s_half = int(over.get("sick_half", d["sick_half"]))
             s_full = int(over.get("sick_full", d["sick_full"]))
-            s_ben = round(float(over.get("sick_benefit", d["sick_benefit"])), 2)
+            s_ben = pe.r2(float(over.get("sick_benefit", d["sick_benefit"])))
             hours = {
                 f: round(float(over.get(f, d[f])), 2)
                 for f in work_hours.SHEET_HOUR_FIELDS

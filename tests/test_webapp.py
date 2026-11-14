@@ -396,7 +396,7 @@ def test_webapp(fresh_system):
     # αργία: χρωματισμός + όνομα δίπλα στην ημέρα (15/8 Δεκαπενταύγουστος)
     check(f"/employments/{eid}/calendar αργία", cal, 'ecal-d hol')
     check(f"/employments/{eid}/calendar όνομα αργίας", cal, "<i>Δεκαπενταύγουστος")
-    # έλεγχος αρτιότητας κάρτας (Διάφορα → card_required): εκκρεμότητες + ολοκλήρωση
+    # έλεγχος αρτιότητας κάρτας (ρύθμιση εταιρείας card_required): εκκρεμότητες + ολοκλήρωση
     svc.set_misc_settings(card_required=True)
     cal = c.get(f"/employments/{eid}/calendar?m=2026-08")
     check(f"/employments/{eid}/calendar έλεγχος κάρτας", cal, "Χωρίς χτύπημα")

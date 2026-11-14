@@ -1,6 +1,8 @@
 from datetime import date
 from types import SimpleNamespace
 
+from _bootstrap import PERSON_ID
+
 from misevent.app.services import PayrollService
 from misevent.domain.events import ErganiSubmissionRecorded
 from misevent.domain.projections import Projections
@@ -287,7 +289,7 @@ def test_hire_form_is_correctable_only_before_web_e3n_submission():
         birth_date=date(1990, 5, 5),
         afm="111222336",
         amka="05059012343",
-    )
+    **PERSON_ID)
     initial_schedule = {
         code: "09:00-17:00" for code in ("MON", "TUE", "WED", "THU", "FRI")
     }

@@ -379,6 +379,9 @@ class SpecialtiesMixin:
             "branches": branches,
             "kpks": kpks,
             "specialties": specialties,
+            # Ρυθμίσεις ΤΗΣ ΕΤΑΙΡΕΙΑΣ (κάρτα, πληρωμές, άδειες…) — όχι του
+            # αρχείου παραμέτρων, που είναι κοινό για όλες τις εταιρείες
+            "settings": dict(self.proj.misc_settings),
         }
 
     def export_company_bytes(self) -> bytes:
@@ -406,7 +409,7 @@ class SpecialtiesMixin:
         if schema and schema != self.COMPANY_EXPORT_SCHEMA:
             raise ValueError(f"Άγνωστος τύπος αρχείου «{schema}»")
 
-        counts = {"company": 0, "branches": 0, "kpks": 0, "specialties": 0}
+        counts = {"company": 0, "branches": 0, "kpks": 0, "specialties": 0, "settings": 0}
         errors: list[str] = []
 
         c = doc.get("company")
@@ -465,6 +468,14 @@ class SpecialtiesMixin:
                 counts["specialties"] += 1
             except (ValueError, TypeError, AttributeError) as exc:
                 errors.append(f"ειδικότητα «{name}»: {exc}")
+
+        settings = doc.get("settings")
+        if isinstance(settings, dict) and settings:
+            try:
+                self.set_misc_settings(**settings)
+                counts["settings"] = 1
+            except (ValueError, TypeError) as exc:
+                errors.append(f"ρυθμίσεις εταιρείας: {exc}")
 
         if not any(counts.values()) and not errors:
             raise ValueError("Το αρχείο δεν περιέχει στοιχεία εταιρείας")

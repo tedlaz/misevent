@@ -118,7 +118,7 @@ def gift_analysis_modal():
 def _zip_response(build):
     """Παράγει το ZIP μέσα στο lock (read-only) και το κατεβάζει. Το ZIP
     παράγεται on the fly· η αποθήκευση στον φάκελο apodeijeis γίνεται μόνο
-    αν είναι ενεργή η προτίμηση «Διάφορα → save_zip» (default: όχι).
+    αν είναι ενεργή η προτίμηση «Εταιρεία → Ρυθμίσεις → save_zip» (default: όχι).
     send_file: σωστό UTF-8 όνομα (filename*) για τις καταλήξεις ΔΠ/ΔΧ."""
     from .. import pdf_reports
     from ..system import lock
@@ -141,7 +141,7 @@ def _zip_response(build):
 @bp.get("/print/slips/zip")
 def print_slips_zip():
     """ZIP με μία απόδειξη ανά εργαζόμενο — κατέβασμα (και αποθήκευση στο
-    apodeijeis μόνο αν το ζητά η προτίμηση «Διάφορα»)."""
+    apodeijeis μόνο αν το ζητά η ρύθμιση της εταιρείας)."""
     from .. import pdf_reports
 
     y = request.values.get("y", type=int)
@@ -312,7 +312,7 @@ def print_exit_settlement(employment_id):
 @bp.get("/print/gift/<kind>/slips/zip")
 def print_gift_slips_zip(kind):
     """ZIP με μία απόδειξη Δώρου/Επιδόματος ανά εργαζόμενο — κατέβασμα (και
-    αποθήκευση στο apodeijeis μόνο αν το ζητά η προτίμηση «Διάφορα»)."""
+    αποθήκευση στο apodeijeis μόνο αν το ζητά η ρύθμιση της εταιρείας)."""
     from .. import pdf_reports
 
     year, month, _stem = _gift_args(kind)

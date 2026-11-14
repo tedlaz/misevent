@@ -15,6 +15,7 @@ Tests ΨΗΦΙΑΚΗΣ ΚΑΡΤΑΣ ΕΡΓΑΣΙΑΣ (φάση 1: καταγρα
 from datetime import date
 
 import _bootstrap  # noqa: F401  # ρίζα project στο sys.path + cwd
+from _bootstrap import PERSON_ID
 
 from misevent.app.services import PayrollService
 from misevent.domain.projections import Projections
@@ -36,7 +37,7 @@ def _setup():
         last_name="ΛΑΖΑΡΟΣ", first_name="ΤΕΝΤ", father_name="Α", mother_name="Β",
         birth_date=date(1990, 1, 1), afm="100011110", amka="01019012341",
         ama="123456789",
-    )
+    **PERSON_ID)
     eid = svc.start_employment(pid, date(2026, 1, 5), monthly_gross=1400.0,
                                weekly_pattern=FULL_WEEK)
     svc.assign_insurance_profile(
@@ -394,17 +395,17 @@ def test_card_rounding_for_calculations_only():
 
 
 def test_rounding_only_in_sheet_proposals(fresh_system):
-    """Παρουσίες/ΕΡΓΑΝΗ ΠΑΝΤΑ ακριβείς· η στρογγυλοποίηση (προεπιλογή 0)
-    αγγίζει μόνο τις ΠΡΟΤΕΙΝΟΜΕΝΕΣ ώρες του φύλλου (hours_analysis)."""
+    """Παρουσίες/ΕΡΓΑΝΗ ΠΑΝΤΑ ακριβείς· η στρογγυλοποίηση (πολιτική
+    εταιρείας) αγγίζει μόνο τις ΠΡΟΤΕΙΝΟΜΕΝΕΣ ώρες του φύλλου (hours_analysis)."""
     _store, proj, svc, eid = _setup()
+    svc.set_misc_settings(card_rounding_minutes=0)  # καμία
     svc.record_card_punch(eid, DAY, "09:00", "in")
     svc.record_card_punch(eid, DAY, "17:12", "out")
     emp = proj.employments[eid]
     assert emp.attendance_shifts[DAY] == ["09:00-17:12"]
     assert emp.attendance[DAY] == 8.2
     assert svc.hours_analysis(2026, 8)[eid]["overwork"] == 0.2  # 9η ώρα: 12΄
-    svc.define_parameters("work_hours", date(2026, 1, 1), night_start=22,
-                          night_end=6, card_rounding_minutes=30)
+    svc.set_misc_settings(card_rounding_minutes=30)  # πολιτική ΕΤΑΙΡΕΙΑΣ
     assert svc.hours_analysis(2026, 8)[eid]["overwork"] == 0.0  # 8,2ω -> 8ω
     assert emp.attendance_shifts[DAY] == ["09:00-17:12"]        # άθικτες
     print("OK στρογγυλοποίηση μόνο στις προτάσεις του φύλλου")

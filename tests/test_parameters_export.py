@@ -10,7 +10,7 @@
   • τη φορολογική κλίμακα με το ΚΑΘΕΣΤΩΣ της και τις παραμέτρους του·
   • την αποζημίωση απόλυσης (πίνακες μηνών + κλιμάκια φόρου)·
   • τις προθεσμίες/παρατάσεις των τύπων υποχρεώσεων·
-  • τις προτιμήσεις («Διάφορα») και το Μητρώο ΚΠΚ.
+  • το Μητρώο ΚΠΚ — ΟΧΙ τις ρυθμίσεις της εταιρείας (αρχείο εταιρείας).
 
 Ο έλεγχος είναι ΚΥΚΛΟΣ: ό,τι εξήχθη, φορτώνεται σε άδειο σύστημα και
 ξαναεξάγεται — τα δύο αρχεία πρέπει να είναι ΤΑΥΤΟΣΗΜΑ. Έτσι μια νέα
@@ -104,9 +104,8 @@ def test_parameters_export_roundtrip(fresh_system):
           "0101" in [k["kpk"] for k in doc["kpks"]] and len(doc["kpks"]) > 1)
     check("η εξαγωγή του χρήστη ΔΕΝ κουβαλά ανάλυση κλάδων",
           all("components" not in r for k in doc["kpks"] for r in k["rates"]))
-    check("οι προτιμήσεις («Διάφορα») ταξιδεύουν μαζί",
-          doc["misc"]["save_zip"] is True
-          and doc["misc"]["show_employer_cost"] is False)
+    check("οι ρυθμίσεις ΤΗΣ ΕΤΑΙΡΕΙΑΣ ΔΕΝ μπαίνουν στο κοινό αρχείο",
+          "misc" not in doc)
     check("η αλλαγμένη προθεσμία ταξιδεύει μαζί",
           any(t["code"] == "APD_SUBMISSION" and t["due"] == ["eom", 1]
               and t["extension"]["max_days"] == 20
@@ -139,7 +138,7 @@ def test_parameters_export_roundtrip(fresh_system):
     # ---------------------------------- 3. ΙΔΙΕΣ ΤΙΜΕΣ (ο κύκλος κλείνει)
     again = svc_b.export_parameters()
     expected = json.loads(raw.decode("utf-8"))
-    for section in ("families", "obligation_types", "misc", "kpks"):
+    for section in ("families", "obligation_types", "kpks"):
         same = json.dumps(again[section], sort_keys=True, ensure_ascii=False) == (
             json.dumps(expected[section], sort_keys=True, ensure_ascii=False)
         )

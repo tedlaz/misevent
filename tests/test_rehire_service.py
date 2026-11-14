@@ -3,7 +3,7 @@
 from datetime import date
 
 import _bootstrap  # noqa: F401
-from _bootstrap import ui_client
+from _bootstrap import PERSON_ID, ui_client
 
 from misevent.app.services import PayrollService
 from misevent.domain.events import EmployeeTerminated
@@ -28,7 +28,7 @@ def _svc():
         birth_date=date(1990, 5, 5),
         afm="111222336",
         amka="05059012343",
-    )
+    **PERSON_ID)
     return svc, proj, pid
 
 

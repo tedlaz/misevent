@@ -385,8 +385,7 @@ class SchedulesMixin:
                 declared = emp.declared_on(d)
                 actual = cp.with_telework(
                     cp.schedule_text(emp.actual_shifts(d)), declared)
-                if emp.pay_source(d, rules.card_tolerance_minutes,
-                                  rules.card_rounding_minutes) == "card":
+                if emp.pay_source(d, *self.card_policy()) == "card":
                     days[d] = (declared, actual)
                 # ΟΡΦΑΝΟ χτύπημα (`retro_declare_orphans`): δηλώνεται ΠΑΝΤΑ,
                 # συμπληρωμένο από το πρόγραμμα — εκτός αν έχει ήδη δηλωθεί
@@ -404,9 +403,7 @@ class SchedulesMixin:
         απολογιστική δήλωση: ημέρα που δηλώνεται με την κάρτα (`pay_source`
         == "card") και η κάρτα έχει ΛΙΓΟΤΕΡΕΣ ώρες από το δηλωμένο
         (`cp.absence_gaps`). Κενό = δεν χρειάζεται λόγος."""
-        rules = config.work_hour_rules_for(d)
-        if emp.pay_source(d, rules.card_tolerance_minutes,
-                          rules.card_rounding_minutes) != "card":
+        if emp.pay_source(d, *self.card_policy()) != "card":
             return []
         return cp.absence_gaps(emp.declared_on(d), emp.actual_shifts(d))
 

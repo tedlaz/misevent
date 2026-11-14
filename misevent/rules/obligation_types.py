@@ -36,7 +36,7 @@ from misevent.rules.calendar_gr import last_working_day_of_month, orthodox_easte
 # `spawn` — πότε γεννιέται ο τύπος:
 #   "period"      μαζί με κάθε μισθολογική περίοδο (κυλιόμενα)
 #   "period_teka" όπως το "period", αλλά ΜΟΝΟ αν υπάρχει ασφαλισμένος ΤΕΚΑ
-#   "period_card" όπως το "period", αλλά ΜΟΝΟ με «Διάφορα → digital_card»
+#   "period_card" όπως το "period", αλλά ΜΟΝΟ με «Εταιρεία → Ρυθμίσεις → digital_card»
 #   "annual"      μία φορά τον χρόνο, με το άνοιγμα περιόδου του έτους
 #   "reactive"    από domain event (π.χ. πρώτη κανονική άδεια)
 #   "on_source"   όταν ΚΛΕΙΣΕΙ ο τύπος `payout_source` (καταβολές Δώρων)

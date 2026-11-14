@@ -12,6 +12,7 @@ Tests: τα **Δώρα** και το **Επίδομα Αδείας** μπαίν�
 from datetime import date
 
 import _bootstrap  # noqa: F401  # ρίζα project στο sys.path + cwd
+from _bootstrap import PERSON_ID
 
 from misevent.app.services import PayrollService
 from misevent.domain.events import LeaveType
@@ -59,7 +60,7 @@ def setup(hire=date(2026, 1, 5)):
         last_name="ΠΑΠΑΔΟΠΟΥΛΟΣ", first_name="ΙΩΑΝΝΗΣ", father_name="ΝΙΚΟΛΑΟΣ",
         mother_name="ΜΑΡΙΑ", birth_date=date(1990, 5, 5), afm="111222336",
         amka="05059012343", ama="123456789",
-    )
+    **PERSON_ID)
     eid = svc.start_employment(
         pid, hire_date=hire, monthly_gross=1500.0,
         weekly_hours=40.0, weekly_pattern=FULL_WEEK,

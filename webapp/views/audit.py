@@ -28,7 +28,7 @@ SAFETY_BACKUP_DIR = data_dir() / "backups"
 
 
 def _back(**args):
-    """Οι φόρμες του audit γυρίζουν στην καρτέλα ⑤ της Εταιρείας."""
+    """Οι φόρμες του audit γυρίζουν στην καρτέλα ⑥ της Εταιρείας."""
     return redirect(url_for("company.index", tab="audit", **args))
 
 

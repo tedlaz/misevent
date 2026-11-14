@@ -15,6 +15,7 @@ Tests ΚΛΕΙΔΩΜΑΤΟΣ ΠΕΡΙΟΔΟΥ: μόλις κλείσει η μι
 from datetime import date
 
 import _bootstrap  # noqa: F401  # ρίζα project στο sys.path + cwd
+from _bootstrap import PERSON_ID
 
 from misevent.app.services import PayrollService
 from misevent.domain.events import LeaveType
@@ -53,7 +54,7 @@ def setup():
         last_name="ΠΑΠΑΔΟΠΟΥΛΟΣ", first_name="ΙΩΑΝΝΗΣ", father_name="ΝΙΚΟΛΑΟΣ",
         mother_name="ΜΑΡΙΑ", birth_date=date(1990, 5, 5), afm="111222336",
         amka="05059012343", ama="123456789",
-    )
+    **PERSON_ID)
     eid = svc.start_employment(
         pid, hire_date=date(2026, 1, 5), monthly_gross=1500.0,
         weekly_hours=40.0, weekly_pattern=FULL_WEEK,
@@ -124,7 +125,7 @@ def test_hire_and_termination_are_frozen():
         last_name="ΓΕΩΡΓΙΟΥ", first_name="ΜΑΡΙΑ", father_name="ΠΕΤΡΟΣ",
         mother_name="ΕΛΕΝΗ", birth_date=date(1992, 2, 2), afm="044555666",
         amka="02029212343", ama="987654321",
-    )
+    **PERSON_ID)
     refuses(svc.start_employment, pid2, hire_date=date(2026, 1, 12),
             monthly_gross=1500.0, weekly_hours=40.0, weekly_pattern=FULL_WEEK)
     print("OK πρόσληψη/αποχώρηση: απαγορεύονται σε κλεισμένη περίοδο")

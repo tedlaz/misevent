@@ -83,7 +83,7 @@ class PayrollMixin:
         που έφερε είτε νέα ΓΣΣΕ είτε συμπληρωμένη τριετία.
 
         Η αντιμετώπιση της **διαφοράς** (όταν ο μισθός είναι πάνω από το όριο)
-        ελέγχεται από την προτίμηση «Διάφορα → `keep_wage_excess`»:
+        ελέγχεται από την προτίμηση «Εταιρεία → Ρυθμίσεις → `keep_wage_excess`»:
         - **συμψηφισμός** (default): ο μισθός ανεβαίνει ΜΟΝΟ αν υπολείπεται,
           και μόνο ως το νέο όριο — η υπάρχουσα διαφορά απορροφά την αύξηση.
         - **διατήρηση**: ο μισθός ανεβαίνει κατά την αύξηση (`+ increment`,
@@ -126,11 +126,11 @@ class PayrollMixin:
                 e.total_service_years(ref_old),
                 *e.allowances_on(ref_old),
             )
-            increment = round(max(0.0, f_new - f_old), 2)
+            increment = pe.r2(max(0.0, f_new - f_old))
             old = e.daily_wage if e.pay_type == "daily" else e.monthly_gross
             if keep:
                 # διατήρηση διαφοράς: περνά η αύξηση, με ελάχιστο το νέο όριο
-                new = round(max(old + increment, f_new), 2)
+                new = pe.r2(max(old + increment, f_new))
             else:
                 # συμψηφισμός: μόνο αν υπολείπεται -> ανεβαίνει ως το όριο
                 new = f_new if old < f_new - 0.005 else old
@@ -708,7 +708,7 @@ class PayrollMixin:
             "fmy": res.fmy,
             "net": res.net,
             # ΤΑ ΠΟΣΟΣΤΑ ΠΟΥ ΧΡΗΣΙΜΟΠΟΙΗΘΗΚΑΝ — χωρίς αυτά ο υπολογισμός δεν
-            # είναι ανιχνεύσιμος: το event κρατά ευρώ, και μια εκ των υστέρων
+            # είναι ανιχνεύσιμος: το event κρατά ποσά, και μια εκ των υστέρων
             # αλλαγή ΚΠΚ γίνεται αόρατη (βλ. `contribution_drift`).
             "rates": {"employee": rates.employee, "employer": rates.employer},
             # ΟΙ ΕΙΣΦΟΡΕΣ ΑΝΑ ΚΑΛΥΨΗ, σε ευρώ: από εδώ τις παίρνει η ΑΠΔ —

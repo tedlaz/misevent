@@ -20,6 +20,7 @@ import math
 from dataclasses import dataclass
 from datetime import date, timedelta
 
+from misevent.domain.money import cents, dec, eur, mul, r2  # noqa: F401 (r2: re-export)
 from misevent.rules.calendar_gr import holy_wednesday
 from misevent.rules.config import (
     ANNUAL_SALARIES,
@@ -30,9 +31,11 @@ from misevent.rules.config import (
     tax_scale_for,
 )
 
-
-def r2(x: float) -> float:
-    return round(x + 1e-9, 2)
+# Οι υπολογισμοί κρατήσεων γίνονται σε ΑΚΕΡΑΙΑ cents (`money`): κάθε ποσό
+# στρογγυλεύεται ΜΙΑ φορά (HALF_UP) και η ταυτότητα μικτά − εισφορές − ΦΜΥ =
+# καθαρό ισχύει ΑΚΡΙΒΩΣ. Είσοδος/έξοδος σε ευρώ (events, UI, ΑΠΔ).
+# ponytail: οι νομοθετικές παράμετροι (κλίμακα ΦΜΥ, πλαφόν, κατώτατος) μένουν
+# σε ευρώ στο config — μετατρέπονται εδώ· πλήρη cents στο log αν χρειαστεί.
 
 
 # ------------------------------------------------------------------ ΦΜΥ
@@ -134,7 +137,7 @@ class PayrollResult:
         # το «Συνολικό κόστος = Αποδοχές + Εισφορές εργοδότη» δίνει και το
         # «Κόστος = Εισφ. εργαζ. + Εισφ. εργοδ. + Φόροι + Καθαρό». Σκάει ΠΡΙΝ
         # γραφτεί event — λάθος καθαρό δεν πρέπει να φτάσει σε πληρωμή.
-        if r2(self.gross - self.efka_employee - self.fmy) != r2(self.net):
+        if cents(self.gross) - cents(self.efka_employee) - cents(self.fmy) != cents(self.net):
             raise ValueError(
                 f"Ασυμφωνία μισθοδοσίας: μικτά {self.gross} − εισφορές "
                 f"{self.efka_employee} − ΦΜΥ {self.fmy} ≠ καθαρό {self.net}"
@@ -163,15 +166,39 @@ def labor_subsidy_full(
 
 
 def _employee_subsidy(
-    labor: float, base: float, mother_pct: float, full_emp: float,
-) -> tuple[float, str]:
-    """Επιδότηση εργαζομένου και κωδ. ΑΠΔ: 102 (κατώτατος, σταθερό ποσό) ή
-    103 (μητέρα, ποσοστό επί `base`). Αφορούν και οι δύο τη σύνταξη
+    labor_c: int, base_c: int, mother_pct: float, full_emp_c: int,
+) -> tuple[int, str]:
+    """Επιδότηση εργαζομένου (cents) και κωδ. ΑΠΔ: 102 (κατώτατος, σταθερό
+    ποσό) ή 103 (μητέρα, ποσοστό επί `base_c`). Αφορούν και οι δύο τη σύνταξη
     εργαζομένου, άρα ΔΕΝ σωρεύονται — ισχύει η μεγαλύτερη."""
-    labor, mother = r2(labor), r2(base * mother_pct)
-    amount, code = (mother, "103") if mother > labor else (labor, "102")
-    amount = min(amount, full_emp)
+    mother_c = mul(base_c, mother_pct)
+    amount, code = (mother_c, "103") if mother_c > labor_c else (labor_c, "102")
+    amount = min(amount, full_emp_c)
     return amount, code if amount else ""
+
+
+def _deductions(
+    gross_c: int, insurable_c: int, rates, children: int, on: date,
+    birth_date: date | None, periods: float = ANNUAL_SALARIES,
+    subsidy: float = 0.0, mother_pct: float = 0.0, youth_pct: float = 0.0,
+    **breakdown,
+) -> PayrollResult:
+    """Κρατήσεις σε cents: εισφορές (με επιδοτήσεις), φορολογητέο, ΦΜΥ,
+    καθαρό. Κοινό για μισθοδοσία μισθωτού/ημερομισθίου και Δώρα/Επίδομα."""
+    full_emp = mul(insurable_c, rates.employee)
+    sub_emp, code = _employee_subsidy(cents(subsidy), insurable_c, mother_pct, full_emp)
+    efka_emp = full_emp - sub_emp  # ό,τι ΠΑΡΑΚΡΑΤΕΙΤΑΙ
+    full_er = mul(insurable_c, rates.employer)
+    sub_er = min(mul(insurable_c, youth_pct), full_er)
+    efka_er = full_er - sub_er  # ό,τι ΚΑΤΑΒΑΛΛΕΙ ο εργοδότης
+    taxable = gross_c - efka_emp
+    fmy = cents(periodic_fmy(eur(taxable), children, on, birth_date, periods))
+    return PayrollResult(
+        eur(gross_c), eur(efka_emp), eur(efka_er), eur(taxable), eur(fmy),
+        eur(taxable - fmy),
+        subsidy_employee=eur(sub_emp), subsidy_code=code,
+        subsidy_employer=eur(sub_er), **breakdown,
+    )
 
 
 def sick_deduction(
@@ -212,34 +239,29 @@ def calc_monthly(
     Μικτά = βάση (μισθός − άνευ αποδοχών) − ασθένεια + προσαυξήσεις ωρών.
     `rates`: συντελεστές κρατήσεων της απασχόλησης (από τα ΚΠΚ των καλύψεών
     της — services.contribution_rates)· None = καθολικοί συντελεστές."""
-    daily = monthly_gross / base_days
-    base = max(0.0, monthly_gross - unpaid_days * daily)
-    gross = r2(max(0.0, base - sick) + premiums)
+    mg = dec(monthly_gross)
+    base = max(dec(0), mg - unpaid_days * mg / base_days)
     rates = rates or efka_rates_for(period_end)
-    exempt = min(r2(exempt), r2(premiums))
-    insurable = min(max(gross - exempt, 0.0), rates.monthly_cap)
-    full_emp = r2(insurable * rates.employee)
-    subsidy, code = _employee_subsidy(subsidy, insurable, mother_pct, full_emp)
-    efka_emp = r2(full_emp - subsidy)  # ό,τι ΠΑΡΑΚΡΑΤΕΙΤΑΙ
-    full_er = r2(insurable * rates.employer)
-    sub_er = min(r2(insurable * youth_pct), full_er)
-    efka_er = r2(full_er - sub_er)  # ό,τι ΚΑΤΑΒΑΛΛΕΙ ο εργοδότης
-    taxable = r2(gross - efka_emp)
-    fmy = monthly_fmy(taxable, children, period_end, birth_date)
-    return PayrollResult(
-        r2(gross),
-        efka_emp,
-        efka_er,
-        taxable,
-        fmy,
-        r2(taxable - fmy),
-        base_gross=r2(base),
-        premiums=r2(premiums),
-        sick_deduction=r2(sick),
-        subsidy_employee=subsidy,
-        subsidy_code=code,
-        subsidy_employer=sub_er,
-        premium_exempt=exempt,
+    return _premium_payroll(
+        base, sick, premiums, exempt, rates, children, period_end, birth_date,
+        subsidy=subsidy, mother_pct=mother_pct, youth_pct=youth_pct,
+    )
+
+
+def _premium_payroll(
+    base, sick, premiums, exempt, rates, children, period_end, birth_date,
+    **subsidies,
+) -> PayrollResult:
+    """Μικτά = βάση − ασθένεια + προσαυξήσεις· ασφαλιστέο χωρίς τις
+    απαλλασσόμενες προσαυξήσεις, με πλαφόν. Κοινό μισθωτού/ημερομισθίου."""
+    gross_c = cents(max(dec(0), base - dec(sick)) + dec(premiums))
+    exempt_c = min(cents(exempt), cents(premiums))
+    insurable_c = min(max(gross_c - exempt_c, 0), cents(rates.monthly_cap))
+    return _deductions(
+        gross_c, insurable_c, rates, children, period_end, birth_date,
+        **subsidies,
+        base_gross=eur(cents(base)), premiums=r2(premiums),
+        sick_deduction=r2(sick), premium_exempt=eur(exempt_c),
     )
 
 
@@ -307,26 +329,10 @@ def calc_monthly_daily(
     − ασθένεια + προσαυξήσεις ωρών. ⚠️ Το `daily_wage` εδώ είναι η ΑΜΟΙΒΗ
     ΗΜΕΡΑΣ (`daily_day_pay`), όχι το συμβατικό ημερομίσθιο.
     `rates`/`exempt`: βλ. calc_monthly."""
-    base = daily_wage * days_worked
-    gross = r2(max(0.0, base - sick) + premiums)
+    base = dec(daily_wage) * days_worked
     rates = rates or efka_rates_for(period_end)
-    exempt = min(r2(exempt), r2(premiums))
-    insurable = min(max(gross - exempt, 0.0), rates.monthly_cap)
-    efka_emp = r2(insurable * rates.employee)
-    efka_er = r2(insurable * rates.employer)
-    taxable = r2(gross - efka_emp)
-    fmy = monthly_fmy(taxable, children, period_end, birth_date)
-    return PayrollResult(
-        gross,
-        efka_emp,
-        efka_er,
-        taxable,
-        fmy,
-        r2(taxable - fmy),
-        base_gross=r2(base),
-        premiums=r2(premiums),
-        sick_deduction=r2(sick),
-        premium_exempt=exempt,
+    return _premium_payroll(
+        base, sick, premiums, exempt, rates, children, period_end, birth_date,
     )
 
 
@@ -523,19 +529,12 @@ def _gift_result(
     birth_date: date | None = None, fmy_periods: float = ANNUAL_SALARIES,
     subsidy: float = 0.0, mother_pct: float = 0.0, youth_pct: float = 0.0,
 ) -> PayrollResult:
-    gross = r2(base * (1 + GIFT_LEAVE_COEFFICIENT) if leave_coeff else base)
+    coeff = 1 + dec(GIFT_LEAVE_COEFFICIENT) if leave_coeff else 1
+    gross_c = cents(dec(base) * coeff)
     rates = rates or efka_rates_for(on)
-    full_emp = r2(gross * rates.employee)
-    subsidy, code = _employee_subsidy(subsidy, gross, mother_pct, full_emp)
-    efka_emp = r2(full_emp - subsidy)  # ό,τι ΠΑΡΑΚΡΑΤΕΙΤΑΙ
-    full_er = r2(gross * rates.employer)
-    sub_er = min(r2(gross * youth_pct), full_er)
-    efka_er = r2(full_er - sub_er)  # ό,τι ΚΑΤΑΒΑΛΛΕΙ ο εργοδότης
-    taxable = r2(gross - efka_emp)
     # Παρακράτηση με αναγωγή σε ετήσιο εισόδημα: ΟΛΟΚΛΗΡΟΣ μισθός (Δώρο
     # Χριστουγέννων) → x14 όπως η μισθοδοσία· ΜΙΣΟΣ μισθός (Δώρο Πάσχα,
     # Επίδομα Αδείας) → x28, και ο ετήσιος φόρος διαιρείται πάλι διά 28.
-    fmy = periodic_fmy(taxable, children, on, birth_date, fmy_periods)
-    return PayrollResult(r2(gross), efka_emp, efka_er, taxable, fmy, r2(taxable - fmy),
-                         subsidy_employee=subsidy, subsidy_code=code,
-                         subsidy_employer=sub_er)
+    return _deductions(gross_c, gross_c, rates, children, on, birth_date,
+                       periods=fmy_periods, subsidy=subsidy,
+                       mother_pct=mother_pct, youth_pct=youth_pct)

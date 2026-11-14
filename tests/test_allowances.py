@@ -9,6 +9,7 @@ Tests προσαυξήσεων κατώτατου ορίου: τριετίες (
 from datetime import date
 
 import _bootstrap  # noqa: F401  # ρίζα project στο sys.path + cwd
+from _bootstrap import PERSON_ID
 
 from misevent.app.services import PayrollService
 from misevent.domain.projections import Projections
@@ -43,7 +44,7 @@ def make_svc():
         afm="111222336",
         amka="05059012343",
         ama="123456789",
-    )
+    **PERSON_ID)
     return svc, proj, pid
 
 

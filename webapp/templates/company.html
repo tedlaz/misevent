@@ -13,13 +13,15 @@
   <input class="tabradio" type="radio" name="_tab" id="tab-specialties">
   <input class="tabradio" type="radio" name="_tab" id="tab-branches">
   <input class="tabradio" type="radio" name="_tab" id="tab-ergani">
+  <input class="tabradio" type="radio" name="_tab" id="tab-settings">
   <input class="tabradio" type="radio" name="_tab" id="tab-audit" {{ 'checked' if audit_tab }}>
   <div class="tabbar">
     <label for="tab-employer">① Στοιχεία εργοδότη</label>
     <label for="tab-branches">② Παραρτήματα</label>
     <label for="tab-specialties">③ Ειδικότητες (θέσεις εργασίας)</label>
     <label for="tab-ergani">④ Σύνδεση ΕΡΓΑΝΗ</label>
-    <label for="tab-audit">⑤ Audit log</label>
+    <label for="tab-settings">⑤ Ρυθμίσεις</label>
+    <label for="tab-audit">⑥ Audit log</label>
   </div>
 
   {# Φορτώνεται μόλις φανεί (ολόκληρο το event log — όχι σε κάθε άνοιγμα της
@@ -35,6 +37,11 @@
     <h2>Σύνδεση ΕΡΓΑΝΗ (Web API)</h2>
     {% include "partials/_company_ergani.html" %}
     {% include "partials/_company_schedule_system.html" %}
+  </div>
+
+  <div class="card tabpane tp-settings">
+    <h2>Ρυθμίσεις <span class="norm">— ισχύουν ΜΟΝΟ για αυτή την εταιρεία</span></h2>
+    {% include "partials/_company_settings.html" %}
   </div>
 
   <div class="card tabpane tp-branches">

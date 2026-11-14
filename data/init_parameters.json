@@ -335,9 +335,7 @@
             "overtime_day_cap": 3,
             "overtime_year_cap": 150,
             "orphan_month_cap": 3,
-            "retro_declare_orphans": 1,
-            "card_rounding_minutes": 30,
-            "card_tolerance_minutes": 0
+            "retro_declare_orphans": 1
           }
         }
       ]
@@ -538,12 +536,6 @@
       "overridden": false
     }
   ],
-  "misc": {
-    "save_zip": false,
-    "show_employer_cost": true,
-    "keep_wage_excess": false,
-    "auto_payments": true
-  },
   "kpks": [
     {
       "carrier": "efka",

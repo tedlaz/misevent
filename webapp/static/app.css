@@ -239,6 +239,7 @@ button.tag.lnk-tag{font-family:inherit;font-size:10.5px;font-weight:700}
 .tabs:has(#tab-kpk:checked) .tp-kpk,
 .tabs:has(#tab-ergani:checked) .tp-ergani,
 .tabs:has(#tab-audit:checked) .tp-audit,
+.tabs:has(#tab-settings:checked) .tp-settings,
 .rmtabs:has(#rm-flow:checked) .rm-p-flow,
 .rmtabs:has(#rm-checks:checked) .rm-p-checks,
 .rmtabs:has(#rm-calc:checked) .rm-p-calc,
@@ -255,6 +256,7 @@ button.tag.lnk-tag{font-family:inherit;font-size:10.5px;font-weight:700}
 .tabs:has(#tab-kpk:checked) .tabbar label[for=tab-kpk],
 .tabs:has(#tab-ergani:checked) .tabbar label[for=tab-ergani],
 .tabs:has(#tab-audit:checked) .tabbar label[for=tab-audit],
+.tabs:has(#tab-settings:checked) .tabbar label[for=tab-settings],
 .rmtabs:has(#rm-flow:checked) .tabbar label[for=rm-flow],
 .rmtabs:has(#rm-checks:checked) .tabbar label[for=rm-checks],
 .rmtabs:has(#rm-calc:checked) .tabbar label[for=rm-calc],
@@ -262,6 +264,24 @@ button.tag.lnk-tag{font-family:inherit;font-size:10.5px;font-weight:700}
 .tabbar a.on{
   color:var(--ink);background:var(--card);border-color:var(--line);
   border-bottom:1px solid var(--card)}
+/* Αλυσίδα υποχρεώσεων (partials/_chain_graph.html) — βάση κόμβων/ακμών. */
+.chain-wrap{overflow-x:auto}
+svg.chain{display:block;min-width:max-content}
+.ch-col{fill:var(--paper);stroke:none}
+.ch-colh{font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;fill:var(--muted)}
+.ch-band{stroke:var(--line);stroke-width:1.5;stroke-dasharray:6 5}
+.ch-bandt{font-size:10.5px;font-weight:700;letter-spacing:.06em;fill:var(--muted)}
+.ch-e{fill:none;stroke:#C3CBD5;stroke-width:1.5}
+.ch-e.spine{stroke:var(--ink);stroke-width:2.4}
+.ch-n :where(rect:first-of-type){fill:var(--card);stroke:var(--line);stroke-width:1.3}
+.ch-n.spine:not([class*="gs-"]) rect:first-of-type{stroke:var(--ink);stroke-width:1.8}
+.ch-t{font-size:12.5px;font-weight:600;fill:var(--ink)}
+.ch-s{font-size:11px;fill:var(--muted)}
+.ch-x{font-size:13px;fill:var(--muted)}
+.ch-cross{margin-top:10px;font-size:12.5px;color:var(--muted)}
+.ch-cross summary{cursor:pointer;font-weight:600}
+.ch-cross ul{margin:6px 0 0;padding-left:18px;line-height:1.7}
+.ch-cross b{color:var(--ink);font-weight:600}
 /* Χάρτης κανόνων — κατάσταση κόμβου του γράφου (ίδια χρώματα με το
    χρονολόγιο υποχρεώσεων). Το CSS νικά τα presentation attributes του SVG. */
 g.gs-done rect{fill:var(--done-bg);stroke:var(--done)}

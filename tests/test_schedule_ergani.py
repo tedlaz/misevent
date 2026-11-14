@@ -8,6 +8,7 @@ pending), αριθμημένα batches (ανά εταιρεία), έλεγχος
 from datetime import date, timedelta
 
 import _bootstrap  # noqa: F401  # ρίζα project στο sys.path + cwd
+from _bootstrap import PERSON_ID
 
 from misevent.app.services import PayrollService
 from misevent.domain.projections import Projections
@@ -33,7 +34,7 @@ def setup(mode="fixed", hire=HIRE):
         father_name="ΝΙΚΟΛΑΟΣ", mother_name="ΜΑΡΙΑ",
         birth_date=date(1990, 5, 5), afm="111222336",
         amka="05059012343", ama="123456789",
-    )
+    **PERSON_ID)
     eid = svc.start_employment(
         pid, hire_date=hire, monthly_gross=1500.0,
         weekly_hours=40.0, weekly_pattern=FULL_WEEK, schedule_mode=mode,
@@ -204,7 +205,7 @@ def test_company_wide_batch_covers_multiple_employees():
         last_name="ΓΕΩΡΓΙΟΥ", first_name="ΜΑΡΙΑ", father_name="ΚΩΝ",
         mother_name="ΣΟΦΙΑ", birth_date=date(1991, 4, 4), afm="222333440",
         amka="04049112347", ama="223344556",
-    )
+    **PERSON_ID)
     eid2 = svc.start_employment(
         pid2, hire_date=HIRE, monthly_gross=1400.0, weekly_hours=40.0,
         weekly_pattern=FULL_WEEK, schedule_mode="fixed",

@@ -70,3 +70,9 @@ def seed(client):
     if resp.status_code == 200:
         svc.set_misc_settings(digital_card=False)
     return resp
+
+# Στοιχεία που απαιτεί η ΠΡΟΣΛΗΨΗ (`constraints.check_person_complete`):
+# `svc.register_person(..., **PERSON_ID)` σε κάθε πρόσωπο που προσλαμβάνεται.
+# ⚠️ "ΔAT" με ΛΑΤΙΝΙΚΟ A: έτσι είναι ο κωδικός στο μητρώο ΕΡΓΑΝΗ.
+PERSON_ID = {"sex": "0", "nationality_code": "048",
+             "identity_type": "ΔAT", "identity_number": "ΑΒ123456"}

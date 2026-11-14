@@ -1,0 +1,109 @@
+{# ΡΥΘΜΙΣΕΙΣ ΤΗΣ ΕΤΑΙΡΕΙΑΣ (όχι της εφαρμογής): κάθε εταιρεία έχει τις δικές
+   της — κάρτα, αποδείξεις, μισθός, πληρωμές, άδειες. Αποθηκεύονται ως
+   MiscSettingsChanged στο store της εταιρείας (`projections.MISC_DEFAULTS`)
+   και ταξιδεύουν με το αρχείο εξαγωγής της εταιρείας. Τα ονόματα των πεδίων
+   είναι αυτά του `company.settings_save`· τα checkboxes στέλνουν τιμή μόνο
+   όταν είναι επιλεγμένα (απουσία = όχι). #}
+{% macro sw(name, title, default) %}
+  <label class="pref">
+    <span class="pref-txt">
+      <span class="pref-t">{{ title }}</span>
+      <span class="pref-d">{{ caller() }}</span>
+      <span class="pref-def">Προεπιλογή: {{ default }}</span>
+    </span>
+    <input class="sw" type="checkbox" name="{{ name }}" value="1"
+           {{ 'checked' if misc[name] }}>
+  </label>
+{% endmacro %}
+{% macro num(name, title, desc, default, unit, hi) %}
+  <label class="pref">
+    <span class="pref-txt">
+      <span class="pref-t">{{ title }}</span>
+      <span class="pref-d">{{ desc }}</span>
+      <span class="pref-def">Προεπιλογή: {{ default }}</span>
+    </span>
+    <span class="pref-in">
+      <input type="number" name="{{ name }}" min="0" max="{{ hi }}" step="1"
+             value="{{ misc[name] }}">
+      <span class="muted">{{ unit }}</span>
+    </span>
+  </label>
+{% endmacro %}
+<form id="company-settings" class="frm prefs" hx-post="{{ url_for('company.settings_save') }}"
+      hx-target="#company-settings" hx-swap="outerHTML">
+  <section class="pref-sec">
+    <h3>⏱️ Ψηφιακή κάρτα εργασίας</h3>
+    {% call sw("digital_card", "Ένταξη στην ψηφιακή κάρτα εργασίας", "ναι") %}
+      Κάθε περίοδος έχει υποχρέωση «Εισαγωγή κάρτας περιόδου» (αρχείο κάρτας
+      από τις Παρουσίες + έλεγχος) πριν την έγκριση παρουσιών — άρα και πριν
+      τη μισθοδοσία.
+    {% endcall %}
+    {% call sw("card_required", "Ολοκληρωμένος έλεγχος κάρτας ανά εργαζόμενο", "όχι") %}
+      Η έγκριση παρουσιών περιμένει, για κάθε εργαζόμενο με εκκρεμότητες κάρτας
+      (χτυπήματα χωρίς ταίρι, ημέρες χωρίς χτύπημα), την «Ολοκλήρωση ελέγχου»
+      στο «Ημερολόγιό» του.
+    {% endcall %}
+    {% call sw("pre_major_by_card", "Προαναγγελτικό: απόκλιση κάρτας πληρώνεται με την κάρτα", "ναι") %}
+      Για ημέρες με απόκλιση πέρα από την ανοχή. <b>Ναι:</b> οι ώρες της κάρτας
+      οφείλονται και η απόκλιση μένει αδήλωτη (προειδοποίηση στις Παρουσίες).
+      <b>Όχι:</b> πληρώνεται το πρόγραμμα.
+    {% endcall %}
+    {{ num("card_tolerance_minutes", "Ανοχή κάρτας ↔ προγράμματος",
+           "Ανά άκρο βάρδιας. Ημέρα εντός ανοχής (μαζί με την ευέλικτη προσέλευση) "
+           ~ "πληρώνεται με το πρόγραμμα και δεν δηλώνεται απολογιστικά. "
+           ~ "Ο νόμος δεν προβλέπει ανοχή.", "0", "λεπτά", 120) }}
+    {{ num("card_rounding_minutes", "Στρογγυλοποίηση διάρκειας ημέρας",
+           "Κοντινότερο πολλαπλάσιο (30: 8,2ω → 8ω), μόνο στις ΠΡΟΤΕΙΝΟΜΕΝΕΣ ώρες "
+           ~ "του φύλλου παρουσιών· Παρουσίες και ΕΡΓΑΝΗ κρατούν τις ακριβείς. "
+           ~ "0 = καμία.", "30", "λεπτά", 120) }}
+  </section>
+
+  <section class="pref-sec">
+    <h3>🧾 Αποδείξεις αποδοχών</h3>
+    {% call sw("save_zip", "Αποθήκευση των ZIP στον δίσκο", "μόνο κατέβασμα") %}
+      Τα ZIP αποδείξεων φυλάσσονται και στον φάκελο <code>apodeijeis/</code>,
+      εκτός από το κατέβασμα.
+    {% endcall %}
+    {% call sw("show_employer_cost", "Κόστος εργοδότη στην απόδειξη", "εμφανίζεται") %}
+      Η απόδειξη αποδοχών δείχνει και τις εισφορές/το συνολικό κόστος του εργοδότη.
+    {% endcall %}
+  </section>
+
+  <section class="pref-sec">
+    <h3>💶 Μισθός</h3>
+    {% call sw("keep_wage_excess", "Διατήρηση της διαφοράς πάνω από το όριο", "συμψηφισμός") %}
+      Σε προσαρμογή μισθού (τριετία/ΓΣΣΕ). <b>Ναι:</b> η αύξηση προστίθεται
+      στον μισθό. <b>Όχι:</b> η υπάρχουσα διαφορά απορροφά την αύξηση.
+    {% endcall %}
+  </section>
+
+  <section class="pref-sec">
+    <h3>📋 Πληρωμές &amp; υποχρεώσεις</h3>
+    {% call sw("auto_payments", "Αυτόματη εξόφληση πληρωμών", "ναι") %}
+      Κάθε πληρωμή (μισθοί, εισφορές, ΦΜΥ, Δώρα) εξοφλείται μόλις ολοκληρωθεί
+      το προαπαιτούμενό της και δεν εμφανίζεται στο χρονολόγιο υποχρεώσεων.
+    {% endcall %}
+    {{ num("obligations_horizon_months", "Ορίζοντας «Εκκρεμών»",
+           "Μήνες μετά τον τρέχοντα. Π.χ. 1: τον 3/2026 εμφανίζονται εκκρεμότητες "
+           ~ "έως και 4/2026 (οι εκπρόθεσμες πάντα).", "1", "μήνες", 24) }}
+  </section>
+
+  <section class="pref-sec">
+    <h3>🌴 Άδειες</h3>
+    <label class="pref">
+      <span class="pref-txt">
+        <span class="pref-t">Περίοδοι αιχμής</span>
+        <span class="pref-d">Διαστήματα χωρίς άδειες — δεν μετράνε στο «Χωράει;»
+          του υπολοίπου. Μορφή ΗΗ/ΜΜ-ΗΗ/ΜΜ, με κόμμα για περισσότερα.</span>
+      </span>
+      <span class="pref-in">
+        <input type="text" name="peak_periods" placeholder="15/12-31/12"
+               value="{{ misc.peak_periods }}">
+      </span>
+    </label>
+  </section>
+
+  <div class="btnrow">
+    <button class="run" type="submit">Αποθήκευση ρυθμίσεων</button>
+  </div>
+</form>

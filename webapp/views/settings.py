@@ -84,12 +84,10 @@ SPAWN_LABELS = {
 
 def _due_text(rule) -> str:
     kind = rule[0]
-    if kind == "eom":
-        return ("τελ. εργάσιμη περιόδου" if not rule[1]
-                else f"τελ. εργάσιμη +{rule[1]} μήνα/ες")
-    if kind == "eom_cal":
-        return ("τέλος μήνα περιόδου" if not rule[1]
-                else f"τέλος μήνα +{rule[1]} μήνα/ες")
+    if kind in ("eom", "eom_cal"):
+        month = {0: "του μήνα", 1: "του επόμενου μήνα",
+                 2: "του μεθεπόμενου μήνα"}.get(rule[1], f"μήνα +{rule[1]}")
+        return ("τελ. εργάσιμη " if kind == "eom" else "τέλος ") + month
     if kind == "fixed":
         return f"σταθερά {rule[2]}/{rule[1]}"
     if kind == "easter_minus":
@@ -99,83 +97,122 @@ def _due_text(rule) -> str:
     return str(rule)
 
 
+# Χειροποίητη διάταξη (στήλη = βήμα, γραμμή) — οι ΑΚΜΕΣ έρχονται πάντα από
+# το μητρώο. Τύπος που λείπει εδώ μπαίνει αυτόματα σε γραμμή στο τέλος.
+CHAIN_COLS = ("Κάρτα", "Παρουσίες", "Μισθοδοσία & ΕΡΓΑΝΗ",
+              "Πληρωμές & υποβολές", "Καταβολές")
+CHAIN_LAYOUT = {
+    "RETRO_SCHEDULE": (2, 0), "LEAVE_DECLARATION": (2, 1),
+    "CARD_IMPORT": (0, 2), "ATTENDANCE_APPROVAL": (1, 2),
+    "MONTHLY_PAYROLL": (2, 2), "SALARY_PAYMENT": (3, 2),
+    "APD_SUBMISSION": (3, 3), "EFKA_PAYMENT": (4, 3),
+    "APD_TEKA_SUBMISSION": (3, 4), "TEKA_PAYMENT": (4, 4),
+    "FMY_SUBMISSION": (3, 5), "FMY_PAYMENT": (4, 5),
+    "WAGE_ADJUSTMENT": (1, 6), "LEAVE_ALLOWANCE": (2, 6),
+    "LEAVE_ALLOWANCE_PAYMENT": (3, 6),
+    # ζώνη «ετήσιες» (κάτω από τη διαχωριστική)
+    "EASTER_GIFT": (2, 7), "EASTER_GIFT_PAYMENT": (3, 7),
+    "CHRISTMAS_GIFT": (2, 8), "CHRISTMAS_GIFT_PAYMENT": (3, 8),
+}
+CHAIN_SPINE = ("CARD_IMPORT", "ATTENDANCE_APPROVAL", "MONTHLY_PAYROLL",
+               "SALARY_PAYMENT")
+CHAIN_ANNUAL_ROW = 7  # από εδώ και κάτω: ετήσιες
+
+
 def _chain_graph():
-    """Layout του γράφου της αλυσίδας (SVG): κόμβοι ανά «βάθος» εξαρτήσεων
-    ίδιας περιόδου, ακμές = requires (διακεκομμένες όσες δείχνουν σε άλλη
-    περίοδο). Κάθε κόμβος δείχνει ΓΕΝΝΗΣΗ/ΠΡΟΘΕΣΜΙΑ/ΠΑΡΑΤΑΣΗ και είναι
-    clickable (ανοίγει το modal επεξεργασίας του τύπου). Υπολογίζεται
-    server-side — το template απλώς ζωγραφίζει."""
+    """Layout του γράφου της αλυσίδας (SVG). Στήλες = βήματα του μήνα·
+    ζωγραφίζονται ΜΟΝΟ οι ακμές ίδιας περιόδου, χωρίς τις μεταβατικές
+    (Α→Γ όταν ήδη Α→Β→Γ)· οι εξαρτήσεις από ΑΛΛΗ περίοδο γίνονται λίστα
+    (`cross`) και σήμα ↩ στον κόμβο. Κάθε κόμβος είναι clickable.
+    Υπολογίζεται server-side — το template απλώς ζωγραφίζει."""
     codes = list(ot.TYPES)
-    same = [
-        (r[0], c)
-        for c, t in ot.TYPES.items()
-        for r in t.requires
-        if r[1] == "same"
-    ]
-    layer = dict.fromkeys(codes, 0)
-    for _ in codes:  # μικρός γράφος: αρκεί απλή χαλάρωση (χωρίς κύκλους)
-        for a, b in same:
-            if layer[b] < layer[a] + 1:
-                layer[b] = layer[a] + 1
+    same = {c: {r[0] for r in ot.TYPES[c].requires if r[1] == "same"} for c in codes}
 
-    cols: dict[int, list] = {}
-    order = {c: i for i, c in enumerate(codes)}
+    def reach(a, seen=None):  # ό,τι προαπαιτεί (ίδια περίοδος) ο a, μεταβατικά
+        seen = set() if seen is None else seen
+        for p in same[a]:
+            if p not in seen:
+                seen.add(p)
+                reach(p, seen)
+        return seen
+
+    pos = {c: CHAIN_LAYOUT[c] for c in codes if c in CHAIN_LAYOUT}
+    extra = max((r for _, r in pos.values()), default=-1) + 1
+    for c in codes:  # νέος τύπος χωρίς θέση: στήλη = βάθος, νέα γραμμή
+        if c not in pos:
+            depth = len(reach(c))
+            pos[c] = (min(depth, len(CHAIN_COLS) - 1), extra)
+            extra += 1
+
+    W, H, GX, GY, PAD, TOP, BAND = 252, 54, 40, 14, 16, 34, 30
+    rows = max(r for _, r in pos.values()) + 1
+
+    def xy(c):
+        col, row = pos[c]
+        y = TOP + row * (H + GY) + (BAND if row >= CHAIN_ANNUAL_ROW else 0)
+        return PAD + col * (W + GX), y
+
+    ncols = max(len(CHAIN_COLS), max(col for col, _ in pos.values()) + 1)
+    width = 2 * PAD + ncols * (W + GX) - GX
+    height = TOP + rows * (H + GY) - GY + PAD + (BAND if rows > CHAIN_ANNUAL_ROW else 0)
+
+    SEL = {"prev": "προηγ. μήνα", "year": "τρέχοντος έτους",
+           "prev_year": "προηγ. έτους"}
+    nodes, cross = [], []
     for c in codes:
-        cols.setdefault(layer[c], []).append(c)
-    for items in cols.values():
-        items.sort(key=lambda c: order[c])
-
-    W, H, GX, GY, PAD = 238, 92, 70, 18, 16
-    height = max(len(v) for v in cols.values()) * (H + GY) - GY + 2 * PAD
-    pos = {}
-    for lx in sorted(cols):
-        items = cols[lx]
-        top = (height - (len(items) * (H + GY) - GY)) / 2
-        for i, c in enumerate(items):
-            pos[c] = (PAD + lx * (W + GX), top + i * (H + GY))
-    width = 2 * PAD + (max(cols) + 1) * (W + GX) - GX
-
-    nodes = []
-    for c in codes:
-        s = ot.spec(c)
-        ext = ("έως " + str(s.extension.get("max_days", "—")) + " ημέρες"
-               if s.extension.get("allowed") else "όχι")
+        s, t = ot.spec(c), ot.TYPES[c]
+        x, y = xy(c)
+        others = []
+        for r in t.requires:
+            if r[1] == "same":
+                continue
+            sel = r[1]
+            when = SEL.get(sel) or (f"μήνα {sel.split(':')[1]}"
+                                    if sel.startswith("month:") else sel)
+            dep = ot.TYPES[r[0]]
+            others.append(f"{dep.icon} {dep.label} ({when}"
+                          + (f" — μόνο για περίοδο {r[2]}" if len(r) > 2 else "")
+                          + ")")
+        if others:
+            cross.append({"icon": t.icon, "label": t.label, "deps": others})
+        ext = s.extension or {}
         nodes.append({
-            "code": c,
-            "label": ot.TYPES[c].label,
-            "icon": ot.TYPES[c].icon,
-            "x": round(pos[c][0], 1),
-            "y": round(pos[c][1], 1),
-            "spawn": ot.TYPES[c].spawn,
-            "spawn_text": SPAWN_LABELS.get(ot.TYPES[c].spawn,
-                                           ot.TYPES[c].spawn),
+            "code": c, "label": t.label, "icon": t.icon,
+            "short": t.label if len(t.label) <= 30 else t.label[:29] + "…",
+            "x": x, "y": y, "spawn": t.spawn,
+            "spawn_text": SPAWN_LABELS.get(t.spawn, t.spawn),
             "due_text": _due_text(s.due),
-            "ext_text": ext,
+            "ext_text": (f"έως {ext.get('max_days', '—')} ημέρες"
+                         if ext.get("allowed") else "όχι"),
+            "cross": others,
+            "spine": c in CHAIN_SPINE,
             "overridden": ot.is_overridden(c),
         })
-    SEL = {"prev": "προηγ. μήνας", "year": "ετήσια", "prev_year": "προηγ. έτος"}
+
     edges = []
-    for c, t in ot.TYPES.items():
-        for r in t.requires:
-            a, sel = r[0], r[1]
-            (x1, y1), (x2, y2) = pos[a], pos[c]
-            lab = ""
-            if sel != "same":
-                lab = SEL.get(sel) or (
-                    "μισθοδοσία μήνα " + sel.split(":")[1]
-                    if sel.startswith("month:") else sel
-                )
-            if len(r) > 2:
-                lab += f" — μόνο περίοδο {r[2]}"
-            edges.append({
-                "x1": round(x1 + W, 1), "y1": round(y1 + H / 2, 1),
-                "x2": round(x2, 1), "y2": round(y2 + H / 2, 1),
-                "dash": sel != "same",
-                "label": lab,
-                "back": pos[a][0] >= pos[c][0],  # ακμή προς τα πίσω/ίδια στήλη
-            })
-    return {"width": round(width), "height": round(height),
-            "nodes": nodes, "edges": edges, "W": W, "H": H}
+    for c in codes:
+        # μεταβατική αναγωγή: κρατάμε μόνο τις άμεσες προϋποθέσεις
+        direct = {a for a in same[c]
+                  if not any(a in reach(b) for b in same[c] if b != a)}
+        for a in sorted(direct, key=codes.index):
+            (x1, y1), (x2, y2) = xy(a), xy(c)
+            if pos[a][0] == pos[c][0]:  # ίδια στήλη: κάθετο βέλος
+                cx = x1 + W / 2
+                d = f"M {cx} {y1 + H} L {cx} {y2 - 2}"
+            else:
+                x1, y1, x2, y2 = x1 + W, y1 + H / 2, x2 - 2, y2 + H / 2
+                k = (x2 - x1) / 2
+                d = f"M {x1} {y1} C {x1 + k} {y1}, {x2 - k} {y2}, {x2} {y2}"
+            edges.append({"d": d,
+                          "spine": a in CHAIN_SPINE and c in CHAIN_SPINE})
+
+    cols = [{"label": f"{i + 1} · {lab}", "x": PAD + i * (W + GX) + W / 2}
+            for i, lab in enumerate(CHAIN_COLS)]
+    band_y = (TOP + CHAIN_ANNUAL_ROW * (H + GY) - GY / 2 + BAND / 2
+              if rows > CHAIN_ANNUAL_ROW else None)
+    return {"width": width, "height": height, "W": W, "H": H,
+            "nodes": nodes, "edges": edges, "cols": cols,
+            "band_y": band_y, "cross": cross}
 
 
 def _severance_row(entry):
@@ -246,7 +283,6 @@ def _panel_ctx():
         # data/init_parameters.json ή, αν λείπει, οι τιμές του config.
         "init_file": bool(svc.init_parameters_doc()),
         "graph": _chain_graph(),
-        "misc": svc.misc_settings(),
         # Τα ποσοστά που δείχνει ο πίνακας είναι αυτά που ΙΣΧΥΟΥΝ την
         # ημερομηνία αναφοράς του UI (ταξίδι στον χρόνο, βλ. webapp/clock.py).
         "kpk_entries": svc.kpk_entries(on=today()),
@@ -280,7 +316,7 @@ def modal_close():
 
 # ------------------- Εξαγωγή/εισαγωγή ΟΛΩΝ των παραμέτρων (JSON)
 # ΕΝΑ αρχείο για ό,τι δείχνει αυτή η σελίδα: οικογένειες παραμέτρων με το
-# ιστορικό ισχύος τους, φορολογική κλίμακα, αποζημίωση, «Διάφορα»,
+# ιστορικό ισχύος τους, φορολογική κλίμακα, αποζημίωση,
 # προθεσμίες τύπων υποχρεώσεων και Μητρώο ΚΠΚ (βλ. services/parameters.py).
 @bp.get("/export")
 def export_json():
@@ -310,8 +346,6 @@ def import_json():
                                ("obligation_types", "τύποι υποχρεώσεων"))
             if c[key]
         ]
-        if c["misc"]:
-            parts.append("προτιμήσεις («Διάφορα»)")
         if not parts:
             raise ValueError(
                 "Δεν εισήχθη τίποτα — " + (" | ".join(res["errors"][:3])
@@ -338,30 +372,6 @@ def confirm():
                else "τις προτεινόμενες τιμές του config")
         return (f"Καταχωρήθηκαν {n} εγγραφές παραμέτρων ως events από {src} — "
                 "από εδώ και πέρα κάθε αλλαγή είναι απλή προσθήκη νέας γραμμής")
-
-    ok, msg = run_command(cmd)
-    return _panel(msg, ok)
-
-
-# ------------------------------------------------------------ Διάφορα
-@bp.post("/misc")
-def misc_save():
-    """Λειτουργικές προτιμήσεις («Διάφορα») — τα checkboxes στέλνουν τιμή
-    μόνο όταν είναι επιλεγμένα, οπότε η απουσία = False."""
-    def cmd():
-        f = request.form
-        svc.set_misc_settings(
-            save_zip=f.get("save_zip") == "1",
-            show_employer_cost=f.get("show_employer_cost") == "1",
-            keep_wage_excess=f.get("keep_wage_excess") == "1",
-            pre_major_by_card=f.get("pre_major_by_card") == "1",
-            card_required=f.get("card_required") == "1",
-            digital_card=f.get("digital_card") == "1",
-            auto_payments=f.get("auto_payments") == "1",
-            obligations_horizon_months=form_int(f, "obligations_horizon_months", 1),
-            peak_periods=f.get("peak_periods", "").strip(),
-        )
-        return "Αποθηκεύτηκαν οι προτιμήσεις (Διάφορα)"
 
     ok, msg = run_command(cmd)
     return _panel(msg, ok)

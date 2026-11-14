@@ -16,6 +16,7 @@ Tests άδειας ασθενείας: τριήμερο εργοδότη, όρι
 from datetime import date, timedelta
 
 import _bootstrap  # noqa: F401  # ρίζα project στο sys.path + cwd
+from _bootstrap import PERSON_ID
 
 from misevent.app.services import PayrollService
 from misevent.domain import payroll_engine as pe
@@ -63,7 +64,7 @@ def setup(
         afm="111222336",
         amka="05059012343",
         ama="123456789",
-    )
+    **PERSON_ID)
     eid = svc.start_employment(
         pid, hire_date=hire, monthly_gross=monthly_gross,
         weekly_hours=40.0, weekly_pattern=FULL_WEEK,

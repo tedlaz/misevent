@@ -16,6 +16,7 @@ Tests ΕΚΚΑΘΑΡΙΣΗΣ ΑΠΟΧΩΡΗΣΗΣ:
 from datetime import date
 
 import _bootstrap  # noqa: F401  # ρίζα project στο sys.path + cwd
+from _bootstrap import PERSON_ID
 
 from misevent.app.services import PayrollService
 from misevent.domain.projections import Projections
@@ -65,7 +66,7 @@ def hire(svc, proj, idx, hire_date=date(2024, 4, 8), gross=1500.0):
         afm=afm,
         amka=amka,
         ama=ama,
-    )
+    **PERSON_ID)
     eid = svc.start_employment(
         pid, hire_date, monthly_gross=gross, weekly_pattern=FULL_WEEK
     )

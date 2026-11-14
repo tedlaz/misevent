@@ -2,7 +2,7 @@ from datetime import date
 from types import SimpleNamespace
 
 import pytest
-from _bootstrap import ui_client
+from _bootstrap import PERSON_ID, ui_client
 
 from misevent.app.services import PayrollService
 from misevent.domain.projections import Projections
@@ -78,7 +78,7 @@ def test_company_specialty_persists_verified_ergani_pair():
         last_name="ΔΟΚΙΜΗ", first_name="ΜΑΡΙΑ", father_name="ΙΩΑΝΝΗΣ",
         mother_name="ΕΛΕΝΗ", birth_date=date(1990, 5, 5),
         afm="111222336", amka="05059012343", ama="123456789",
-    )
+    **PERSON_ID)
     employment_id = service.start_employment(
         person_id, date(2026, 1, 1), monthly_gross=1500,
         weekly_pattern={

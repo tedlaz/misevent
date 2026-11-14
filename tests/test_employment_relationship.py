@@ -2,6 +2,7 @@ from datetime import date
 from types import SimpleNamespace
 
 import pytest
+from _bootstrap import PERSON_ID
 from flask import render_template
 
 from misevent.app.services import PayrollService
@@ -24,7 +25,7 @@ def _service():
         last_name="ΔΟΚΙΜΗ", first_name="ΜΑΡΙΑ", father_name="ΙΩΑΝΝΗΣ",
         mother_name="ΕΛΕΝΗ", birth_date=date(1990, 5, 5),
         afm="111222336", amka="05059012343",
-    )
+    **PERSON_ID)
     return service, projection, person_id
 
 
@@ -270,7 +271,7 @@ def test_fixed_term_correction_does_not_block_next_web_e3n_event(tmp_path):
         last_name="ΔΟΚΙΜΗ", first_name="ΜΑΡΙΑ", father_name="ΙΩΑΝΝΗΣ",
         mother_name="ΕΛΕΝΗ", birth_date=date(1990, 5, 5),
         afm="111222336", amka="05059012343",
-    )
+    **PERSON_ID)
     employment_id = service.start_employment(
         person_id, date(2026, 1, 1), monthly_gross=1500,
         weekly_pattern=WEEK, draft=True,

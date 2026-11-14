@@ -69,11 +69,11 @@ def setup(monthly_gross=1500.0, hire=date(2026, 1, 5), teka=False,
         last_name="ΠΑΠΑΔΟΠΟΥΛΟΣ", first_name="ΙΩΑΝΝΗΣ", father_name="ΝΙΚΟΛΑΟΣ",
         mother_name="ΜΑΡΙΑ", birth_date=birth_date, afm="111222336",
         amka="05059012343", ama="123456789",
-        # Φύλο ⇒ ΟΛΑ τα στοιχεία ταυτότητας WebE3N (`check_web_e3n_identity`)
-        **({"sex": sex,
-            "nationality_code": ergani_parameters.nationalities()[0]["code"],
-            "identity_type": ergani_parameters.identity_types()[0]["code"],
-            "identity_number": "ΑΒ123456"} if sex else {}),
+        # Η πρόσληψη απαιτεί ΟΛΑ τα στοιχεία ταυτότητας (`check_person_complete`)
+        sex=sex or "0",
+        nationality_code=ergani_parameters.nationalities()[0]["code"],
+        identity_type=ergani_parameters.identity_types()[0]["code"],
+        identity_number="ΑΒ123456",
     )
     eid = svc.start_employment(
         pid, hire_date=hire, monthly_gross=monthly_gross,

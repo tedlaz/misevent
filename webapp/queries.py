@@ -138,7 +138,7 @@ def period_has_employment(y: int, m: int) -> bool:
 
 
 def hidden_payment(ob) -> bool:
-    """Πληρωμή κρυμμένη από το χρονολόγιο (Διάφορα → `auto_payments`):
+    """Πληρωμή κρυμμένη από το χρονολόγιο (Εταιρεία → Ρυθμίσεις → `auto_payments`):
     εξοφλείται αυτόματα, άρα δεν περιμένει ενέργεια του χρήστη."""
     return bool(proj.misc_settings.get("auto_payments")) and (
         OB_TRACKS.get(ob.obligation_type) == "payment"
@@ -166,7 +166,7 @@ def obligation_list(ref: date, show_locked: bool = False, view: str = "active"):
     `view`: "active" (εκκρεμείς) | "done" (ολοκληρωμένες) | "all" (και τα δύο).
     Οι κλειδωμένες (με ανεκπλήρωτο προαπαιτούμενο) παραλείπονται, εκτός αν
     ζητηθούν ρητά με `show_locked`. Στις εκκρεμείς, οι μελλοντικές φτάνουν
-    έως το τέλος του μήνα `ref` + ορίζοντα (Παράμετροι → Διάφορα)."""
+    έως το τέλος του μήνα `ref` + ορίζοντα (Εταιρεία → Ρυθμίσεις)."""
     index = deps.build_index(proj.obligations.values())
     months = ref.month + int(proj.misc_settings.get("obligations_horizon_months", 1))
     y, m = ref.year + (months - 1) // 12, (months - 1) % 12 + 1
@@ -745,7 +745,7 @@ def attendance_sheet(y: int, m: int) -> dict:
         # Υποβολές ΕΡΓΑΝΗ πρόσληψης που εκκρεμούν — προαπαιτούμενο των παρουσιών.
         # Όσο υπάρχει έστω μία, η έγκριση μπλοκάρεται (και στο command layer).
         "ergani_pending": svc.attendance_ergani_pending(y, m),
-        # «Διάφορα → card_required»: εκκρεμής έλεγχος κάρτας — μπλοκάρει κι αυτός
+        # «Εταιρεία → Ρυθμίσεις → card_required»: εκκρεμής έλεγχος κάρτας — μπλοκάρει κι αυτός
         "card_pending": [
             {"eid": eid, "name": d["name"]} for eid, d in draft.items()
             if svc.card_month_pending(proj.employments[eid], y, m)
@@ -3512,7 +3512,7 @@ def detail_payload(ob_id: str, ref: date):
             if violations:
                 d["steps"].append(
                     "Η ενεργοποίηση προσαρμόζει τις συμβάσεις κατά την πολιτική "
-                    "«Διάφορα» (συμψηφισμός/διατήρηση) — ContractChanged + "
+                    "της εταιρείας (συμψηφισμός/διατήρηση) — ContractChanged + "
                     "Δήλωση Μεταβολής ΕΡΓΑΝΗ."
                 )
     return d

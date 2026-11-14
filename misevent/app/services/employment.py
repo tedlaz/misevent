@@ -126,6 +126,7 @@ class EmploymentMixin:
                     "Για ημερήσιο πρόγραμμα δηλώστε πλήθος εβδομάδων 1 έως 10"
                 )
         constraints.check_rehire(person, existing, hire_date)
+        constraints.check_person_complete(person)  # φύλο, υπηκοότητα, ταυτότητα
         if ergani_hire_done or (payroll_from and payroll_from > hire_date):
             self.check_migration_open()
         # ΚΛΕΙΔΩΜΑ: κρίνεται από την ΑΝΑΛΗΨΗ, όχι από την πρόσληψη — μια παλιά

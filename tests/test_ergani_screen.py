@@ -15,6 +15,7 @@ from datetime import date, timedelta
 
 def test_ergani_screen(fresh_system):
     import _bootstrap  # noqa: F401  # ρίζα project στο sys.path + cwd
+    from _bootstrap import PERSON_ID
 
     from webapp import create_app, labels
     from webapp.actions import FULL_TIME
@@ -34,7 +35,7 @@ def test_ergani_screen(fresh_system):
     pid = svc.register_person(
         last_name="ΝΕΟΣ", first_name="ΕΡΓΑΖΟΜΕΝΟΣ", father_name="Π",
         mother_name="Μ", birth_date=date(1990, 5, 5),
-        afm="090034337", amka="05059012350", ama="123456788")
+        afm="090034337", amka="05059012350", ama="123456788", **PERSON_ID)
     with app.test_request_context("/"):
         start = today().replace(day=1)
     new = svc.start_employment(pid, start, monthly_gross=1300.0,

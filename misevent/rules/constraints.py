@@ -336,6 +336,23 @@ def check_web_e3n_identity(
         )
 
 
+def check_person_complete(person):
+    """Στοιχεία που ΠΡΕΠΕΙ να έχει πρόσωπο για να ΠΡΟΣΛΗΦΘΕΙ (WebE3N:
+    f_sex, f_ypikoothta, f_typos_taytothtas, f_ar_taytothtas — minLength 1).
+    Η καταχώρηση προσώπου τα επιτρέπει κενά· η πρόσληψη όχι. Η μορφή τους
+    ελέγχεται ήδη στο `check_web_e3n_identity`."""
+    missing = [label for attr, label in (
+        ("sex", "Φύλο"), ("nationality_code", "Υπηκοότητα"),
+        ("identity_type", "Τύπος ταυτότητας"),
+        ("identity_number", "Αριθμός ταυτότητας"),
+    ) if not str(getattr(person, attr, "") or "").strip()]
+    if missing:
+        raise ValueError(
+            f"Λείπουν στοιχεία του {person.full_name} για την πρόσληψη: "
+            + ", ".join(missing) + " — συμπληρώστε τα στην καρτέλα του προσώπου"
+        )
+
+
 def check_web_e3n_person_details(
     marital_status="0", nationality_code="",
     res_permit_inst="", res_permit_inst_type="", res_permit_inst_number="",

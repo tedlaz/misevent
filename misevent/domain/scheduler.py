@@ -125,7 +125,7 @@ class ObligationScheduler:
         self._gift_keys: set[tuple[str, int]] = set()
         self._wage_adjust_periods: set[tuple[int, int]] = set()
         self._retro_periods: set[tuple[int, int]] = set()
-        # «Διάφορα → digital_card» ως τώρα: η φόρμα στέλνει ΟΛΑ τα κλειδιά
+        # «Εταιρεία → Ρυθμίσεις → digital_card» ως τώρα: η φόρμα στέλνει ΟΛΑ τα κλειδιά
         # σε κάθε αποθήκευση, οπότε αντιδρούμε ΜΟΝΟ σε πραγματική αλλαγή
         self._digital_card = bool(projections.misc_settings.get("digital_card", True))
         self._bootstrap()
@@ -341,7 +341,7 @@ class ObligationScheduler:
                 self._schedule(code, ot.due_date(code, y, m), y, m)
 
     def _digital_card_toggled(self, on: bool):
-        """«Διάφορα → digital_card» άλλαξε. ΟΝ: νέα CARD_IMPORT σε κάθε ανοιχτή
+        """«Εταιρεία → Ρυθμίσεις → digital_card» άλλαξε. ΟΝ: νέα CARD_IMPORT σε κάθε ανοιχτή
         περίοδο (μη εγκεκριμένες παρουσίες) χωρίς εκκρεμή — ο έλεγχος
         ξαναγίνεται. OFF: οι εκκρεμείς κλείνουν — αλλιώς θα κλείδωναν για πάντα
         την έγκριση παρουσιών."""
@@ -473,7 +473,7 @@ class ObligationScheduler:
 
     def _floor_rose(self, y: int, m: int) -> bool:
         """True αν χρειάζεται προσαρμογή μισθού λόγω ωρίμανσης τριετίας. Η
-        πολιτική «Διάφορα → keep_wage_excess» καθορίζει πότε «χρειάζεται»:
+        πολιτική «Εταιρεία → Ρυθμίσεις → keep_wage_excess» καθορίζει πότε «χρειάζεται»:
         - **συμψηφισμός** (default): μόνο αν ο μισθός ΥΠΟΛΕΙΠΕΤΑΙ του νέου
           ορίου (πραγματική παράβαση) — αλλιώς η διαφορά απορροφά την αύξηση
           και δεν χρειάζεται obligation.

@@ -30,7 +30,9 @@ def schema_version(event_type: str) -> int:
 
 
 def upcast(event_type: str, payload: dict) -> dict:
-    """Φέρνει ένα αποθηκευμένο payload στην τρέχουσα μορφή του τύπου."""
+    """Φέρνει ένα αποθηκευμένο payload στην τρέχουσα μορφή του τύπου —
+    ΚΑΙ τα ποσά από cents σε ευρώ (`MONEY_PATHS`): όλες οι αναγνώσεις περνούν
+    από εδώ, άρα κανείς εκτός store δεν βλέπει cents."""
     chain = UPCASTERS.get(event_type, ())
     version = payload.get("_v", 1)
     if version > len(chain) + 1:
@@ -40,7 +42,86 @@ def upcast(event_type: str, payload: dict) -> dict:
         )
     for fn in chain[version - 1:]:
         payload = fn(payload)
+    return _map_money(event_type, payload, lambda c: c / 100)
+
+
+# ------------------------------------------------- Ποσά σε cents στη βάση
+# Στη βάση κάθε ποσό είναι ΑΚΕΡΑΙΑ cents (123456 = 1.234,56 €)· στον κώδικα
+# (dataclasses, projections, UI) μένει ευρώ. Η μετατροπή γίνεται ΜΟΝΟ στο όριο:
+# `to_record` (ευρώ → cents) και `upcast` (cents → ευρώ).
+# Διαδρομές: "a.b" = εμφωλευμένο κλειδί, "*" = κάθε στοιχείο λίστας / τιμή dict.
+# ⚠️ Νέο πεδίο ποσού σε event = νέα διαδρομή ΕΔΩ· ένα float πεδίο που δεν είναι
+# ούτε εδώ ούτε στο `NOT_MONEY` σπάει το `tests/test_event_money.py`.
+# Οι νομοθετικές παράμετροι (`ParametersDefined.values`) μένουν σε ευρώ: ίδια
+# μορφή με το `data/init_parameters.json` και την εξαγωγή της σελίδας.
+_RESULT = ("gross", "efka_employee", "efka_employer", "fmy", "net",
+           "subsidy_employee", "subsidy_employer")
+_WAGE = ("monthly_gross", "daily_wage")
+MONEY_PATHS: dict[str, tuple[str, ...]] = {
+    "EmploymentStarted": _WAGE,
+    "EmploymentHireDetailsCorrected": _WAGE,
+    "ContractChanged": _WAGE,
+    "SicknessBenefitRecorded": ("amount",),
+    "AttendanceSheetApproved": ("lines.*.sick_benefit",),
+    "MonthlyPayrollCalculated": (
+        "gross", "efka_employee", "efka_employer", "taxable", "fmy", "net",
+        "daily_wage", "sick_deduction", "premiums",
+        *(f"analysis.{k}" for k in (
+            # (`day_pay`, `hourly_rate`: τιμές ΜΟΝΑΔΑΣ με 4 δεκαδικά — όχι ποσά)
+            *_RESULT, *_WAGE, "taxable", "base_gross",
+            "sick_deduction", "sick_benefit", "premium_total", "premium_exempt")),
+        "analysis.premium_lines.*.amount", "analysis.premium_lines.*.premium",
+        *(f"analysis.contributions.*.{k}" for k in (
+            "employee", "employer", "subsidy", "subsidy_employer")),
+    ),
+    "GiftCalculated": _RESULT,
+    "LeaveAllowanceCalculated": _RESULT,
+    "WageAdjustmentApplied": ("adjusted.*.old", "adjusted.*.new"),
+    "APDFileGenerated": ("total_gross", "total_contributions"),
+    "APDSubmitted": ("total_contributions",),
+    "FMYFileGenerated": ("total_gross", "total_tax"),
+    "FMYSubmitted": ("total_fmy",),
+    "PaymentMade": ("amount",),
+    "LeaveCompensationCalculated": ("gross", "fmy", "net"),
+    "SeveranceCalculated": ("monthly_salary", "gross", "fmy", "net"),
+}
+# float πεδία events που ΔΕΝ είναι ποσά (ώρες, έτη, ημέρες, ποσοστά)
+NOT_MONEY = frozenset({
+    "weekly_hours", "service_years", "frozen_service_years",
+    "extra_allowances_pct", "hours_worked", "overtime_hours",
+    "employee", "employer", "leave_days", "comp_days", "months",
+})
+
+
+def _to_cents(v):
+    c = round(v * 100)
+    if abs(v * 100 - c) > 1e-6:
+        # Αστρογγύλευτο ποσό ΔΕΝ γράφεται: μετά το replay θα ήταν άλλο από
+        # ό,τι είδαν οι projections τη στιγμή του append.
+        raise ValueError(f"Ποσό {v!r} με περισσότερα από 2 δεκαδικά")
+    return c
+
+
+def _map_money(event_type: str, payload: dict, fn) -> dict:
+    """ΝΕΟ payload με το `fn` εφαρμοσμένο σε κάθε ποσό (δεν μεταλλάσσει)."""
+    for path in MONEY_PATHS.get(event_type, ()):
+        payload = _map_path(payload, path.split("."), fn)
     return payload
+
+
+def _map_path(obj, parts, fn):
+    if not parts:
+        return fn(obj) if isinstance(obj, int | float) and not isinstance(obj, bool) else obj
+    head, rest = parts[0], parts[1:]
+    if head == "*":
+        if isinstance(obj, dict):
+            return {k: _map_path(v, rest, fn) for k, v in obj.items()}
+        if isinstance(obj, list | tuple):
+            return [_map_path(v, rest, fn) for v in obj]
+        return obj
+    if isinstance(obj, dict) and head in obj:
+        return {**obj, head: _map_path(obj[head], rest, fn)}
+    return obj
 
 
 class LeaveType(str, Enum):
@@ -59,7 +140,7 @@ class DomainEvent:
     """Βάση όλων των events."""
 
     def to_record(self, aggregate_id: str) -> dict:
-        payload = asdict(self)
+        payload = _map_money(type(self).__name__, asdict(self), _to_cents)
         version = schema_version(type(self).__name__)
         if version > 1:  # v1 = χωρίς `_v` -> τα υπάρχοντα logs μένουν ως έχουν
             payload["_v"] = version
@@ -459,7 +540,7 @@ class CardPunchCancelled(DomainEvent):
 class CardPeriodChecked(DomainEvent):
     """Η ΚΑΡΤΑ ΤΗΣ ΠΕΡΙΟΔΟΥ εισήχθη και πέρασε τον έλεγχο αρτιότητας για
     ΟΛΟΥΣ τους εργαζόμενους (κλείνει την υποχρέωση CARD_IMPORT —
-    προαπαιτούμενο της έγκρισης παρουσιών με «Διάφορα → digital_card»)."""
+    προαπαιτούμενο της έγκρισης παρουσιών με «Εταιρεία → Ρυθμίσεις → digital_card»)."""
 
     year: int
     month: int
@@ -469,7 +550,7 @@ class CardPeriodChecked(DomainEvent):
 class CardMonthChecked(DomainEvent):
     """Ο ΕΛΕΓΧΟΣ ΑΡΤΙΟΤΗΤΑΣ ΚΑΡΤΑΣ του μήνα ολοκληρώθηκε (ARCH_REF §5.11):
     ο χρήστης τακτοποίησε στο ΗΜΕΡΟΛΟΓΙΟ ό,τι έλειπε και αποδέχεται τις
-    ημέρες χωρίς χτύπημα (μετρούν με το πρόγραμμα). Με «Διάφορα →
+    ημέρες χωρίς χτύπημα (μετρούν με το πρόγραμμα). Με «Εταιρεία → Ρυθμίσεις →
     card_required» είναι προαπαιτούμενο της έγκρισης παρουσιών. Κάθε νέα
     διέλευση/ακύρωση στον μήνα το ΑΝΑΙΡΕΙ (projection): ξαναελέγχεται."""
 

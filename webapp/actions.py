@@ -9,6 +9,7 @@ from datetime import date, timedelta
 
 from misevent.rules import obligation_types as ot
 from misevent.rules.calendar_gr import is_working_day
+from misevent.rules.constraints import GREEK_ID_TYPE as GREEK_ID
 
 from . import clock
 from .labels import ERGANI_ONLY
@@ -113,7 +114,7 @@ def _submit_fmy(y, m):
 
 def _apply_minimum_adjustments(y, m):
     # Έλεγχος/προσαρμογή στον κατώτατο (ΓΣΣΕ ή ωρίμανση τριετίας): προσαρμόζει
-    # τις ενεργές συμβάσεις κατά την πολιτική «Διάφορα → keep_wage_excess»
+    # τις ενεργές συμβάσεις κατά την πολιτική «Εταιρεία → Ρυθμίσεις → keep_wage_excess»
     # (συμψηφισμός/διατήρηση) — ContractChanged + Μεταβολή ΕΡΓΑΝΗ.
     res = svc.apply_minimum_adjustments(y, m)
     if not res:
@@ -213,7 +214,7 @@ def trigger(ob_id: str, via_ergani: bool = False) -> str:
 
 
 def auto_settle_payments() -> list[str]:
-    """Διάφορα → `auto_payments`: εκτελεί κάθε ανεκπλήρωτη πληρωμή (στήλη
+    """Εταιρεία → Ρυθμίσεις → `auto_payments`: εκτελεί κάθε ανεκπλήρωτη πληρωμή (στήλη
     «Πληρωμές») που δεν είναι πλέον μπλοκαρισμένη. Καλείται μετά από κάθε
     επιτυχημένη εντολή (`helpers.run_command`). Οι πληρωμές δεν είναι
     προαπαιτούμενα άλλων, άρα αρκεί ένα πέρασμα. Επιστρέφει τις ετικέτες
@@ -295,6 +296,8 @@ def seed_demo() -> str:
         father_name="ΓΕΩΡΓΙΟΣ", mother_name="ΕΛΕΝΗ",
         birth_date=date(1990, 1, 1),
         afm="111222336", amka="01019012341", ama="123456789", children=1,
+        sex="1", nationality_code="048", identity_type=GREEK_ID,
+        identity_number="ΑΚ100001", identity_issuer="ΑΤ ΑΘΗΝΩΝ",
     )
     eid1 = svc.start_employment(pid1, start, monthly_gross=1400.0,
                                 weekly_pattern=FULL_TIME)
@@ -305,6 +308,8 @@ def seed_demo() -> str:
         father_name="ΙΩΑΝΝΗΣ", mother_name="ΑΝΝΑ",
         birth_date=date(1980, 5, 15),
         afm="222333440", amka="15058011220", ama="234567890", children=2,
+        sex="0", nationality_code="048", identity_type=GREEK_ID,
+        identity_number="ΑΚ100002", identity_issuer="ΑΤ ΑΘΗΝΩΝ",
     )
     eid2 = svc.start_employment(pid2, start, monthly_gross=1950.0,
                                 weekly_pattern=FULL_TIME)
@@ -315,6 +320,8 @@ def seed_demo() -> str:
         father_name="ΔΗΜΗΤΡΙΟΣ", mother_name="ΣΟΦΙΑ",
         birth_date=date(1995, 7, 20),
         afm="333444553", amka="20079533442", ama="345678901",
+        sex="0", nationality_code="048", identity_type=GREEK_ID,
+        identity_number="ΑΚ100003", identity_issuer="ΑΤ ΑΘΗΝΩΝ",
     )
     eid3 = svc.start_employment(pid3, start, pay_type="daily", daily_wage=46.50,
                                 weekly_pattern=FULL_TIME)

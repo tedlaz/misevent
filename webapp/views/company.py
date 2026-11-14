@@ -16,7 +16,7 @@ from misevent.rules.constraints import norm_name
 from .. import osyk
 from ..clock import today
 from ..ergani_credentials import ENVIRONMENTS
-from ..helpers import flash_to, form_date, run_command
+from ..helpers import flash_to, form_date, form_int, run_command
 from ..system import proj, registry, svc
 
 bp = Blueprint("company", __name__, url_prefix="/company")
@@ -91,8 +91,36 @@ def index():
     return render_template(
         "company.html", c=proj.company,
         company_values=_company_form_values(proj.company), **_panel_ctx(),
-        **_ergani_ctx(), **_system_ctx(),
+        **_ergani_ctx(), **_system_ctx(), misc=svc.misc_settings(),
     )
+
+
+# ------------------------------------------ Ρυθμίσεις ΤΗΣ ΕΤΑΙΡΕΙΑΣ (όχι της εφαρμογής)
+@bp.post("/settings")
+def settings_save():
+    """Κάρτα, αποδείξεις, μισθός, πληρωμές, άδειες — τα checkboxes στέλνουν
+    τιμή μόνο όταν είναι επιλεγμένα, οπότε η απουσία = False."""
+    f = request.form
+
+    def cmd():
+        svc.set_misc_settings(
+            digital_card=f.get("digital_card") == "1",
+            card_required=f.get("card_required") == "1",
+            pre_major_by_card=f.get("pre_major_by_card") == "1",
+            card_tolerance_minutes=form_int(f, "card_tolerance_minutes", 0),
+            card_rounding_minutes=form_int(f, "card_rounding_minutes", 0),
+            save_zip=f.get("save_zip") == "1",
+            show_employer_cost=f.get("show_employer_cost") == "1",
+            keep_wage_excess=f.get("keep_wage_excess") == "1",
+            auto_payments=f.get("auto_payments") == "1",
+            obligations_horizon_months=form_int(f, "obligations_horizon_months", 1),
+            peak_periods=f.get("peak_periods", "").strip(),
+        )
+        return "Αποθηκεύτηκαν οι ρυθμίσεις της εταιρείας"
+
+    ok, msg = run_command(cmd)
+    return flash_to(render_template(
+        "partials/_company_settings.html", misc=svc.misc_settings()), msg, err=not ok)
 
 
 # ------------------------------------- Σύστημα δήλωσης αλλαγών ωραρίου
@@ -228,6 +256,8 @@ def import_json():
                            ("specialties", "ειδικότητες")):
             if c[key]:
                 parts.append(f"{c[key]} {label}")
+        if c["settings"]:
+            parts.append("ρυθμίσεις εταιρείας")
         if not parts:
             raise ValueError(
                 "Δεν εισήχθη τίποτα — " + " | ".join(res["errors"][:3])

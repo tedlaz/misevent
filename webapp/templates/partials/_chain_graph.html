@@ -1,102 +1,110 @@
 {# Γράφος της αλυσίδας υποχρεώσεων — καθαρό SVG, υπολογισμένο server-side
-   (webapp/views/settings.py::_chain_graph). Κόμβοι χρωματισμένοι κατά spawn
-   (period μπλε, annual πράσινο, reactive πορτοκαλί, on_source γκρι), με
-   γραμμές ΓΕΝΝΗΣΗ/ΠΡΟΘΕΣΜΙΑ/ΠΑΡΑΤΑΣΗ — CLICKABLE: το κλικ ανοίγει το modal
-   παραμετροποίησης του τύπου (καθαρό htmx πάνω σε <g>). #}
-<div style="overflow-x:auto">
-<svg width="{{ graph.width }}" height="{{ graph.height }}"
-     viewBox="0 0 {{ graph.width }} {{ graph.height }}"
-     font-family="inherit" style="min-width:{{ graph.width }}px">
+   (webapp/views/settings.py::_chain_graph). Στήλες = βήματα του μήνα, η κύρια
+   ροή (κάρτα → παρουσίες → μισθοδοσία → πληρωμή) τονισμένη. Μόνο ακμές ίδιας
+   περιόδου· οι εξαρτήσεις από άλλη περίοδο = σήμα ↩ + λίστα από κάτω.
+   Χωρίς `status`: χρωματιστή λωρίδα κατά spawn, κλικ = επεξεργασία τύπου.
+   Με `status` (Χάρτης κανόνων): χρώμα κατάστασης (.gs-*), κλικ = λεπτομέρειες. #}
+{% set st_map = status if status is defined and status else {} %}
+{% set BAR = {'period': '#5B8DEF', 'period_teka': '#5B8DEF', 'period_card': '#5B8DEF',
+              'annual': '#2FA866', 'reactive': '#E8890C', 'on_source': '#9AA6B1'} %}
+<div class="chain-wrap">
+<svg class="chain" width="{{ graph.width }}" height="{{ graph.height }}"
+     viewBox="0 0 {{ graph.width }} {{ graph.height }}" font-family="inherit"
+     role="img" aria-label="Αλυσίδα υποχρεώσεων του μήνα">
   <defs>
-    <marker id="arr" viewBox="0 0 8 8" refX="7" refY="4"
+    <marker id="ch-arr" viewBox="0 0 10 10" refX="9" refY="5"
             markerWidth="7" markerHeight="7" orient="auto">
-      <path d="M0,0 L8,4 L0,8 z" fill="#8a93a6"/>
+      <path d="M0,1 L9,5 L0,9 z" fill="#A9B4C0"/>
+    </marker>
+    <marker id="ch-arr-spine" viewBox="0 0 10 10" refX="9" refY="5"
+            markerWidth="7" markerHeight="7" orient="auto">
+      <path d="M0,1 L9,5 L0,9 z" fill="#17242F"/>
     </marker>
   </defs>
 
-  {% for e in graph.edges %}
-    {% if e.back %}
-      {# ακμή προς τα πίσω (άλλη περίοδος): καμπύλη πάνω από τους κόμβους #}
-      <path d="M {{ e.x1 - graph.W }} {{ e.y1 - graph.H / 2 }}
-               C {{ e.x1 - graph.W }} {{ e.y1 - graph.H / 2 - 26 }},
-                 {{ e.x2 }} {{ e.y2 - graph.H / 2 - 26 }},
-                 {{ e.x2 + 20 }} {{ e.y2 - graph.H / 2 }}"
-            fill="none" stroke="#c4cad6" stroke-width="1.3"
-            stroke-dasharray="5 4" marker-end="url(#arr)"/>
-    {% else %}
-      <path d="M {{ e.x1 }} {{ e.y1 }}
-               C {{ e.x1 + 34 }} {{ e.y1 }}, {{ e.x2 - 34 }} {{ e.y2 }},
-                 {{ e.x2 }} {{ e.y2 }}"
-            fill="none" stroke="{{ '#c4cad6' if e.dash else '#8a93a6' }}"
-            stroke-width="1.4"
-            {% if e.dash %}stroke-dasharray="5 4"{% endif %}
-            marker-end="url(#arr)"/>
-    {% endif %}
-    {% if e.label %}
-      <text x="{{ (e.x1 + e.x2) / 2 }}"
-            y="{{ (e.y1 + e.y2) / 2 - (graph.H / 2 + 30 if e.back else 5) }}"
-            text-anchor="middle" font-size="10" fill="#8a93a6">{{ e.label }}</text>
-    {% endif %}
+  {# στήλες-βήματα #}
+  {% for col in graph.cols %}
+    <rect x="{{ col.x - graph.W / 2 - 10 }}" y="4" width="{{ graph.W + 20 }}"
+          height="{{ graph.height - 8 }}" rx="12" class="ch-col"/>
+    <text x="{{ col.x }}" y="22" text-anchor="middle" class="ch-colh">{{ col.label }}</text>
   {% endfor %}
 
-  {% set FILL = {'period': '#eef4ff', 'period_teka': '#eef4ff',
-                 'annual': '#ecf8ef', 'reactive': '#fff4e8',
-                 'on_source': '#f2f3f6'} %}
-  {% set EDGE = {'period': '#b9cdf2', 'period_teka': '#b9cdf2',
-                 'annual': '#bfe3c8', 'reactive': '#f2d3ad',
-                 'on_source': '#d5d9e0'} %}
-  {# `status` (προαιρετικό, Χάρτης κανόνων): κατάσταση της υποχρέωσης ΜΙΑΣ
-     περιόδου ανά κόμβο — χρώμα από το CSS (.gs-*), κλικ στο modal λεπτομερειών
-     της. Χωρίς `status`: η εμφάνιση των Παραμέτρων (επεξεργασία τύπου). #}
+  {% if graph.band_y %}
+    <line x1="8" x2="{{ graph.width - 8 }}" y1="{{ graph.band_y }}" y2="{{ graph.band_y }}"
+          class="ch-band"/>
+    <text x="20" y="{{ graph.band_y + 18 }}" class="ch-bandt">ΕΤΗΣΙΕΣ — μόνο στον μήνα τους</text>
+  {% endif %}
+
+  {% for e in graph.edges %}
+    <path d="{{ e.d }}" class="ch-e{{ ' spine' if e.spine }}"
+          marker-end="url(#{{ 'ch-arr-spine' if e.spine else 'ch-arr' }})"/>
+  {% endfor %}
+
   {% for n in graph.nodes %}
-    {% set st = status[n.code] if status is defined and status else None %}
+    {% set st = st_map.get(n.code) %}
     {% if st and st.id %}
       {% set href = url_for('obligations.detail_modal', id=st.id) %}
     {% elif not st or is_admin %}
       {% set href = url_for('settings.obtype_modal', code=n.code) %}
     {% else %}{% set href = '' %}{% endif %}
-    <g class="{{ 'gs-' ~ st.status if st }}" style="cursor:{{ 'pointer' if href else 'default' }}"
+    <g class="ch-n{{ ' spine' if n.spine }}{{ ' gs-' ~ st.status if st }}"
+       style="cursor:{{ 'pointer' if href else 'default' }}"
        {% if href %}hx-get="{{ href }}" hx-target="#modal-host" hx-swap="innerHTML"{% endif %}>
-      <title>{{ st.text if st else 'Κλικ για επεξεργασία προθεσμίας/παράτασης' }} — {{ n.code }}</title>
-      <rect x="{{ n.x }}" y="{{ n.y }}" rx="10"
-            width="{{ graph.W }}" height="{{ graph.H }}"
-            fill="{{ FILL.get(n.spawn, '#f2f3f6') }}"
-            stroke="{{ EDGE.get(n.spawn, '#d5d9e0') }}" stroke-width="1.3"/>
-      <text x="{{ n.x + 12 }}" y="{{ n.y + 20 }}" font-size="12.5"
-            font-weight="600" fill="#2c3345">{{ n.icon }} {{ n.label[:28] }}
+      <title>{{ n.icon }} {{ n.label }}{% if st %} — {{ st.text }}{% endif %}
+γέννηση: {{ n.spawn_text }}
+προθεσμία: {{ n.due_text }}
+παράταση: {{ n.ext_text }}
+{%- for d in n.cross %}
+↩ περιμένει: {{ d }}{% endfor %}
+{{ 'κλικ για λεπτομέρειες' if st else 'κλικ για επεξεργασία προθεσμίας/παράτασης' }}</title>
+      <rect x="{{ n.x }}" y="{{ n.y }}" rx="10" width="{{ graph.W }}" height="{{ graph.H }}"/>
+      {% if not st %}
+        <rect x="{{ n.x }}" y="{{ n.y + 8 }}" width="4" height="{{ graph.H - 16 }}" rx="2"
+              fill="{{ BAR.get(n.spawn, '#9AA6B1') }}" stroke="none"/>
+      {% endif %}
+      <text x="{{ n.x + 14 }}" y="{{ n.y + 22 }}" class="ch-t">{{ n.icon }} {{ n.short }}
         {%- if n.overridden %} ⚙️{% endif %}</text>
-      <text x="{{ n.x + 12 }}" y="{{ n.y + 40 }}" font-size="10.5" fill="#5b6474">
-        <tspan fill="#8a93a6">γέννηση:</tspan> {{ n.spawn_text }}</text>
-      <text x="{{ n.x + 12 }}" y="{{ n.y + 56 }}" font-size="10.5" fill="#5b6474">
-        <tspan fill="#8a93a6">προθεσμία:</tspan> {{ n.due_text }}</text>
       {% if st %}
-        <text class="gs-t" x="{{ n.x + 12 }}" y="{{ n.y + 74 }}" font-size="11"
+        <text class="gs-t" x="{{ n.x + 14 }}" y="{{ n.y + 41 }}" font-size="11.5"
               font-weight="600">{{ st.text }}</text>
       {% else %}
-        <text x="{{ n.x + 12 }}" y="{{ n.y + 72 }}" font-size="10.5" fill="#5b6474">
-          <tspan fill="#8a93a6">παράταση:</tspan> {{ n.ext_text }}</text>
+        <text x="{{ n.x + 14 }}" y="{{ n.y + 41 }}" class="ch-s">⏰ {{ n.due_text }}</text>
+      {% endif %}
+      {% if n.cross %}
+        <text x="{{ n.x + graph.W - 10 }}" y="{{ n.y + 18 }}" text-anchor="end"
+              class="ch-x">↩</text>
       {% endif %}
     </g>
   {% endfor %}
 </svg>
 </div>
-{% if status is defined and status %}
-<div class="legend" style="margin-top:8px">
-  <span><i style="background:var(--done)"></i>έγινε</span>
-  <span><i style="background:var(--ready)"></i>διαθέσιμη</span>
-  <span><i style="background:var(--warn)"></i>λήγει σύντομα</span>
-  <span><i style="background:var(--prob)"></i>εκπρόθεσμη</span>
-  <span><i style="background:#9aa6b1"></i>🔒 περιμένει προαπαιτούμενο</span>
-  <span class="muted" style="font-size:12px">— συνεχής ακμή: ίδια περίοδος ·
-    διακεκομμένη: άλλη περίοδος · κλικ σε κόμβο: λεπτομέρειες υποχρέωσης</span>
+
+<div class="legend" style="margin-top:10px">
+  {% if st_map %}
+    <span><i style="background:var(--done)"></i>έγινε</span>
+    <span><i style="background:var(--ready)"></i>διαθέσιμη</span>
+    <span><i style="background:var(--warn)"></i>λήγει σύντομα</span>
+    <span><i style="background:var(--prob)"></i>εκπρόθεσμη</span>
+    <span><i style="background:#9aa6b1"></i>🔒 περιμένει προαπαιτούμενο</span>
+  {% else %}
+    <span><i style="background:#5B8DEF"></i>μηνιαία</span>
+    <span><i style="background:#2FA866"></i>ετήσια (Δώρα)</span>
+    <span><i style="background:#E8890C"></i>όταν προκύψει</span>
+    <span><i style="background:#9AA6B1"></i>καταβολή</span>
+  {% endif %}
+  <span class="muted" style="font-size:12px">— <b style="color:var(--ink)">━</b> κύρια ροή ·
+    βέλος: «πρώτα αυτό» · ↩ περιμένει και κάτι από άλλη περίοδο ·
+    κλικ σε κουτί: {{ 'λεπτομέρειες' if st_map else 'επεξεργασία' }}</span>
 </div>
-{% else %}
-<div class="legend" style="margin-top:8px">
-  <span><i style="background:#b9cdf2"></i>μηνιαία</span>
-  <span><i style="background:#bfe3c8"></i>ετήσια (Δώρα)</span>
-  <span><i style="background:#f2d3ad"></i>αντιδραστική</span>
-  <span><i style="background:#d5d9e0"></i>καταβολή</span>
-  <span class="muted" style="font-size:12px">— συνεχής ακμή: ίδια περίοδος ·
-    διακεκομμένη: άλλη περίοδος · κλικ σε κόμβο: επεξεργασία</span>
-</div>
+
+{% if graph.cross %}
+<details class="ch-cross">
+  <summary>↩ Εξαρτήσεις από άλλη περίοδο ({{ graph.cross|length }})</summary>
+  <ul>
+    {% for c in graph.cross %}
+      <li><b>{{ c.icon }} {{ c.label }}</b> περιμένει
+        {{ c.deps|join(' · ') }}</li>
+    {% endfor %}
+  </ul>
+</details>
 {% endif %}

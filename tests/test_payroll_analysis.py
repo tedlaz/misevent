@@ -9,6 +9,7 @@ Tests πλήρους αλυσίδας: βάρδιες κάρτας -> ώρες �
 from datetime import date, timedelta
 
 import _bootstrap  # noqa: F401  # ρίζα project στο sys.path + cwd
+from _bootstrap import PERSON_ID
 
 from misevent.app.services import PayrollService
 from misevent.domain.projections import Projections
@@ -47,7 +48,7 @@ def setup():
         last_name="ΠΑΠΑΔΟΠΟΥΛΟΣ", first_name="ΙΩΑΝΝΗΣ",
         father_name="Ν", mother_name="Μ", birth_date=date(1990, 5, 5),
         afm="111222336", amka="05059012343", ama="123456789",
-    )
+    **PERSON_ID)
     eid = svc.start_employment(pid, date(2024, 4, 8), monthly_gross=1500.0,
                                weekly_hours=40.0, weekly_pattern=FULL_WEEK)
     insure(svc, eid)
@@ -161,7 +162,7 @@ def test_part_time_efka_days():
         last_name="ΜΕΡΙΚΟΥ", first_name="ΕΛΕΝΗ",
         father_name="Ν", mother_name="Μ", birth_date=date(1992, 3, 3),
         afm="444555667", amka="03039211226", ama="456789012",
-    )
+    **PERSON_ID)
     part = {d: "09:00-13:00" for d in ("MON", "TUE", "WED", "THU", "FRI")}
     eid = svc.start_employment(pid, date(2024, 4, 8), monthly_gross=500.0,
                                weekly_hours=20.0, weekly_pattern=part)
@@ -203,7 +204,7 @@ def test_midmonth_termination_is_paid():
         last_name="ΠΑΠΑΔΟΠΟΥΛΟΣ", first_name="ΙΩΑΝΝΗΣ",
         father_name="Ν", mother_name="Μ", birth_date=date(1990, 5, 5),
         afm="111222336", amka="05059012343", ama="123456789",
-    )
+    **PERSON_ID)
     eid = svc.start_employment(pid, date(2024, 4, 8), monthly_gross=1500.0,
                                weekly_hours=40.0, weekly_pattern=FULL_WEEK)
     insure(svc, eid)
@@ -234,7 +235,7 @@ def test_leave_compensation_untaken_leave():
         last_name="ΠΑΠΑΔΟΠΟΥΛΟΣ", first_name="ΙΩΑΝΝΗΣ",
         father_name="Ν", mother_name="Μ", birth_date=date(1990, 5, 5),
         afm="111222336", amka="05059012343", ama="123456789",
-    )
+    **PERSON_ID)
     eid = svc.start_employment(pid, date(2024, 4, 8), monthly_gross=1500.0,
                                weekly_hours=40.0, weekly_pattern=FULL_WEEK)
     insure(svc, eid)
@@ -267,7 +268,7 @@ def test_leave_compensation_prorated_second_year():
         last_name="ΠΑΠΑΔΟΠΟΥΛΟΣ", first_name="ΙΩΑΝΝΗΣ",
         father_name="Ν", mother_name="Μ", birth_date=date(1990, 5, 5),
         afm="111222336", amka="05059012343", ama="123456789",
-    )
+    **PERSON_ID)
     eid = svc.start_employment(pid, date(2024, 4, 8), monthly_gross=1500.0,
                                weekly_hours=40.0, weekly_pattern=FULL_WEEK)
     insure(svc, eid)
@@ -302,7 +303,7 @@ def _svc_with_scheduler():
 def _person(svc, afm, amka, last="ΠΑΠΑΔΟΠΟΥΛΟΣ"):
     return svc.register_person(
         last_name=last, first_name="ΙΩΑΝΝΗΣ", father_name="Ν", mother_name="Μ",
-        birth_date=date(1985, 5, 5), afm=afm, amka=amka, ama=afm)
+        birth_date=date(1985, 5, 5), afm=afm, amka=amka, ama=afm, **PERSON_ID)
 
 
 def test_empty_month_skipped_in_chain():
@@ -375,7 +376,7 @@ def _leave_comp_case(hire, term, **kw):
         last_name="ΠΑΠΑΔΟΠΟΥΛΟΣ", first_name="ΙΩΑΝΝΗΣ",
         father_name="Ν", mother_name="Μ", birth_date=date(1960, 5, 5),
         afm="111222336", amka="05059012343", ama="123456789",
-    )
+    **PERSON_ID)
     kw.setdefault("weekly_pattern", FULL_WEEK)
     eid = svc.start_employment(pid, hire, monthly_gross=1500.0,
                                weekly_hours=40.0, **kw)
@@ -420,7 +421,7 @@ def test_leave_compensation_employer_fault():
         last_name="ΠΑΠΑΔΟΠΟΥΛΟΣ", first_name="ΙΩΑΝΝΗΣ",
         father_name="Ν", mother_name="Μ", birth_date=date(1960, 5, 5),
         afm="111222336", amka="05059012343", ama="123456789",
-    )
+    **PERSON_ID)
     eid = svc.start_employment(pid, date(2024, 4, 8), monthly_gross=1500.0,
                                weekly_hours=40.0, weekly_pattern=FULL_WEEK)
     insure(svc, eid)

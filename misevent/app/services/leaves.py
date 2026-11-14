@@ -19,6 +19,7 @@ from misevent.domain.events import (
     LeaveType,
     SicknessBenefitRecorded,
 )
+from misevent.domain.money import r2
 
 
 class LeavesMixin:
@@ -232,5 +233,5 @@ class LeavesMixin:
             raise ValueError("Αρνητικό ποσό επιδόματος")
         self.store.append(
             employee_id,
-            SicknessBenefitRecorded(employee_id, leave_id, round(amount, 2), reference),
+            SicknessBenefitRecorded(employee_id, leave_id, r2(amount), reference),
         )

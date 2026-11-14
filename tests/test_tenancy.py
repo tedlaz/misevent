@@ -15,6 +15,7 @@ def test_tenancy():
     from datetime import date
 
     import _bootstrap  # noqa: F401  # ρίζα project στο sys.path + cwd
+    from _bootstrap import PERSON_ID
 
     # Ο ΠΡΟΣΩΡΙΝΟΣ φάκελος δεδομένων στήνεται από το `_bootstrap`.
     from misevent.rules import config  # noqa: E402
@@ -38,7 +39,7 @@ def test_tenancy():
             birth_date=date(1990, 5, 5),
             afm=afm,
             amka=amka,
-        )
+        **PERSON_ID)
 
 
     reg = Registry()

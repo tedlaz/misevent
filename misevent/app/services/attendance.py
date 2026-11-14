@@ -78,6 +78,12 @@ class AttendanceMixin:
         return blind
 
     # ------------------------------------------------ ΨΗΦΙΑΚΗ ΚΑΡΤΑ ΕΡΓΑΣΙΑΣ
+    def card_policy(self) -> tuple[int, int]:
+        """(ανοχή, στρογγυλοποίηση) κάρτας σε λεπτά — ΠΟΛΙΤΙΚΗ ΤΗΣ ΕΤΑΙΡΕΙΑΣ
+        («Εταιρεία → Ρυθμίσεις»), όχι νομοθετική παράμετρος."""
+        m = self.proj.misc_settings
+        return int(m["card_tolerance_minutes"]), int(m["card_rounding_minutes"])
+
     def record_card_punch(self, employee_id: str, punch_date: date, time_text,
                           kind: str, source: str = "manual",
                           note: str = "", blind: bool = False) -> str:
@@ -241,7 +247,7 @@ class AttendanceMixin:
         return out
 
     def card_month_pending(self, emp, year: int, month: int) -> bool:
-        """Εμποδίζει η κάρτα τη μισθοδοσία του μήνα; Μόνο με «Διάφορα →
+        """Εμποδίζει η κάρτα τη μισθοδοσία του μήνα; Μόνο με «Εταιρεία → Ρυθμίσεις →
         card_required», όταν υπάρχουν εκκρεμότητες και ο έλεγχος δεν έχει
         ολοκληρωθεί (μήνας χωρίς καμία εκκρεμότητα είναι έτοιμος)."""
         return (
@@ -277,7 +283,7 @@ class AttendanceMixin:
         ]
 
     def check_card_period(self, year: int, month: int) -> dict:
-        """ΕΙΣΑΓΩΓΗ & ΕΛΕΓΧΟΣ ΚΑΡΤΑΣ ΠΕΡΙΟΔΟΥ (υποχρέωση CARD_IMPORT, «Διάφορα
+        """ΕΙΣΑΓΩΓΗ & ΕΛΕΓΧΟΣ ΚΑΡΤΑΣ ΠΕΡΙΟΔΟΥ (υποχρέωση CARD_IMPORT, «Εταιρεία → Ρυθμίσεις
         → digital_card»): απορρίπτεται όσο κάποιος εργαζόμενος έχει
         εκκρεμότητα που μπλοκάρει (`card_issues`: κανένα χτύπημα, χτύπημα σε
         άδεια) — διορθώνονται στο ΗΜΕΡΟΛΟΓΙΟ. Οι ημέρες χωρίς χτύπημα και τα
@@ -302,6 +308,7 @@ class AttendanceMixin:
         δεύτερη σύγκριση. Read-only."""
         leave = set(emp.leave_days_in_month(year, month))
         days = []
+        tol, step = self.card_policy()
         for n in range(1, monthrange(year, month)[1] + 1):
             d = date(year, month, n)
             declared, actual = emp.declared_on(d), emp.actual_shifts(d)
@@ -312,12 +319,10 @@ class AttendanceMixin:
                 plan = constraints.day_schedule_minutes(physical)
             except ValueError:
                 plan = 0
-            rules = config.work_hour_rules_for(d)
             # η κάρτα ΣΤΡΟΓΓΥΛΕΜΕΝΗ (`card_rounding_minutes`) — όπως πληρώνεται
             exact = sum(_shift_minutes(t) for t in actual)
-            card = cp.round_total(exact, rules.card_rounding_minutes)
-            source = emp.pay_source(d, rules.card_tolerance_minutes,
-                                    rules.card_rounding_minutes)
+            card = cp.round_total(exact, step)
+            source = emp.pay_source(d, tol, step)
             row = {"day": d, "declared": declared, "card": " + ".join(actual),
                    "plan_min": plan, "card_min": card, "card_exact": exact,
                    "diff": card - plan if actual else 0,
@@ -330,7 +335,6 @@ class AttendanceMixin:
             # του day_matches (ανοχή → ευέλικτη → και τα δύο → στρογγυλοποίηση)
             elif actual and cp.schedule_text(actual) != physical:
                 act, flex = cp.schedule_text(actual), int(emp.flexible_arrival_minutes or 0)
-                tol = rules.card_tolerance_minutes
                 row["rule"] = (
                     "ανοχή" if cp.day_matches(physical, act, 0, tol)
                     else "ευέλικτη προσέλευση" if cp.day_matches(physical, act, flex)
@@ -348,7 +352,7 @@ class AttendanceMixin:
             "plan_min": sum(r["plan_min"] for r in days),
             "card_min": sum(r["card_min"] or r["plan_min"] for r in days),
             "basis": basis, "retro": retro,
-            "step": config.work_hour_rules_for(first).card_rounding_minutes,
+            "step": step,
             "auto_card": self._major_by_card(first),  # τι θα έκανε το «αυτόματο»
             "system": self.proj.schedule_system_on(first),
             "retro_needed": self.proj.schedule_system_on(first) == "retro" and bool(diff),

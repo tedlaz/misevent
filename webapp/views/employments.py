@@ -1309,7 +1309,7 @@ def calendar(employment_id):
     hols = {}
     for y in {start.year, d.year}:
         hols.update(holiday_names(y))
-    # έλεγχος αρτιότητας κάρτας του μήνα («Διάφορα → card_required»)
+    # έλεγχος αρτιότητας κάρτας του μήνα («Εταιρεία → Ρυθμίσεις → card_required»)
     card = None
     if proj.misc_settings.get("card_required"):
         issues = svc.card_issues(e, first.year, first.month)

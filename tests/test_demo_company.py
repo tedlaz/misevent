@@ -39,6 +39,13 @@ def test_demo_company(fresh_system):
              if not o.fulfilled and o.period_month
              and (o.period_year, o.period_month) < (today.year, today.month)]
     assert not stuck, stuck
+    # Ψηφιακή κάρτα ενεργή: η «Εισαγωγή κάρτας» κάθε κλειστού μήνα έγινε.
+    assert proj.misc_settings.get("digital_card", True)
+    cards = {(o.period_year, o.period_month) for o in proj.obligations.values()
+             if o.obligation_type == "CARD_IMPORT" and o.fulfilled}
+    assert cards >= closed
+    # Πλήρη πρόσωπα: η πρόσληψη τα απαιτεί.
+    assert all(e.person.sex and e.person.identity_number for e in emps)
     # Ο μισθωτός πλήρους παίρνει τον βασικό της περιόδου.
     for p in proj.payrolls:
         e = proj.employments[p.employee_id]

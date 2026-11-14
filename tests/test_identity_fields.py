@@ -68,3 +68,19 @@ def test_correction_clears_optional_fields_but_absent_means_unchanged():
     svc.correct_person(pid, ama="001234567")
     svc.correct_person(pid, ama=None, children=1)
     assert proj.persons[pid].ama == "001234567"
+
+
+def test_hire_requires_sex_nationality_and_identity():
+    """Πρόσωπο χωρίς φύλο/υπηκοότητα/ταυτότητα καταχωρείται, αλλά ΔΕΝ προσλαμβάνεται."""
+    store = Database().store("test")
+    proj = Projections()
+    store.subscribe(proj.handle)
+    svc = PayrollService(store, proj)
+    pid = svc.register_person(
+        last_name="ΚΕΝΟΣ", first_name="ΝΙΚΟΣ", father_name="ΙΩΑΝΝΗΣ",
+        mother_name="ΕΛΕΝΗ", birth_date=date(1990, 5, 5), afm="111222336",
+        amka="05059012343")
+    with pytest.raises(ValueError, match="Φύλο, Υπηκοότητα, Τύπος ταυτότητας"):
+        svc.start_employment(pid, date(2026, 1, 5), monthly_gross=1000.0,
+                             weekly_pattern={d: "09:00-17:00"
+                                             for d in ("MON", "TUE", "WED", "THU", "FRI")})

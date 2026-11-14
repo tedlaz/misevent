@@ -38,6 +38,8 @@ from decimal import ROUND_HALF_UP, Decimal
 from io import BytesIO
 from typing import ClassVar
 
+from misevent.domain.money import r2
+
 CRLF = "\r\n"
 ENCODING = "cp1253"  # Ελληνικά Windows-1253 (τα κεφαλαία ελληνικά δεν είναι ASCII)
 FILE_NAME = "CSL01"  # Το όνομα που περιμένει ο e-ΕΦΚΑ/ΤΕΚΑ ΜΕΣΑ στο ZIP
@@ -214,7 +216,7 @@ class SubsidyRow:
 
     @property
     def total(self) -> float:
-        return round(self.amount_employee + self.amount_employer, 2)
+        return r2(self.amount_employee + self.amount_employer)
 
 
 # ------------------------------------------------------------- Builder

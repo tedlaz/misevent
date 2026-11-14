@@ -8,6 +8,12 @@
   4. ημερομίσθιος μερικής (20ω, 4ωρο)           — ΗΜΕΡΗΣΙΟ πρόγραμμα
   5. μισθωτός πλήρους, κάτω των 25
 
+Πλήρη στοιχεία προσώπων (φύλο, ταυτότητα, διεύθυνση…) — η πρόσληψη τα
+απαιτεί (`constraints.check_person_complete`). ΨΗΦΙΑΚΗ ΚΑΡΤΑ ενεργή (η
+προεπιλογή): κάθε ημέρα προγράμματος ως χθες έχει χτυπήματα εισόδου/εξόδου
+στις ώρες του προγράμματος, οπότε η «Εισαγωγή κάρτας περιόδου» κλείνει
+κανονικά πριν από την έγκριση παρουσιών.
+
 Όλα γράφονται με τις ΙΔΙΕΣ εντολές του UI (κανένα event «με το χέρι»), και η
 αλυσίδα υποχρεώσεων (παρουσίες → μισθοδοσία → ΑΠΔ/ΦΜΥ → πληρωμές, Δώρα,
 προσαρμογή ΓΣΣΕ…) τρέχει όπως θα την έτρεχε ο χρήστης, για κάθε περίοδο πριν
@@ -19,7 +25,8 @@
 from datetime import date, timedelta
 
 from misevent.rules import config
-from misevent.rules.constraints import afm_checksum_ok, amka_checksum_ok
+from misevent.rules.calendar_gr import public_holidays
+from misevent.rules.constraints import GREEK_ID_TYPE, afm_checksum_ok, amka_checksum_ok
 
 from . import clock
 from .actions import trigger
@@ -57,7 +64,6 @@ def seed_demo_company() -> str:
     mw = config.minimum_wage_for(start)
 
     svc.confirm_default_parameters()  # κοινές παράμετροι + μητρώο ΚΠΚ, αν λείπουν
-    svc.set_misc_settings(digital_card=False)  # το demo δεν έχει αρχείο κάρτας
     svc.register_company(
         ame="1234567890", afm=_afm("99988877"), legal_name="DEMO ΕΜΠΟΡΙΚΗ ΕΠΕ",
         local_office_code="1150706000",
@@ -70,34 +76,44 @@ def seed_demo_company() -> str:
     svc.define_specialty("ΕΡΓΑΤΗΣ", _packages("411300"),
                          "932", "ΑΝΕΙΔΙΚΕΥΤΟΙ ΕΡΓΑΤΕΣ ΜΕΤΑΠΟΙΗΤΙΚΩΝ ΒΙΟΜΗΧΑΝΙΩΝ")
 
-    # (επώνυμο, όνομα, πατρώνυμο, γέννηση, ειδικότητα, όροι σύμβασης)
+    # (επώνυμο, όνομα, πατρώνυμο, φύλο, έγγαμος, γέννηση, ειδικότητα, όροι)
     staff = [
-        ("ΑΛΕΞΙΟΥ", "ΑΝΝΑ", "ΓΕΩΡΓΙΟΣ", date(1985, 3, 14), "ΥΠΑΛΛΗΛΟΣ ΓΡΑΦΕΙΟΥ",
-         dict(monthly_gross=mw.monthly, weekly_pattern=FULL)),
-        ("ΒΑΣΙΛΕΙΟΥ", "ΠΕΤΡΟΣ", "ΝΙΚΟΛΑΟΣ", date(1979, 6, 2), "ΕΡΓΑΤΗΣ",
+        ("ΑΛΕΞΙΟΥ", "ΑΝΝΑ", "ΓΕΩΡΓΙΟΣ", "1", True, date(1985, 3, 14),
+         "ΥΠΑΛΛΗΛΟΣ ΓΡΑΦΕΙΟΥ", dict(monthly_gross=mw.monthly, weekly_pattern=FULL)),
+        ("ΒΑΣΙΛΕΙΟΥ", "ΠΕΤΡΟΣ", "ΝΙΚΟΛΑΟΣ", "0", True, date(1979, 6, 2), "ΕΡΓΑΤΗΣ",
          dict(pay_type="daily", daily_wage=mw.daily, weekly_pattern=FULL,
               schedule_mode="variable", schedule_weeks=1)),
-        ("ΓΕΩΡΓΙΑΔΟΥ", "ΕΛΕΝΗ", "ΙΩΑΝΝΗΣ", date(1992, 11, 23), "ΥΠΑΛΛΗΛΟΣ ΓΡΑΦΕΙΟΥ",
+        ("ΓΕΩΡΓΙΑΔΟΥ", "ΕΛΕΝΗ", "ΙΩΑΝΝΗΣ", "1", False, date(1992, 11, 23),
+         "ΥΠΑΛΛΗΛΟΣ ΓΡΑΦΕΙΟΥ",
          dict(monthly_gross=round(mw.monthly / 2, 2), weekly_hours=20.0,
               weekly_pattern=PART)),
-        ("ΔΗΜΟΥ", "ΣΤΑΥΡΟΣ", "ΑΘΑΝΑΣΙΟΣ", date(1988, 8, 9), "ΕΡΓΑΤΗΣ",
+        ("ΔΗΜΟΥ", "ΣΤΑΥΡΟΣ", "ΑΘΑΝΑΣΙΟΣ", "0", False, date(1988, 8, 9), "ΕΡΓΑΤΗΣ",
          dict(pay_type="daily", daily_wage=mw.daily, weekly_hours=20.0,
               weekly_pattern=PART, schedule_mode="variable", schedule_weeks=1)),
-        ("ΕΥΑΓΓΕΛΟΥ", "ΜΑΡΙΟΣ", "ΚΩΝΣΤΑΝΤΙΝΟΣ", date(year - 22, 5, 17),
+        ("ΕΥΑΓΓΕΛΟΥ", "ΜΑΡΙΟΣ", "ΚΩΝΣΤΑΝΤΙΝΟΣ", "0", False, date(year - 22, 5, 17),
          "ΥΠΑΛΛΗΛΟΣ ΓΡΑΦΕΙΟΥ", dict(monthly_gross=mw.monthly, weekly_pattern=FULL)),
     ]
     # ΗΜΕΡΗΣΙΟ πρόγραμμα: σχεδιάζεται ως το τέλος του τρέχοντος μήνα
     # (κενό ωράριο = ρεπό) και δηλώνεται στο ΕΡΓΑΝΗ όπως από το «Πρόγραμμα».
     month_end = date(year + today.month // 12, today.month % 12 + 1, 1) - timedelta(1)
     days = [start + timedelta(n) for n in range((month_end - start).days + 1)]
-    for i, (last, first, father, born, spec, terms) in enumerate(staff, 1):
+    eids = []
+    for i, (last, first, father, sex, married, born, spec, terms) in enumerate(staff, 1):
         pid = svc.register_person(
             last_name=last, first_name=first, father_name=father, mother_name="ΜΑΡΙΑ",
             birth_date=born, afm=_afm(f"1{i:02d}22233"), amka=_amka(born, f"{i:04d}"),
-            ama=f"10000000{i}",
+            ama=f"10000000{i}", sex=sex, marital_status="1" if married else "0",
+            nationality_code="048", identity_type=GREEK_ID_TYPE,
+            identity_number=f"ΑΚ{i:06d}", identity_issuer="ΤΑ ΘΕΣΣΑΛΟΝΙΚΗΣ",
+            identity_issue_date=date(2021, 3, i), education_level="4",
+            birth_place="ΘΕΣΣΑΛΟΝΙΚΗ", address=f"ΕΓΝΑΤΙΑ {10 * i}",
+            postal_code="54625", municipality="ΘΕΣΣΑΛΟΝΙΚΗΣ",
+            prefecture="ΘΕΣΣΑΛΟΝΙΚΗΣ", phone=f"69000000{i:02d}",
+            children=1 if married else 0,
         )
         eid = svc.start_employment(pid, hire, payroll_from=start,
                                    ergani_hire_done=True, **terms)
+        eids.append(eid)
         svc.assign_specialty(eid, spec, auxiliary_scheme="efka")
         if terms.get("schedule_mode") == "variable":
             pattern = terms["weekly_pattern"]
@@ -109,8 +125,24 @@ def seed_demo_company() -> str:
         else:
             svc.submit_hire_wto(eid)
 
+    _punch_card(eids, start, today)
     done = _run_chain(today)
     return f"Δημιουργήθηκε η DEMO: 5 εργαζόμενοι, {done} υποχρεώσεις ολοκληρώθηκαν"
+
+
+def _punch_card(eids, start: date, today: date) -> None:
+    """Χτυπήματα ψηφιακής κάρτας σε κάθε ημέρα προγράμματος ως χθες, στις
+    ώρες του προγράμματος (καμία απόκλιση: ο μήνας πληρώνεται με αυτό).
+    Όχι στις αργίες: εργασία σε αργία = προσαύξηση, και το demo δεν δουλεύει."""
+    holidays = public_holidays(start.year) | public_holidays(today.year)
+    for eid in eids:
+        emp = proj.employments[eid]
+        y, m = start.year, start.month
+        while (y, m) <= (today.year, today.month):
+            for d in emp.scheduled_days_in_month(y, m):
+                if d < today and d not in holidays:
+                    svc.record_attendance(eid, d, [emp.day_schedule(d)], source="card")
+            y, m = (y + 1, 1) if m == 12 else (y, m + 1)
 
 
 def _run_chain(today: date) -> int:

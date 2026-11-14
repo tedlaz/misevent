@@ -2,6 +2,7 @@ from datetime import date
 from types import SimpleNamespace
 
 import pytest
+from _bootstrap import PERSON_ID
 from flask import render_template
 
 from misevent.app.services import PayrollService
@@ -23,7 +24,7 @@ def _service():
         last_name="ΔΟΚΙΜΗ", first_name="ΜΑΡΙΑ", father_name="ΙΩΑΝΝΗΣ",
         mother_name="ΕΛΕΝΗ", birth_date=date(1990, 5, 5),
         afm="111222336", amka="05059012343",
-    )
+    **PERSON_ID)
     return service, projection, person_id
 
 

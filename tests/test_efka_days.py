@@ -13,6 +13,7 @@ def test_efka_days():
     from datetime import date
 
     import _bootstrap  # noqa: F401  # ρίζα project στο sys.path + cwd
+    from _bootstrap import PERSON_ID
 
     from misevent.app.services import PayrollService
     from misevent.domain.projections import Projections
@@ -74,7 +75,7 @@ def test_efka_days():
             last_name=f"ΔΟΚΙΜΗ{i}", first_name="ΝΙΚΟΣ", father_name="ΓΙΩΡΓΟΣ",
             mother_name="ΜΑΡΙΑ", birth_date=date(1990, 1, 1),
             afm=_afm(i), amka=_amka(i), ama=f"1111111{i:02d}",
-        )
+        **PERSON_ID)
         eid = svc.start_employment(
             pid, hire_date=hire_date, pay_type="monthly", monthly_gross=gross,
             weekly_hours=weekly_hours, weekly_pattern=pattern or WEEK5,

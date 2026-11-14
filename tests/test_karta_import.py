@@ -8,6 +8,7 @@ Tests εισαγωγής παρουσιών από αρχείο «Κάρτας �
 from datetime import date
 
 import _bootstrap  # noqa: F401  # ρίζα project στο sys.path + cwd
+from _bootstrap import PERSON_ID
 
 from misevent.app.services import PayrollService
 from misevent.domain.projections import Projections
@@ -59,7 +60,7 @@ def _svc_with_person(afm):
     pid = svc.register_person(
         last_name="ΜΕΜΗ", first_name="ΒΑΣΙΛ", father_name="Α", mother_name="Β",
         birth_date=date(1990, 1, 1), afm=afm, amka="01019012341", ama="123456789",
-    )
+    **PERSON_ID)
     eid = svc.start_employment(pid, date(2026, 1, 5), monthly_gross=1400.0,
                                weekly_pattern=FULL_WEEK)
     svc.assign_insurance_profile(

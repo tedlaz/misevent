@@ -45,8 +45,7 @@ def _month(tol, system="retro"):
     svc, proj, eid = setup()  # πρόγραμμα 09-17 Δε–Πα
     if system == "retro":
         svc.declare_schedule_system(date(2026, 2, 1), "retro", date(2026, 1, 20))
-    svc.define_parameters("work_hours", date(2026, 1, 1), night_start=22,
-                          night_end=6, card_tolerance_minutes=tol)
+    svc.set_misc_settings(card_tolerance_minutes=tol, card_rounding_minutes=0)  # εταιρεία
     emp = proj.employments[eid]
     emp.flexible_arrival_minutes = "0"
     for d in FEB:
