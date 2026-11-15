@@ -649,10 +649,17 @@ class PayrollMixin:
         # Ημερομίσθιος: αμοιβή ημέρας × ημέρες ΕΡΓΑΣΙΑΣ — οι ημέρες ΕΦΚΑ είναι
         # ανηγμένες σε εξαήμερο (`pe.daily_insurance_days`), όχι ημέρες αμοιβής.
         pay_days = int(line.get("worked", ins_days))
+        paid_leave = sick_value = 0
         if emp.pay_type == "daily":
+            # + ημέρες άδειας με αποδοχές (κανονική κ.λπ.) στην αμοιβή ημέρας,
+            # + αξία ημερών ασθενείας σε ημερομίσθιο ΕΞΑΗΜΕΡΟΥ — από την οποία
+            # αφαιρείται μετά η περικοπή (`sick`), όπως στον μισθωτό.
+            paid_leave = len(emp.paid_leave_days_in_month(year, month))
+            s_half, s_full, _ = self.sick_line_totals(emp, line, year, month)
+            sick_value = pe.r2(self._sick_daily_rate(emp) * (s_half + s_full))
             res = pe.calc_monthly_daily(
                 day_pay,
-                pay_days,
+                pay_days + paid_leave,
                 emp.children_on(period_end),
                 period_end,
                 sick=sick,
@@ -660,6 +667,7 @@ class PayrollMixin:
                 rates=rates,
                 birth_date=emp.birth_date,
                 exempt=exempt,
+                sick_days_value=sick_value,
             )
         else:
             res = pe.calc_monthly(
@@ -685,6 +693,8 @@ class PayrollMixin:
             # αμοιβή ημέρας ημερομισθίου = ωρομίσθιο × ώρες ημέρας
             "day_pay": day_pay,
             "pay_days": pay_days,
+            "paid_leave_days": paid_leave,  # ημερομίσθιος: άδεια με αποδοχές
+            "sick_days_value": sick_value,  # ημερομίσθιος: ημέρες ασθενείας × ημερομίσθιο
             "day_hours": round(emp.weekly_hours / emp.scheduled_days_per_week(), 2),
             "hourly_rate": hourly,
             "efka_days": ins_days,

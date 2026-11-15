@@ -133,7 +133,7 @@
               υπόλοιπο <b>{{ a.leave_entitlement - a.leave_taken }}</b></td><td></td></tr>
           <tr><td>🤒 Ασθένεια (πληρωμένες)</td>
             <td><b>{{ a.sick_used }}</b> από {{ a.sick_limit }} ημέρες ·
-              {% if a.sick_since %}παράθυρο 12 μηνών από {{ a.sick_since|date_gr }}
+              {% if a.sick_since %}εργασιακό έτος από {{ a.sick_since|date_gr }}
               {% else %}καμία ασθένεια τους τελευταίους 12 μήνες{% endif %}</td><td></td></tr>
           {% for b in a.bonuses %}
           <tr><td>🎁 {{ b.label }}</td>

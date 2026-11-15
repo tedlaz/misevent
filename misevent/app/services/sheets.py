@@ -7,6 +7,7 @@
 μεταξύ mixins, θα φτιάξεις κύκλους.
 """
 
+from calendar import monthrange
 from datetime import date, timedelta
 
 import misevent.domain.payroll_engine as pe
@@ -65,11 +66,13 @@ class SheetsMixin:
             hour_stats = self.hours_analysis(year, month)
         planned = emp.scheduled_days_in_month(year, month)
         # Ασθένεια: οι ημέρες πάνω από το ετήσιο όριο είναι ΑΝΕΥ ΑΠΟΔΟΧΩΝ,
-        # άρα προσμετρώνται στις unpaid (κόβουν και ημέρες ασφάλισης).
+        # άρα προσμετρώνται στις unpaid (κόβουν και ημέρες ασφάλισης) — σε
+        # ημέρες ΠΡΟΓΡΑΜΜΑΤΟΣ, όπως όλο το συγκεντρωτικό (`over_scheduled`).
         sick = emp.sick_days_in_month(year, month)
         unpaid_leave = len(emp.leave_days_in_month(year, month, LeaveType.UNPAID))
-        unpaid = unpaid_leave + sick["over"]
-        on_leave = len(emp.leave_days_in_month(year, month)) - unpaid_leave - sick["over"]
+        unpaid = unpaid_leave + sick["over_scheduled"]
+        on_leave = (len(emp.leave_days_in_month(year, month))
+                    - unpaid_leave - sick["over_scheduled"])
 
         # Ημέρα προγράμματος ΧΩΡΙΣ χτύπημα και χωρίς άδεια ΜΕΤΡΑ ΜΕ ΤΟ
         # ΠΡΟΓΡΑΜΜΑ (`emp.pay_source`): τηλεεργασία (η κάρτα καταγράφει μόνο
@@ -291,12 +294,21 @@ class SheetsMixin:
         """Ημερομηνίες εργασίας ημερομισθίου για τις ημέρες ασφάλισης: του μήνα
         (παρουσίες + ημέρες προγράμματος χωρίς χτύπημα), και οι εργάσιμες του
         προηγούμενου μήνα στην εβδομάδα του 1ου Σαββάτου — κατά το πρόγραμμα,
-        αφού ανήκουν σε άλλη (ή καμία) περίοδο του συστήματος."""
+        αφού ανήκουν σε άλλη (ή καμία) περίοδο του συστήματος.
+
+        Μετράνε ΚΑΙ οι ΠΛΗΡΩΜΕΝΕΣ ημέρες άδειας (κανονική κ.λπ.) και
+        ασθενείας (μισές/κανονικές) — είναι ασφαλισμένες ημέρες με αποδοχές.
+        Μόνο όσες είναι ημέρες ΠΡΟΓΡΑΜΜΑΤΟΣ: το Σάββατο του πενθημέρου το
+        δίνει ήδη η προσαύξηση «+1 ανά εβδομάδα» (`pe.daily_insurance_days`)."""
         if emp.pay_type != "daily":
             return []
         first = date(year, month, 1)
         dates = {d for d in emp.attendance if (d.year, d.month) == (year, month)}
         dates |= set(unpunched)
+        dates |= set(emp.paid_leave_days_in_month(year, month))
+        dates |= {d for d, (cls, _) in emp.sick_day_map().items()
+                  if (d.year, d.month) == (year, month) and cls != "over"
+                  and emp.is_scheduled(d)}
         if not dates:
             return []
         # ημέρες Δευ–Παρ του προηγούμενου μήνα στην εβδομάδα του 1ου Σαββάτου
@@ -385,10 +397,14 @@ class SheetsMixin:
                 raise ValueError(f"Αρνητικές ώρες προσαυξήσεων για {d['name']}")
             if min(worked, unpaid, leave, efka, s_half, s_full, s_ben) < 0:
                 raise ValueError(f"Αρνητικές ημέρες για {d['name']}")
-            if s_half + s_full > leave:
+            # Οι ημέρες ασθενείας μετριούνται σε ΕΞΑΗΜΕΡΟ (Δευ–Σαβ), όχι σε
+            # ημέρες προγράμματος όπως η `leave` — άρα όριο οι Δευ–Σαβ του μήνα.
+            six_day = sum(1 for x in range(1, monthrange(year, month)[1] + 1)
+                          if date(year, month, x).weekday() != 6)
+            if s_half + s_full > six_day:
                 raise ValueError(
                     f"Ημέρες ασθενείας ({s_half + s_full}) πάνω από τις ημέρες "
-                    f"αδείας ({leave}) για {d['name']}"
+                    f"Δευτέρας–Σαββάτου του μήνα ({six_day}) για {d['name']}"
                 )
             if worked > 31 or worked + unpaid + leave > 31:
                 raise ValueError(f"Πάνω από 31 ημέρες για {d['name']}")

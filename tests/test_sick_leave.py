@@ -1,19 +1,20 @@
 """
-Tests άδειας ασθενείας: τριήμερο εργοδότη, όριο ανά κυλιόμενο έτος,
-αφαίρεση επιδόματος ΕΦΚΑ.
+Tests άδειας ασθενείας (ΑΚ 657-658, ΑΝ 178/67 — ARCH_REF §5.9).
 
-Ο κανόνας:
-  - Οι πρώτες 3 ημέρες ασθενείας κάθε κυλιόμενου έτους πληρώνονται ΜΙΣΕΣ
-    από τον εργοδότη (τριήμερο). Δίνεται ΜΙΑ φορά — δεν ξαναρχίζει σε
-    επόμενη ασθένεια μέσα στο ίδιο έτος.
-  - Οι υπόλοιπες, μέχρι το όριο, πληρώνονται κανονικά μείον το επίδομα ΕΦΚΑ.
-  - Το όριο είναι 13 ημέρες (προϋπηρεσία < 1 έτος) ή 26 (>= 1 έτος).
-  - Οι ημέρες πάνω από το όριο ΔΕΝ πληρώνονται.
+Ο κανόνας, ανά ΕΠΕΙΣΟΔΙΟ ασθένειας μέσα στο ΕΡΓΑΣΙΑΚΟ έτος (από την επέτειο
+πρόσληψης):
+  - Σύντομη (<= 3 ημέρες): όλες ΜΙΣΟ ημερομίσθιο, ΚΑΘΕ φορά που συμβαίνει.
+  - 1η μακρά του έτους: 3 μισές, μετά κανονικά μείον επίδομα ΕΦΚΑ.
+  - Επόμενη μακρά: κανονικά μείον επίδομα από την 1η ημέρα.
+  - Όριο 13 ημέρες (προϋπηρεσία < 1 έτος) ή 26 (>= 1 έτος)· πάνω από αυτό
+    άνευ αποδοχών. Πριν από 10 ημέρες εργασίας: τίποτα από τον εργοδότη.
+  - Οι ημέρες μετριούνται σε ΕΞΑΗΜΕΡΟ: Δευτέρα-Σάββατο, χωρίς Κυριακές και
+    αργίες, ανεξάρτητα από το πρόγραμμα.
 
 Εκτέλεση: python test_sick_leave.py
 """
 
-from datetime import date, timedelta
+from datetime import date
 
 import _bootstrap  # noqa: F401  # ρίζα project στο sys.path + cwd
 from _bootstrap import PERSON_ID
@@ -92,8 +93,8 @@ def classes(emp):
 def test_short_sickness_is_all_half():
     """Ασθένεια <= 3 ημερών: όλες οι ημέρες μισό ημερομίσθιο."""
     svc, proj, eid = setup()
-    # Δευ 3/3/2025 - Τετ 5/3/2025: 3 εργάσιμες
-    svc.record_leave(eid, LeaveType.SICK, date(2025, 3, 3), date(2025, 3, 5))
+    # Δευ 10/3/2025 - Τετ 12/3/2025: 3 εργάσιμες
+    svc.record_leave(eid, LeaveType.SICK, date(2025, 3, 10), date(2025, 3, 12))
     assert classes(proj.employments[eid]) == ["half", "half", "half"]
     print("OK ασθένεια <= 3 ημερών: όλες μισές")
 
@@ -101,52 +102,96 @@ def test_short_sickness_is_all_half():
 def test_long_sickness_three_half_then_full():
     """Ασθένεια > 3 ημερών: 3 μισές, οι υπόλοιπες κανονικά."""
     svc, proj, eid = setup()
-    # Δευ 3/3 - Παρ 14/3/2025: 10 εργάσιμες (2 εβδομάδες)
-    svc.record_leave(eid, LeaveType.SICK, date(2025, 3, 3), date(2025, 3, 14))
+    # Τρι 4/3 - Παρ 14/3/2025 (μετά την Καθαρά Δευτέρα): 10 ημέρες εξαημέρου
+    svc.record_leave(eid, LeaveType.SICK, date(2025, 3, 4), date(2025, 3, 14))
     assert classes(proj.employments[eid]) == ["half"] * 3 + ["full"] * 7
     print("OK ασθένεια > 3 ημερών: 3 μισές + υπόλοιπες κανονικά")
 
 
-def test_weekend_days_do_not_count():
-    """Ημέρες που δεν προβλέπει το πρόγραμμα δεν κοστίζουν ούτε στο όριο."""
+def test_six_day_basis_saturday_counts_sunday_not():
+    """ΕΞΑΗΜΕΡΟ: το Σάββατο μετράει ακόμη κι αν το πρόγραμμα είναι πενθήμερο·
+    η Κυριακή όχι."""
     svc, proj, eid = setup()
-    # Σαβ 8/3 - Κυρ 9/3/2025: κανένα ρεπό δεν μετράει
+    # Σαβ 8/3 - Κυρ 9/3/2025
     svc.record_leave(eid, LeaveType.SICK, date(2025, 3, 8), date(2025, 3, 9))
-    assert classes(proj.employments[eid]) == []
-    print("OK το σαββατοκύριακο δεν μετράει")
+    assert sorted(proj.employments[eid].sick_day_map()) == [date(2025, 3, 8)]
+    print("OK εξαήμερο: Σάββατο ναι, Κυριακή όχι")
 
 
-def test_triimero_not_repeated_within_year():
-    """2η ασθένεια μέσα στο ΙΔΙΟ κυλιόμενο έτος: το τριήμερο ΔΕΝ ξαναρχίζει."""
+def test_public_holiday_does_not_count():
+    """Ασθένεια σε αργία: η αργία εξαιρείται όπως η Κυριακή."""
     svc, proj, eid = setup()
+    # Δευ 3/3/2025 = Καθαρά Δευτέρα -> μετράνε μόνο Τρι 4/3, Τετ 5/3
     svc.record_leave(eid, LeaveType.SICK, date(2025, 3, 3), date(2025, 3, 5))
-    svc.record_leave(eid, LeaveType.SICK, date(2025, 6, 2), date(2025, 6, 4))
-    # 1η: 3 μισές (εξαντλεί το τριήμερο). 2η: όλες κανονικά.
-    assert classes(proj.employments[eid]) == ["half"] * 3 + ["full"] * 3
-    print("OK το τριήμερο δεν επαναλαμβάνεται μέσα στο έτος")
+    assert sorted(proj.employments[eid].sick_day_map()) == [
+        date(2025, 3, 4), date(2025, 3, 5)]
+    print("OK η αργία δεν μετράει")
 
 
-def test_new_window_restores_triimero():
-    """Ασθένεια μετά από >365 ημέρες: νέο παράθυρο, νέο τριήμερο."""
+def test_short_sickness_is_half_every_time():
+    """Σύντομη ασθένεια (<= 3 ημέρες): μισό ημερομίσθιο ΚΑΘΕ φορά — δεν
+    «εξαντλείται» το τριήμερο μέσα στο έτος."""
     svc, proj, eid = setup()
-    svc.record_leave(eid, LeaveType.SICK, date(2025, 3, 3), date(2025, 3, 5))
-    # 366 ημέρες μετά την πρώτη ημέρα ασθενείας -> νέο κυλιόμενο έτος
-    later = date(2025, 3, 3) + timedelta(days=366)  # Πέμ 4/3/2026
-    svc.record_leave(eid, LeaveType.SICK, later, later + timedelta(days=1))
-    assert classes(proj.employments[eid]) == ["half"] * 3 + ["half"] * 2
-    print("OK νέο κυλιόμενο έτος ξαναδίνει το τριήμερο")
+    svc.record_leave(eid, LeaveType.SICK, date(2025, 3, 10), date(2025, 3, 12))
+    svc.record_leave(eid, LeaveType.SICK, date(2025, 6, 3), date(2025, 6, 5))
+    svc.record_leave(eid, LeaveType.SICK, date(2025, 9, 16), date(2025, 9, 17))
+    assert classes(proj.employments[eid]) == ["half"] * 8
+    print("OK σύντομες ασθένειες: μισό ημερομίσθιο κάθε φορά")
+
+
+def test_second_long_sickness_is_full_from_day_one():
+    """2η ΜΑΚΡΑ ασθένεια στο ίδιο εργασιακό έτος: κανονικά μείον επίδομα από
+    την 1η ημέρα. Η σύντομη ΠΡΙΝ από αυτές δεν «τρώει» το τριήμερο."""
+    svc, proj, eid = setup()  # πρόσληψη 8/4/2024 -> έτος 8/4/2025-7/4/2026
+    svc.record_leave(eid, LeaveType.SICK, date(2025, 5, 13), date(2025, 5, 14))  # σύντομη
+    svc.record_leave(eid, LeaveType.SICK, date(2025, 6, 16), date(2025, 6, 20))  # 1η μακρά
+    svc.record_leave(eid, LeaveType.SICK, date(2025, 10, 6), date(2025, 10, 9))  # 2η μακρά
+    assert classes(proj.employments[eid]) == (
+        ["half"] * 2 + ["half"] * 3 + ["full"] * 2 + ["full"] * 4)
+    print("OK 2η μακρά: κανονικά από την 1η ημέρα")
+
+
+def test_sickness_across_sunday_is_one_episode():
+    """Πέμ-Σαβ + Δευ-Τρι (δύο άδειες, Κυριακή ανάμεσα) = ΜΙΑ ασθένεια 5 ημερών."""
+    svc, proj, eid = setup()
+    svc.record_leave(eid, LeaveType.SICK, date(2025, 5, 15), date(2025, 5, 17))
+    svc.record_leave(eid, LeaveType.SICK, date(2025, 5, 19), date(2025, 5, 20))
+    assert classes(proj.employments[eid]) == ["half"] * 3 + ["full"] * 2
+    print("OK συνεχόμενες άδειες = ένα επεισόδιο")
+
+
+def test_work_year_resets_at_hire_anniversary():
+    """Το έτος είναι ΕΡΓΑΣΙΑΚΟ (επέτειος πρόσληψης 8/4): μακρά ασθένεια πριν
+    και μετά την επέτειο -> και οι δύο ξεκινούν με τριήμερο."""
+    svc, proj, eid = setup()
+    svc.record_leave(eid, LeaveType.SICK, date(2025, 3, 17), date(2025, 3, 21))
+    svc.record_leave(eid, LeaveType.SICK, date(2025, 4, 22), date(2025, 4, 25))
+    assert classes(proj.employments[eid]) == (
+        ["half"] * 3 + ["full"] * 2 + ["half"] * 3 + ["full"])
+    print("OK νέο εργασιακό έτος -> νέο τριήμερο")
+
+
+def test_no_pay_before_ten_working_days():
+    """ΑΚ 657: ασθένεια πριν από 10 ημέρες εργασίας -> άνευ αποδοχών."""
+    svc, proj, eid = setup(hire=date(2025, 9, 1))
+    svc.record_leave(eid, LeaveType.SICK, date(2025, 9, 8), date(2025, 9, 9))
+    assert classes(proj.employments[eid]) == ["over", "over"]
+    # μετά τις 10 ημέρες εργασίας πληρώνεται κανονικά
+    svc.record_leave(eid, LeaveType.SICK, date(2025, 9, 22), date(2025, 9, 23))
+    assert classes(proj.employments[eid])[2:] == ["half", "half"]
+    print("OK πριν από 10 ημέρες εργασίας: τίποτα από τον εργοδότη")
 
 
 def test_limit_26_days_for_senior():
     """Προϋπηρεσία >= 1 έτος: όριο 26 ημέρες, οι υπόλοιπες άνευ αποδοχών."""
     svc, proj, eid = setup(hire=date(2024, 4, 8))
-    # 30 συνεχόμενες εργάσιμες (6 εβδομάδες) από Δευ 5/1/2026
+    # Δευ 5/1 - Παρ 13/2/2026: 34 ημέρες εξαημέρου (χωρίς Κυριακές και 6/1)
     svc.record_leave(eid, LeaveType.SICK, date(2026, 1, 5), date(2026, 2, 13))
     cls = classes(proj.employments[eid])
-    assert len(cls) == 30
+    assert len(cls) == 34
     assert cls[:3] == ["half"] * 3
     assert cls.count("half") + cls.count("full") == 26  # το όριο
-    assert cls[26:] == ["over"] * 4  # πάνω από το όριο: απλήρωτες
+    assert cls[26:] == ["over"] * 8  # πάνω από το όριο: απλήρωτες
     print("OK όριο 26 ημερών (προϋπηρεσία >= 1 έτος)")
 
 
@@ -165,18 +210,18 @@ def test_benefit_split_across_months():
     """Το επίδομα ΕΦΚΑ επιμερίζεται στους μήνες ΑΝΑΛΟΓΙΚΑ προς τις
     κανονικά πληρωμένες (`full`) ημέρες της άδειας."""
     svc, proj, eid = setup(hire=date(2024, 4, 8))
-    # Δευ 26/1/2026 - Παρ 6/2/2026: 10 εργάσιμες (5 Ιαν + 5 Φεβ)
+    # Δευ 26/1/2026 - Παρ 6/2/2026: 6 τον Ιαν (μαζί το Σάβ 31/1) + 5 τον Φεβ
     lid = svc.record_leave(eid, LeaveType.SICK, date(2026, 1, 26), date(2026, 2, 6))
     svc.record_sickness_benefit(eid, lid, 350.0)
     emp = proj.employments[eid]
 
     jan = emp.sick_days_in_month(2026, 1)
     feb = emp.sick_days_in_month(2026, 2)
-    assert (jan["half"], jan["full"], jan["over"]) == (3, 2, 0)
+    assert (jan["half"], jan["full"], jan["over"]) == (3, 3, 0)
     assert (feb["half"], feb["full"], feb["over"]) == (0, 5, 0)
-    # 7 ημέρες full συνολικά: 2/7 τον Ιαν, 5/7 τον Φεβ
-    assert jan["benefit"] == 100.0
-    assert feb["benefit"] == 250.0
+    # 8 ημέρες full συνολικά: 3/8 τον Ιαν, 5/8 τον Φεβ
+    assert jan["benefit"] == 131.25
+    assert feb["benefit"] == 218.75
     assert jan["benefit"] + feb["benefit"] == 350.0
     print("OK επιμερισμός επιδόματος ΕΦΚΑ ανά μήνα")
 
@@ -193,7 +238,7 @@ def test_payroll_applies_deduction():
     """Η μισθοδοσία κόβει τα μικτά κατά την περικοπή ασθενείας."""
     svc, proj, eid = setup(hire=date(2024, 4, 8))
     # Ασθένεια 5 εργάσιμων: 3 μισές + 2 κανονικά, επίδομα 120€
-    lid = svc.record_leave(eid, LeaveType.SICK, date(2026, 1, 5), date(2026, 1, 9))
+    lid = svc.record_leave(eid, LeaveType.SICK, date(2026, 1, 12), date(2026, 1, 16))
     svc.record_sickness_benefit(eid, lid, 120.0)
 
     draft = svc.attendance_draft(2026, 1)[eid]

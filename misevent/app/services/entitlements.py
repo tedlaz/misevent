@@ -11,7 +11,6 @@ from datetime import date
 from math import ceil, floor
 
 import misevent.domain.payroll_engine as pe
-import misevent.domain.work_hours as work_hours
 import misevent.rules.config as config
 from misevent.domain.events import LeaveCompensationCalculated, LeaveType, SeveranceCalculated
 
@@ -51,31 +50,37 @@ class EntitlementsMixin:
 
         Φύλλο με έστω ένα μη μηδενικό πεδίο θεωρείται ρητή δήλωση του χρήστη
         και ΥΠΕΡΙΣΧΥΕΙ (μπορεί να το έχει διορθώσει χειροκίνητα)."""
-        half = int(line.get("sick_half", 0))
-        full = int(line.get("sick_full", 0))
-        benefit = float(line.get("sick_benefit", 0.0))
-        if not half and not full and not benefit:
-            sick = emp.sick_days_in_month(year, month)
-            half, benefit = sick["half"], sick["benefit"]
+        half, _full, benefit = EntitlementsMixin.sick_line_totals(emp, line, year, month)
         if not half and not benefit:
             return 0.0
         return pe.sick_deduction(EntitlementsMixin._sick_daily_rate(emp), half, benefit)
 
     @staticmethod
+    def sick_line_totals(emp, line: dict, year: int, month: int) -> tuple[int, int, float]:
+        """(μισές, κανονικές, επίδομα ΕΦΚΑ) μιας γραμμής συγκεντρωτικού — ΜΙΑ
+        προτεραιότητα για περικοπή, αποτίμηση ημερομισθίου και ΑΠΔ: η γραμμή
+        με έστω ένα πεδίο ασθενείας υπερισχύει· αλλιώς από τις άδειες."""
+        half = int(line.get("sick_half", 0))
+        full = int(line.get("sick_full", 0))
+        benefit = float(line.get("sick_benefit", 0.0))
+        if not half and not full and not benefit:
+            s = emp.sick_days_in_month(year, month)
+            half, full, benefit = s["half"], s["full"], s["benefit"]
+        return half, full, benefit
+
+    @staticmethod
     def _sick_daily_rate(emp) -> float:
         """Το ημερομίσθιο με το οποίο αποτιμώνται οι ημέρες ασθενείας — ΜΙΑ
-        πηγή αλήθειας για την περικοπή (`sick_deduction`) ΚΑΙ για τις
-        «Αποδοχές ασθενείας» της ΑΠΔ (`sickness_apd_lines`)."""
+        πηγή αλήθειας για την περικοπή (`sick_deduction`), την αξία των ημερών
+        ασθενείας του ημερομισθίου και τις «Αποδοχές ασθενείας» της ΑΠΔ.
+
+        ΠΑΝΤΑ σε ΕΞΑΗΜΕΡΟ, όπως μετριούνται και οι ημέρες (`sick_day_map`):
+        μισθωτός = μισθός ÷ 25· ημερομίσθιος = το ΣΥΜΒΑΤΙΚΟ ημερομίσθιο (του
+        εξαημέρου), αναλογικά σε μερική (ώρες ÷ 40) — ΟΧΙ η αμοιβή ημέρας
+        πενθημέρου (`daily_day_pay`, ×6/5), αλλιώς μια εβδομάδα ασθένειας (6
+        ημέρες) θα πλήρωνε περισσότερο από μια εβδομάδα εργασίας (5)."""
         if emp.pay_type == "daily":
-            return pe.daily_day_pay(emp.daily_wage, emp.weekly_hours,
-                                    emp.scheduled_days_per_week())
-        if emp.weekly_hours and emp.weekly_hours < 40:
-            # Μερική απασχόληση: ημερομίσθιο = ωρομίσθιο (ίδιος τύπος με την
-            # πλήρη) x μέσες συμβατικές ώρες ημέρας προγράμματος.
-            hourly = work_hours.hourly_rate(
-                emp.pay_type, emp.monthly_gross, emp.daily_wage, emp.weekly_hours
-            )
-            return hourly * emp.weekly_hours / emp.scheduled_days_per_week()
+            return emp.daily_wage * pe.daily_gift_ratio(emp.weekly_hours)
         return emp.monthly_gross / 25.0
 
     def sick_totals(self, emp, year: int, month: int) -> tuple[int, int, float]:
@@ -85,13 +90,7 @@ class EntitlementsMixin:
         νέου από τις άδειες (βλ. `sick_deduction`)."""
         sheet = self.proj.attendance_sheets.get((year, month))
         line = (sheet.lines.get(emp.employee_id) or {}) if sheet else {}
-        half = int(line.get("sick_half", 0))
-        full = int(line.get("sick_full", 0))
-        benefit = float(line.get("sick_benefit", 0.0))
-        if not half and not full and not benefit:
-            s = emp.sick_days_in_month(year, month)
-            half, full, benefit = s["half"], s["full"], s["benefit"]
-        return half, full, benefit
+        return self.sick_line_totals(emp, line, year, month)
 
     def sickness_apd_lines(self, emp, year: int, month: int) -> list[dict]:
         """Οι γραμμές **«008 Αποδοχές ασθενείας»** της περιόδου — ΜΙΑ ανά άδεια

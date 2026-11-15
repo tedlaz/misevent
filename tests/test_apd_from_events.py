@@ -119,7 +119,8 @@ def test_sickness_rows_share_the_same_total():
     κατ' αναλογία και το άθροισμα μένει ΑΚΡΙΒΩΣ το ίδιο (καμία απώλεια
     λεπτού στη στρογγυλοποίηση)."""
     svc, proj, eid = setup()
-    svc.record_leave(eid, LeaveType.SICK, date(2026, 1, 5), date(2026, 1, 9))
+    # μετά τις 10 πρώτες ημέρες εργασίας (πρόσληψη 5/1 — ΑΚ 657)
+    svc.record_leave(eid, LeaveType.SICK, date(2026, 1, 26), date(2026, 1, 30))
     svc.approve_attendance(2026, 1)
     svc.run_monthly_payroll(2026, 1)
 

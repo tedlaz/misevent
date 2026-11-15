@@ -76,8 +76,8 @@ def rows(svc, year, month, fund="efka"):
 def test_sickness_row_days_period_and_amount():
     """Μία ασθένεια: ξεχωριστή γραμμή 008 με τις ημέρες & το διάστημά της."""
     svc, proj, eid = setup()
-    # Δευ 5/1 - Παρ 9/1/2026: 5 εργάσιμες -> 3 μισές + 2 κανονικά, επίδομα 120
-    lid = svc.record_leave(eid, LeaveType.SICK, date(2026, 1, 5), date(2026, 1, 9))
+    # Δευ 12/1 - Παρ 16/1/2026: 5 ημέρες -> 3 μισές + 2 κανονικά, επίδομα 120
+    lid = svc.record_leave(eid, LeaveType.SICK, date(2026, 1, 12), date(2026, 1, 16))
     svc.record_sickness_benefit(eid, lid, 120.0)
     svc.approve_attendance(2026, 1)
     svc.run_monthly_payroll(2026, 1)
@@ -89,8 +89,8 @@ def test_sickness_row_days_period_and_amount():
     # Ημερομίσθιο 1500/25 = 60. Πληρωμένο ασθενείας: 3 x 30 + 2 x 60 - 120 = 90
     assert sick[0].gross == 90.0
     assert sick[0].insurance_days == 5            # ημέρες ασθενείας
-    assert sick[0].date_from == date(2026, 1, 5)  # έναρξη ασθένειας
-    assert sick[0].date_to == date(2026, 1, 9)    # λήξη ασθένειας
+    assert sick[0].date_from == date(2026, 1, 12)  # έναρξη ασθένειας
+    assert sick[0].date_to == date(2026, 1, 16)    # λήξη ασθένειας
 
     # Οι τακτικές μειώνονται αντίστοιχα — τα σύνολα ΔΕΝ αλλάζουν
     p = next(p for p in proj.payrolls if (p.period_year, p.period_month) == (2026, 1))
@@ -104,7 +104,7 @@ def test_sickness_row_days_period_and_amount():
 def test_two_sicknesses_two_rows():
     """Δύο ασθένειες στον ίδιο μήνα: ΜΙΑ γραμμή 008 ανά ασθένεια."""
     svc, proj, eid = setup()
-    svc.record_leave(eid, LeaveType.SICK, date(2026, 1, 5), date(2026, 1, 6))
+    svc.record_leave(eid, LeaveType.SICK, date(2026, 1, 12), date(2026, 1, 13))
     svc.record_leave(eid, LeaveType.SICK, date(2026, 1, 19), date(2026, 1, 21))
     svc.approve_attendance(2026, 1)
     svc.run_monthly_payroll(2026, 1)
@@ -115,11 +115,12 @@ def test_two_sicknesses_two_rows():
     )
     assert len(sick) == 2
     assert [(r.date_from, r.date_to, r.insurance_days) for r in sick] == [
-        (date(2026, 1, 5), date(2026, 1, 6), 2),
+        (date(2026, 1, 12), date(2026, 1, 13), 2),
         (date(2026, 1, 19), date(2026, 1, 21), 3),
     ]
-    # 1η ασθένεια: 2 μισές (60). 2η: 1 μισή + 2 κανονικά (30 + 120 = 150)
-    assert [r.gross for r in sick] == [60.0, 150.0]
+    # ΣΥΝΤΟΜΕΣ ασθένειες (<= 3 ημέρες): μισό ημερομίσθιο ΚΑΘΕ φορά.
+    # 1η: 2 μισές (60). 2η: 3 μισές (90).
+    assert [r.gross for r in sick] == [60.0, 90.0]
     p = next(p for p in proj.payrolls if (p.period_year, p.period_month) == (2026, 1))
     regular = next(r for r in rows(svc, 2026, 1) if r.earnings_type == "001")
     assert round(regular.gross + sum(r.gross for r in sick), 2) == p.gross
@@ -130,7 +131,7 @@ def test_two_sicknesses_two_rows():
 def test_sickness_across_months_is_clipped():
     """Ασθένεια που περνά τον μήνα: κάθε ΑΠΔ δηλώνει το δικό της κομμάτι."""
     svc, proj, eid = setup()
-    # Δευ 26/1 - Παρ 6/2/2026 (10 εργάσιμες, 5 σε κάθε μήνα)
+    # Δευ 26/1 - Παρ 6/2/2026: εξαήμερο -> 6 τον Ιαν (μαζί το Σάβ 31/1), 5 τον Φεβ
     svc.record_leave(eid, LeaveType.SICK, date(2026, 1, 26), date(2026, 2, 6))
     svc.approve_attendance(2026, 1)
     svc.run_monthly_payroll(2026, 1)
@@ -141,7 +142,7 @@ def test_sickness_across_months_is_clipped():
     feb = next(r for r in rows(svc, 2026, 2) if r.earnings_type == "008")
     assert (jan.date_from, jan.date_to) == (date(2026, 1, 26), date(2026, 1, 31))
     assert (feb.date_from, feb.date_to) == (date(2026, 2, 1), date(2026, 2, 6))
-    assert jan.insurance_days == 5 and feb.insurance_days == 5
+    assert jan.insurance_days == 6 and feb.insurance_days == 5
     print("OK ασθένεια σε δύο μήνες: το διάστημα κόβεται ανά περίοδο")
 
 
@@ -160,19 +161,20 @@ def test_unpaid_over_limit_days_stay_out():
     """Ημέρες πάνω από το όριο είναι ΑΝΕΥ ΑΠΟΔΟΧΩΝ: δεν μπαίνουν στο 008
     (ούτε στις ημέρες ασφάλισης — τις κόβει ήδη το συγκεντρωτικό)."""
     svc, proj, eid = setup()
-    # 30 συνεχόμενες εργάσιμες από Δευ 5/1/2026 -> 26 πληρωμένες, 4 over
+    # Δευ 5/1 - Παρ 13/2/2026 σε εξαήμερο χωρίς Κυριακές/αργίες: 23 τον Ιαν
+    # (χωρίς τα Θεοφάνια 6/1) + 11 τον Φεβ = 34 -> 26 πληρωμένες, 8 over
     svc.record_leave(eid, LeaveType.SICK, date(2026, 1, 5), date(2026, 2, 13))
     svc.approve_attendance(2026, 1)
     svc.run_monthly_payroll(2026, 1)
     jan = next(r for r in rows(svc, 2026, 1) if r.earnings_type == "008")
-    # Ιανουάριος: 20 εργάσιμες ασθενείας (5/1-31/1), όλες εντός ορίου
-    assert jan.insurance_days == 20
+    # Ιανουάριος: 23 ημέρες ασθενείας (5/1-31/1), όλες εντός ορίου
+    assert jan.insurance_days == 23
 
     svc.approve_attendance(2026, 2)
     svc.run_monthly_payroll(2026, 2)
     feb_sick = [r for r in rows(svc, 2026, 2) if r.earnings_type == "008"]
-    # Φεβρουάριος: 6 εντός ορίου (26 - 20) + 4 over που ΔΕΝ πληρώνονται
-    assert feb_sick[0].insurance_days == 6
+    # Φεβρουάριος: 3 εντός ορίου (26 - 23) + 8 over που ΔΕΝ πληρώνονται
+    assert feb_sick[0].insurance_days == 3
     p = next(p for p in proj.payrolls if (p.period_year, p.period_month) == (2026, 2))
     regular = next(r for r in rows(svc, 2026, 2) if r.earnings_type == "001")
     assert regular.insurance_days + feb_sick[0].insurance_days == p.insurance_days

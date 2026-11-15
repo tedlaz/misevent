@@ -324,12 +324,20 @@ def calc_monthly_daily(
     rates=None,
     birth_date: date | None = None,
     exempt: float = 0.0,
+    sick_days_value: float = 0.0,
 ) -> PayrollResult:
     """Μηνιαίος υπολογισμός ημερομισθίου: μικτά = αμοιβή ημέρας × ημέρες
-    − ασθένεια + προσαυξήσεις ωρών. ⚠️ Το `daily_wage` εδώ είναι η ΑΜΟΙΒΗ
-    ΗΜΕΡΑΣ (`daily_day_pay`), όχι το συμβατικό ημερομίσθιο.
+    + αξία ημερών ασθενείας − ασθένεια + προσαυξήσεις ωρών. ⚠️ Το
+    `daily_wage` εδώ είναι η ΑΜΟΙΒΗ ΗΜΕΡΑΣ (`daily_day_pay`), όχι το
+    συμβατικό ημερομίσθιο.
+
+    `days_worked`: ημέρες εργασίας + ημέρες άδειας ΜΕ αποδοχές εργοδότη.
+    `sick_days_value`: οι ημέρες ασθενείας (μισές + κανονικές) × ημερομίσθιο
+    ΕΞΑΗΜΕΡΟΥ — από αυτή την αξία αφαιρείται μετά η περικοπή `sick`, ΑΚΡΙΒΩΣ
+    όπως στον μισθωτό (ο μισθός περιέχει τις ημέρες, η περικοπή τις κόβει).
+    Χωρίς αυτήν η ασθένεια μετρούσε ΔΥΟ φορές: ημέρες απλήρωτες ΚΑΙ περικοπή.
     `rates`/`exempt`: βλ. calc_monthly."""
-    base = dec(daily_wage) * days_worked
+    base = dec(daily_wage) * days_worked + dec(sick_days_value)
     rates = rates or efka_rates_for(period_end)
     return _premium_payroll(
         base, sick, premiums, exempt, rates, children, period_end, birth_date,

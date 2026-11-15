@@ -1654,7 +1654,9 @@ def _tax_breakdown(emp, taxable, fmy, on_date, periods=config.ANNUAL_SALARIES):
     έκανε τον υπολογισμό (`config.TaxScale.annual_tax_detail`)."""
     if taxable is None:
         return None
-    children = getattr(emp, "children", 0) or 0
+    # Τέκνα ΤΗΣ ΠΕΡΙΟΔΟΥ — όπως ο υπολογισμός (`children_on`), όχι τα τρέχοντα
+    children = (emp.children_on(on_date) if hasattr(emp, "children_on")
+                else getattr(emp, "children", 0) or 0)
     birth = getattr(emp, "birth_date", None)
     scale = config.tax_scale_for(on_date)
     d = scale.annual_tax_detail(taxable * periods, children, birth, on_date)

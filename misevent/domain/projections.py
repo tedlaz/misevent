@@ -1159,6 +1159,19 @@ class EmploymentState:
                     break
         return out
 
+    # Άδειες που ΠΛΗΡΩΝΕΙ ο εργοδότης ως ημέρες εργασίας (ο ημερομίσθιος τις
+    # πληρώνεται αμοιβή ημέρας × ημέρες). Η ασθένεια έχει δική της αποτίμηση
+    # (`sick_day_map`), η άνευ αποδοχών καμία.
+    # ponytail: μητρότητα/γονική μένουν εκτός (τις πληρώνει ΕΦΚΑ/ΔΥΠΑ, όχι ο
+    # εργοδότης) — να επιβεβαιωθεί, όπως και η αντιμετώπισή τους στον μισθωτό.
+    PAID_LEAVE_TYPES = (LeaveType.ANNUAL, LeaveType.CHILDCARE)
+
+    def paid_leave_days_in_month(self, year: int, month: int) -> list:
+        """Ημέρες ΠΡΟΓΡΑΜΜΑΤΟΣ του μήνα σε άδεια με αποδοχές εργοδότη
+        (`PAID_LEAVE_TYPES`)."""
+        return sorted(d for t in self.PAID_LEAVE_TYPES
+                      for d in self.leave_days_in_month(year, month, t))
+
     def holiday_off(self, d: date) -> bool:
         """Καθημερινή ΑΡΓΙΑ όπου η εργασία ΔΕΝ τεκμαίρεται (η επιχείρηση
         κλείνει, ο μισθός πληρώνεται) — θέλει ρητή δήλωση παρουσίας. Η
@@ -1203,73 +1216,121 @@ class EmploymentState:
         return out
 
     # ------------------------------------------------------------ Ασθένεια
-    def sick_day_map(self) -> dict:
-        """Κάθε ημέρα ασθενείας -> (κατηγορία, leave_id), σε χρονολογική σειρά.
+    @staticmethod
+    def _sick_count_day(d: date) -> bool:
+        """Μετράει ως ημέρα ασθενείας; ΕΞΑΗΜΕΡΟ — Δευτέρα–Σάββατο, ΧΩΡΙΣ
+        Κυριακές και αργίες, ανεξάρτητα από το πρόγραμμα του εργαζομένου
+        (ο υπολογισμός αποδοχών γίνεται πάντα σε εξαήμερο: μισθός ÷ 25)."""
+        from misevent.rules.calendar_gr import public_holidays
 
-        Κατηγορίες:
-          `half` — τριήμερο εργοδότη: πληρώνεται ΜΙΣΟ ημερομίσθιο.
-          `full` — πληρώνεται κανονικά, μείον το επίδομα ΕΦΚΑ της άδειας.
-          `over` — πάνω από το ετήσιο όριο: ΑΝΕΥ ΑΠΟΔΟΧΩΝ.
+        return d.weekday() != 6 and d not in public_holidays(d.year)
 
-        Το «έτος» είναι ΚΥΛΙΟΜΕΝΟ: ανοίγει με την πρώτη ημέρα ασθενείας και
-        διαρκεί 365 ημέρες. Μέσα σε αυτό το παράθυρο το τριήμερο δίνεται ΜΙΑ
-        φορά (δεν ξαναρχίζει σε επόμενη ασθένεια) και το όριο (13 ή 26 ημέρες,
-        ανάλογα με την προϋπηρεσία) εξαντλείται συνολικά. Μετράνε μόνο οι
-        ημέρες που ΠΡΟΒΛΕΠΕΙ το πρόγραμμα — μια ασθένεια που πέφτει σε ρεπό
-        δεν κοστίζει ούτε στον εργοδότη ούτε στο όριο."""
+    def _work_year_start(self, d: date) -> date:
+        """Αρχή του ΕΡΓΑΣΙΑΚΟΥ έτους που περιέχει την `d` — η επέτειος της
+        πρόσληψης (όχι ημερολογιακό, όχι κυλιόμενο). 29/2 -> 28/2."""
+        hire = self.hire_date or date(d.year, 1, 1)
+
+        def anniv(y):
+            try:
+                return hire.replace(year=y)
+            except ValueError:
+                return date(y, 2, 28)
+
+        start = anniv(d.year)
+        return start if start <= d else anniv(d.year - 1)
+
+    def _sick_episodes(self) -> list:
+        """Οι ημέρες ασθενείας (εξαήμερο, εντός απασχόλησης) ομαδοποιημένες σε
+        ΕΠΕΙΣΟΔΙΑ: [[(ημέρα, leave_id), ...], ...]. Συνεχόμενες άδειες
+        ασθενείας είναι ΕΝΑ επεισόδιο — Κυριακή/αργία ανάμεσα δεν το σπάει."""
         days = []
         for lv in self.active_leaves():
             if lv.leave_type != LeaveType.SICK:
                 continue
             d = lv.date_from
             while d <= lv.date_to:
-                in_period = (self.hire_date is None or d >= self.hire_date) and (
-                    self.termination_date is None or d <= self.termination_date
-                )
-                if in_period and self.is_scheduled(d):
+                if (_within(d, self.hire_date, self.termination_date)
+                        and self._sick_count_day(d)):
                     days.append((d, lv.leave_id))
                 d = _next_day(d)
-
-        out = {}
-        window_start = None
-        half_used = used = limit = 0
+        episodes, prev = [], None
         for d, lid in sorted(days):
-            if window_start is None or (d - window_start).days >= 365:
-                window_start = d
-                half_used = used = 0
-                limit = self._sick_limit(window_start)
-            rules = sick_leave_rules_for(d)
-            if used >= limit:
-                out[d] = ("over", lid)
+            nxt = _next_day(prev) if prev else None
+            while nxt is not None and nxt < d and not self._sick_count_day(nxt):
+                nxt = _next_day(nxt)
+            if nxt != d:
+                episodes.append([])
+            episodes[-1].append((d, lid))
+            prev = d
+        return episodes
+
+    def _worked_days_before(self, d: date, needed: int) -> int:
+        """Ημέρες προγράμματος από την πρόσληψη ως την προηγούμενη της `d`
+        (σταματά στις `needed` — αρκεί για την προϋπόθεση του ΑΚ 657)."""
+        n, x = 0, self.hire_date
+        while x is not None and x < d and n < needed:
+            if self.is_scheduled(x):
+                n += 1
+            x = _next_day(x)
+        return n
+
+    def sick_day_map(self) -> dict:
+        """Κάθε ημέρα ασθενείας -> (κατηγορία, leave_id), σε χρονολογική σειρά.
+
+        Κατηγορίες:
+          `half` — μισό ημερομίσθιο (τριήμερο).
+          `full` — πληρώνεται κανονικά, μείον το επίδομα ΕΦΚΑ της άδειας.
+          `over` — ΑΝΕΥ ΑΠΟΔΟΧΩΝ: πάνω από το ετήσιο όριο, ή ασθένεια πριν
+                   από `min_service_days` ημέρες εργασίας (ΑΚ 657).
+
+        Κανόνες (ΑΚ 657-658, ΑΝ 178/67 — ARCH_REF §5.9), ανά ΕΠΕΙΣΟΔΙΟ:
+        - **σύντομο** (≤ τριήμερο): όλες `half`, ΚΑΘΕ φορά που συμβαίνει·
+        - **1ο μακρό** του εργασιακού έτους: τριήμερο `half`, μετά `full`·
+        - **επόμενο μακρό**: όλες `full` (επίδομα ΕΦΚΑ από την 1η ημέρα).
+        Το **όριο** (13/26) εξαντλείται συνολικά μέσα στο ΕΡΓΑΣΙΑΚΟ έτος (από
+        την επέτειο πρόσληψης)· το επεισόδιο ανήκει ολόκληρο στο έτος της
+        πρώτης του ημέρας (το ίδιο κώλυμα δεν ξαναπαίρνει όριο). Ημέρες σε
+        ΕΞΑΗΜΕΡΟ, χωρίς Κυριακές και αργίες (`_sick_count_day`)."""
+        out = {}
+        year_start, used, long_seen = None, 0, False
+        for ep in self._sick_episodes():
+            first = ep[0][0]
+            rules = sick_leave_rules_for(first)
+            ws = self._work_year_start(first)
+            if ws != year_start:
+                year_start, used, long_seen = ws, 0, False
+            need = rules.min_service_days
+            if need and self._worked_days_before(first, need) < need:
+                out.update({d: ("over", lid) for d, lid in ep})
                 continue
-            used += 1
-            if half_used < rules.half_wage_days:
-                half_used += 1
-                out[d] = ("half", lid)
-            else:
-                out[d] = ("full", lid)
+            limit = self._sick_limit(first)
+            short = len(ep) <= rules.half_wage_days
+            halves = len(ep) if short else (0 if long_seen else rules.half_wage_days)
+            long_seen = long_seen or not short
+            for i, (d, lid) in enumerate(ep):
+                if used >= limit:
+                    out[d] = ("over", lid)
+                    continue
+                used += 1
+                out[d] = ("half" if i < halves else "full", lid)
         return out
 
     def sick_balance(self, on: date) -> tuple[int, int, date | None]:
-        """(πληρωμένες ημέρες που χρησιμοποιήθηκαν, όριο, έναρξη παραθύρου)
-        στο παράθυρο 365 ημερών που ισχύει την `on` — ΙΔΙΟ παράθυρο με το
-        `sick_day_map`. Χωρίς ανοιχτό παράθυρο: 0 από το όριο της `on`."""
+        """(πληρωμένες ημέρες που χρησιμοποιήθηκαν ως την `on`, όριο, έναρξη
+        εργασιακού έτους) — ΙΔΙΑ λογική με το `sick_day_map`: μετράνε τα
+        επεισόδια που ΞΕΚΙΝΗΣΑΝ μέσα στο εργασιακό έτος της `on`."""
+        start = self._work_year_start(on)
         days = self.sick_day_map()
-        start = None
-        for d in sorted(days):
-            if d > on:
-                break
-            if start is None or (d - start).days >= 365:
-                start = d
-        if start is None or (on - start).days >= 365:
-            return 0, self._sick_limit(on), None
-        used = sum(1 for d, (cls, _) in days.items()
-                   if cls != "over" and 0 <= (d - start).days < 365)
-        return used, self._sick_limit(start), start
+        used = sum(
+            1 for ep in self._sick_episodes()
+            if self._work_year_start(ep[0][0]) == start
+            for d, _ in ep if d <= on and days[d][0] != "over"
+        )
+        return used, self._sick_limit(on), start
 
     def _sick_limit(self, on: date) -> int:
-        """Ετήσιο όριο πληρωμένων ημερών ασθενείας — εξαρτάται από την
-        προϋπηρεσία ΣΤΟΝ ΙΔΙΟ ΕΡΓΟΔΟΤΗ κατά το άνοιγμα του παραθύρου."""
+        """Ετήσιο όριο πληρωμένων ημερών ασθενείας (ΑΚ 658): μισός μήνας αν το
+        κώλυμα εμφανίζεται μέσα στο 1ο έτος ΣΤΟΝ ΙΔΙΟ ΕΡΓΟΔΟΤΗ, αλλιώς μήνας."""
         rules = sick_leave_rules_for(on)
         if self.hire_date is None or (on - self.hire_date).days < 365:
             return rules.limit_under_year
@@ -1281,8 +1342,12 @@ class EmploymentState:
 
         Το επίδομα καταχωρείται συνολικά ανά άδεια· εδώ επιμερίζεται στους
         μήνες ΑΝΑΛΟΓΙΚΑ προς τις ημέρες `full` της άδειας που πέφτουν σε κάθε
-        μήνα (μόνο αυτές πληρώνονται κανονικά, άρα μόνο από αυτές αφαιρείται)."""
-        half = full = over = 0
+        μήνα (μόνο αυτές πληρώνονται κανονικά, άρα μόνο από αυτές αφαιρείται).
+
+        `half/full/over` είναι ημέρες ΕΞΑΗΜΕΡΟΥ (αποτίμηση: μισθός ÷ 25)·
+        `over_scheduled` = όσες από τις `over` είναι ημέρες ΠΡΟΓΡΑΜΜΑΤΟΣ — σε
+        αυτή τη μονάδα μετράει το συγκεντρωτικό τις άνευ αποδοχών (ημέρες ΕΦΚΑ)."""
+        half = full = over = over_scheduled = 0
         per_leave = {}  # leave_id -> [σύνολο ημερών full, ημέρες full του μήνα]
         for d, (cls, lid) in self.sick_day_map().items():
             this_month = d.year == year and d.month == month
@@ -1299,6 +1364,7 @@ class EmploymentState:
                 full += 1
             else:
                 over += 1
+                over_scheduled += self.is_scheduled(d)
 
         benefit = 0.0
         for lid, (total, in_month) in per_leave.items():
@@ -1308,6 +1374,7 @@ class EmploymentState:
             "half": half,
             "full": full,
             "over": over,
+            "over_scheduled": over_scheduled,
             "benefit": round(benefit + 1e-9, 2),
         }
 

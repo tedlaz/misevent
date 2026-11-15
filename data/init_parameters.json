@@ -168,7 +168,8 @@
           "values": {
             "half_wage_days": 3,
             "limit_under_year": 13,
-            "limit_over_year": 26
+            "limit_over_year": 26,
+            "min_service_days": 10
           }
         }
       ]
